@@ -40,7 +40,7 @@ We use a strict **MVC (Model-View-Controller)** pattern. Do not put files in ran
 
 ---
 
-## 🎨 1. Frontend Guide (For Helen & Chris)
+## 🎨 1. Frontend Guide (For Helen & Kimbery & Chris)
 
 ### A. Styling with Tailwind CSS v4
 
