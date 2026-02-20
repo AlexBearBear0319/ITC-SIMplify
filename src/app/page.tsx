@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Users, Clock, User, ChevronDown, BarChart3, Settings } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Users, Clock } from "lucide-react";
 import InteractiveMap from "@/components/features/InteractiveMap";
-import Sidebar from "@/components/layout/Sidebar";
 import { createClient } from "@/utils/supabase/client";
 import type { Location } from "@/types/database.types";
 
@@ -12,8 +11,6 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const profileRef = useRef<HTMLDivElement>(null);
 
   // Fetch locations from Supabase
   useEffect(() => {
@@ -44,84 +41,10 @@ export default function HomePage() {
     ? allLocations.filter((loc) => loc.current_status === statusFilter)
     : allLocations;
 
-  // Close profile dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        profileRef.current &&
-        !profileRef.current.contains(event.target as Node) &&
-        showProfileMenu
-      ) {
-        setShowProfileMenu(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showProfileMenu]);
-
   return (
-    <div className="flex min-h-screen bg-gray-50 w-full overflow-x-hidden">
-      {/* Sidebar */}
-      <Sidebar />
-
-      {/* Main Content */}
-      <main className="flex-1 w-full md:ml-52 min-w-0">
-        {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-4 md:px-6 h-16 flex items-center justify-between sticky top-0 z-20">
-          <div className="min-w-0 shrink pl-12 md:pl-0">
-            <h1 className="text-lg md:text-xl font-bold text-gray-800 truncate">Homepage</h1>
-          </div>
-          
-          {/* Profile Button (Top Right) with Dropdown */}
-          <div className="relative shrink-0" ref={profileRef}>
-            <button 
-              onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="flex items-center gap-2 md:gap-3 px-2 md:px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
-                <User size={18} className="text-gray-600" />
-              </div>
-              <div className="text-left hidden sm:block">
-                <p className="text-sm font-semibold text-gray-800">Student Name</p>
-                <p className="text-xs text-green-600">1,200 pts</p>
-              </div>
-              <ChevronDown size={16} className={`text-gray-400 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`} />
-            </button>
-
-            {/* Profile Dropdown */}
-            {showProfileMenu && (
-              <div className="absolute top-full right-0 mt-2 w-48 py-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                <a
-                  href="/profile"
-                  className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors"
-                >
-                  <User size={18} className="text-gray-600" />
-                  <span className="text-sm text-gray-700">Profile</span>
-                </a>
-                <a
-                  href="/statistics"
-                  className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors"
-                >
-                  <BarChart3 size={18} className="text-gray-600" />
-                  <span className="text-sm text-gray-700">Statistics</span>
-                </a>
-                <a
-                  href="/settings"
-                  className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors"
-                >
-                  <Settings size={18} className="text-gray-600" />
-                  <span className="text-sm text-gray-700">Settings</span>
-                </a>
-              </div>
-            )}
-          </div>
-        </header>
-
-        {/* Page Content */}
-        <div className="p-4 md:p-6 max-w-7xl mx-auto w-full">
-          {/* Campus Map Section */}
-          <section className="mb-6 md:mb-8 w-full">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto w-full">
+      {/* Campus Map Section */}
+      <section className="mb-6 md:mb-8 w-full">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
               <h2 className="text-xl md:text-2xl font-bold text-gray-800 shrink-0">Campus Map</h2>
               
@@ -298,19 +221,6 @@ export default function HomePage() {
               </button>
             </div>
           </section>
-        </div>
-
-        {/* Footer */}
-        <footer className="border-t border-gray-200 bg-white mt-8 md:mt-12 py-4 md:py-6">
-          <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-col sm:flex-row items-center justify-between text-sm text-gray-600 gap-2">
-            <span className="font-semibold">SIMplify</span>
-            <div className="flex gap-4 md:gap-6">
-              <a href="#" className="hover:text-gray-900">Support</a>
-              <a href="#" className="hover:text-gray-900">Socials</a>
-            </div>
-          </div>
-        </footer>
-      </main>
     </div>
   );
 }
