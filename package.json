@@ -9,12 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
-<<<<<<< Updated upstream
-=======
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.94.1",
     "lucide-react": "^0.574.0",
->>>>>>> Stashed changes
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3"
