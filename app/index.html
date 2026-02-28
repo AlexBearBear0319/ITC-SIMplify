@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SIMplify Home Page</title>
+
+<style>
+/* CSS */
+*{
+    box-sizing:border-box;
+    margin:0;
+    padding:0;
+    font-family:Arial,Helvetica,sans-serif}
+body{
+    background:#f1f1EE;
+    color:#222}
+.container{display:flex;min-height:100vh}
+
+/* Sidebar */
+.sidebar{
+    width:220px;
+    background:#ffffff;
+    border-right:1px solid #ddd;
+    position:fixed;
+    height:100vh;
+    padding:20px}
+.logo{
+    font-weight:bold;
+    font-size:20px;
+    margin-bottom:30px}
+.nav a{
+    display:block;
+    padding:12px 10px;
+    margin-bottom:6px;
+    border-radius:8px;
+    text-decoration:none;
+    color:#333}
+.nav a:hover{background:#eef2f6}
+
+/* Main content */
+.main{
+    margin-left:220px;
+    flex:1;
+    padding:30px}
+.header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;margin-bottom:20px}
+.card{
+    background:#fff;
+    border-radius:16px;
+    padding:18px;
+    box-shadow:0 2px 6px rgba(0,0,0,0.05)}
+
+.map{
+    height:260px;
+    background:linear-gradient(135deg,#dfe6ec,#cfd8e3);
+    border-radius:12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:18px;
+    color:#555
+}
+
+.spots{margin-top:25px}
+.spot-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:15px;
+    margin-top:12px
+}
+.spot{
+    padding:16px;
+    border-radius:12px;
+    background:#fafafa;
+    border:1px solid #e2e6ea
+}
+.status{margin-top:8px;font-size:14px;color:#777}
+
+.cta{margin-top:25px;text-align:center}
+.cta button{padding:12px 18px;margin:8px;border:none;border-radius:10px;background:#2f80ed;color:white;cursor:pointer}
+.cta button.secondary{background:#e4e7ec;color:#333}
+
+footer{margin-top:40px;text-align:center;color:#777;font-size:14px}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+<div class="logo">SIMplify</div>
+<nav class="nav">
+<a href="#">Home</a>
+<a href="#">Timer</a>
+<a href="#">Study Buddy</a>
+<a href="#">Mission</a>
+<a href="#">Rewards</a>
+<a href="#">Leaderboard</a>
+</nav>
+</aside>
+
+<!-- Main -->
+<main class="main">
+<div class="header">
+<h2>Home Page</h2>
+<div>
+    Student Name
+</div>
+</div>
+
+<div class="card">
+<h3>Campus Map</h3>
+<div class="map">Map Placeholder</div>
+</div>
+
+<div class="spots card">
+<h3>Campus Spots</h3>
+<div class="spot-grid">
+<div class="spot">
+<strong>Library</strong>
+<div class="status">Full</div>
+</div>
+<div class="spot">
+<strong>Foodclique</strong>
+<div class="status">Empty</div>
+</div>
+<div class="spot">
+<strong>Student Learning Center</strong>
+<div class="status">Busy</div>
+</div>
+<div class="spot">
+<strong>Foodgallery</strong>
+<div class="status">Empty</div>
+</div>
+</div>
+</div>
+
+<div class="cta">
+<h3>Ready to tackle your work?</h3>
+<button class="secondary">Find Study Buddy</button>
+<button>Start Study Timer</button>
+</div>
+
+<footer>SIMplify — Support | Socials</footer>
+</main>
+</div>
+</body>
+</html>
