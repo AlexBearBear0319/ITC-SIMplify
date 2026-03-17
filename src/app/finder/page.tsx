@@ -17,7 +17,7 @@
  *     List:  supabase.from("study_group_members").select("*, profiles(username, avatar_url)").eq("group_id", id)
  */
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -751,10 +751,10 @@ function FilterSelect({
 }
 
 // ─────────────────────────────────────────────
-// Main Page
+// Main Page Content
 // ─────────────────────────────────────────────
 
-export default function FinderPage() {
+function FinderPageContent() {
   const searchParams = useSearchParams();
 
   const [currentUser,     setCurrentUser]     = useState<UserProfile | null>(null);
@@ -1127,5 +1127,13 @@ export default function FinderPage() {
         Start a Session
       </button>
     </>
+  );
+}
+
+export default function FinderPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-bg flex items-center justify-center text-ink-muted">Loading study groups...</div>}>
+      <FinderPageContent />
+    </Suspense>
   );
 }
