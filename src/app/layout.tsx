@@ -1,13 +1,29 @@
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
-import type { Metadata } from "next";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
+import ThemeProvider from "@/components/providers/ThemeProvider";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "SIMplify - Campus Map",
-  description: "Find study spots on campus",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
+  title: {
+    default: "SIMplify – Find Your Study Spot",
+    template: "%s · SIMplify",
+  },
+  description:
+    "Find available study spots, check real-time crowd statuses, discover study buddies, and earn rewards — by SIM IT Club.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({
@@ -16,16 +32,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="overflow-x-hidden" suppressHydrationWarning>
-        <div className="flex min-h-screen bg-gray-50 w-full overflow-x-hidden">
-          <Sidebar />
-          <main className="flex-1 w-full md:ml-52 min-w-0">
-            <Header />
-            {children}
-            <Footer />
-          </main>
-        </div>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <body suppressHydrationWarning>
+        <ThemeProvider>
+          {/* App shell: sidebar (fixed) + scrollable main area */}
+          <div className="flex h-screen overflow-hidden bg-canvas">
+            <Sidebar />
+
+            {/* Content column: offset by sidebar width on md+ */}
+            <div className="flex flex-col flex-1 overflow-hidden md:ml-64">
+              <Header />
+
+              <main className="flex-1 overflow-y-auto">
+                {children}
+              </main>
+            </div>
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );
