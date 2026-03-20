@@ -1,86 +1,68 @@
-// ============================================================
-// NEXT.JS MIDDLEWARE — Automatic Session Refresh
-// ============================================================
-// This file runs automatically on every page request BEFORE the page loads.
-// Its main job: silently refresh the user's Supabase auth session so they
-// stay logged in without being asked to log in again every hour.
-//
-// Think of it like a background "keep me logged in" mechanism.
-//
-// HOW AUTH PROTECTION WORKS (add this when the login page is ready):
-//   Uncomment the "AUTH GUARD" block below to redirect unauthenticated
-//   users to /login before they can see any protected page.
-//
-// IMPORTANT: Do NOT move or rename this file. Next.js specifically looks
-//            for 'middleware.ts' at the root of the src/ folder.
-// ============================================================
+import { NextResponse, type NextRequest } from "next/server";
+import { updateSession } from "@/utils/supabase/middleware";
 
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+/**
+ * redirect — creates a redirect response and copies all session cookies from
+ * the Supabase response onto it.
+ *
+ * This is the critical fix for the infinite-loop bug: when the session has
+ * just been refreshed, the new tokens live in `sessionResponse`'s Set-Cookie
+ * headers. If we return a bare NextResponse.redirect() without those cookies,
+ * the browser never stores the new token → the very next request arrives
+ * with stale/missing cookies → middleware sees a guest again → loop.
+ */
+function redirect(
+  to: string,
+  request: NextRequest,
+  sessionResponse: NextResponse
+): NextResponse {
+  const url = request.nextUrl.clone();
+  url.pathname = to;
+  const res = NextResponse.redirect(url);
+  // Copy every refreshed session cookie onto the redirect response.
+  sessionResponse.cookies.getAll().forEach(({ name, value }) =>
+    res.cookies.set(name, value)
+  );
+  return res;
+}
 
 export async function middleware(request: NextRequest) {
-  // Start with a default "let the request through" response
-  let supabaseResponse = NextResponse.next({ request })
+  const { response, user, supabase } = await updateSession(request);
+  const { pathname } = request.nextUrl;
 
-  // Create a Supabase client that can read and write cookies mid-request.
-  // This is different from the server client — it patches cookies on both
-  // the incoming request AND outgoing response simultaneously.
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        // Read all cookies from the incoming request
-        getAll() {
-          return request.cookies.getAll()
-        },
-        // Write refreshed session cookies to both the request and response
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            // Next.js 16 RequestCookies.set() only accepts (name, value)
-            request.cookies.set(name, value)
-          )
-          supabaseResponse = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
-        },
-      },
-    },
-  )
+  const isAuthPage = pathname.startsWith("/auth/");
 
-  // IMPORTANT: This line refreshes the session if it has expired.
-  // Do NOT add any code between createServerClient and supabase.auth.getUser() —
-  // it can silently break authentication in hard-to-debug ways.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // ── 1. Logged-in user visiting an auth page → send to dashboard ───────────
+  if (isAuthPage && user) {
+    return redirect("/", request, response);
+  }
 
-  // ── AUTH GUARD ────────────────────────────────────────────────────────────
-  // Uncomment this block when the /login and /auth pages are built.
-  // It redirects any unauthenticated visitor to the login page.
-  //
-  // const isPublicRoute =
-  //   request.nextUrl.pathname.startsWith('/login') ||
-  //   request.nextUrl.pathname.startsWith('/auth')
-  //
-  // if (!user && !isPublicRoute) {
-  //   const url = request.nextUrl.clone()
-  //   url.pathname = '/login'
-  //   return NextResponse.redirect(url)
-  // }
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── 2. Guest visiting any non-auth page → send to login ───────────────────
+  if (!isAuthPage && !user) {
+    return redirect("/auth/login", request, response);
+  }
 
-  // Suppress unused-variable warning until the auth guard is enabled
-  void user
+  // ── 3. Admin-only routes ───────────────────────────────────────────────────
+  // Guests are already bounced above. Check is_admin for logged-in users.
+  if (user && (pathname === "/admin" || pathname.startsWith("/admin/"))) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single();
 
-  return supabaseResponse
+    if (!profile?.is_admin) {
+      return redirect("/", request, response);
+    }
+  }
+
+  // Pass through — session cookies (including any refresh) are in `response`.
+  return response;
 }
 
-// Tell Next.js which routes this middleware should run on.
-// It skips static files, images, and favicons for performance.
+// Run on every request except Next.js internals and static assets.
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
-}
+};

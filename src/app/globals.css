@@ -1,26 +1,116 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Enable class-based dark mode.
+ * Tailwind v4 equivalent of darkMode: 'class' in tailwind.config.ts.
+ * ThemeProvider adds/removes .dark on <html> based on Singapore Time.
+ *
+ * IMPORTANT — @theme (no "inline"):
+ *   Without the inline keyword, Tailwind v4 emits utilities that reference
+ *   CSS variables (e.g. `bg-canvas → background-color: var(--color-canvas)`)
+ *   instead of inlining the hex value. This means the .dark overrides below
+ *   automatically swap every token across the entire UI when ThemeProvider
+ *   toggles <html class="dark"> — no dark: utility classes needed in React.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* ── Morning Study Café – SIMplify Design System ── */
+
+  /* 60% – Page background */
+  --color-canvas:        #F1F1EE;
+
+  /* 30% – Primary brand (soft dusty blue) */
+  --color-brand:         #B3D2D5;
+  --color-brand-dark:    #8FBDC1;   /* hover / pressed states */
+  --color-brand-light:   #D4E9EB;   /* subtle fills */
+  --color-brand-faint:   #EDF5F6;   /* near-white tint for hover rows */
+
+  /* Ink – Typography */
+  --color-ink:           #2C3E50;   /* primary text */
+  --color-ink-muted:     #6B7C8D;   /* secondary / labels */
+  --color-ink-faint:     #A8B8C8;   /* placeholder / disabled */
+
+  /* Alert – busy / crowded status */
+  --color-alert:         #E5989B;
+  --color-alert-light:   #FAEAEA;
+
+  /* Gold – points / rewards */
+  --color-gold:          #E2C044;
+  --color-gold-light:    #FBF3D0;
+
+  /* Success – available / empty status */
+  --color-success:       #7BC99A;
+  --color-success-light: #E8F6EE;
+
+  /* Surfaces & borders */
+  --color-surface:       #FFFFFF;   /* cards, sidebar */
+  --color-border:        #E4E4E0;   /* dividers, card outlines */
+
+  /*
+   * Overlay — modal backdrops & scanner bg.
+   * Intentionally NOT overridden in .dark so these always stay near-black
+   * regardless of theme (ink changes to light in dark mode, overlay does not).
+   */
+  --color-overlay:       #000000;
+
+  /* Typography scale */
+  --font-sans: var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ─────────────────────────────────────────────────────────────
+   Dark mode token overrides
+   Designers: edit ONLY this block to retheme dark mode.
+   No React/TSX files need to be touched.
+   ───────────────────────────────────────────────────────────── */
+.dark {
+  /* Page & surface backgrounds */
+  --color-canvas:        #0f172a;   /* slate-900 — main page bg      */
+  --color-surface:       #1e293b;   /* slate-800 — cards, sidebar    */
+  --color-border:        #334155;   /* slate-700 — dividers          */
+
+  /* Typography — ink flips to light so all text-ink reads on dark bg */
+  --color-ink:           #e2e8f0;   /* slate-200 — primary text      */
+  --color-ink-muted:     #94a3b8;   /* slate-400 — secondary text    */
+  --color-ink-faint:     #64748b;   /* slate-500 — placeholder text  */
+
+  /*
+   * Brand — darkened teal so text-ink (#e2e8f0) meets WCAG AA contrast
+   * (~3.5:1) on active nav items and primary buttons.
+   */
+  --color-brand:         #2B7A80;
+  --color-brand-dark:    #236870;
+  --color-brand-light:   #1a3045;
+  --color-brand-faint:   #112030;
+
+  /* Status light backgrounds — deep tinted darks */
+  --color-success-light: #052e16;
+  --color-alert-light:   #450a0a;
+  --color-gold-light:    #422006;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ── Base styles ── */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+html,
+body {
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ── Thin branded scrollbar ── */
+::-webkit-scrollbar        { width: 5px; height: 5px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: #B3D2D5; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #8FBDC1; }
