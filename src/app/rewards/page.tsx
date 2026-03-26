@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { type LevelTier, LEVELS, getLevel } from "@/lib/levels";
 
 // ─────────────────────────────────────────────
 // Types  (shapes match Supabase schema)
@@ -47,35 +48,6 @@ type UserRewards = {
   avatar_url: string | null;
   points: number;  // DB column name is "points" (not "points_balance")
 };
-
-// ─────────────────────────────────────────────
-// Level tier system
-// ─────────────────────────────────────────────
-
-type LevelTier = {
-  name: string;
-  emoji: string;
-  minPts: number;
-  nextPts: number;
-  badgeClass: string;
-};
-
-const LEVELS: LevelTier[] = [
-  { name: "Seedling", emoji: "🌱", minPts: 0,    nextPts: 500,      badgeClass: "bg-success-light text-success" },
-  { name: "Explorer", emoji: "🔍", minPts: 500,   nextPts: 1500,     badgeClass: "bg-brand-faint text-brand-dark" },
-  { name: "Scholar",  emoji: "📚", minPts: 1500,  nextPts: 3000,     badgeClass: "bg-brand-light text-ink" },
-  { name: "Champion", emoji: "🏆", minPts: 3000,  nextPts: 5000,     badgeClass: "bg-gold-light text-ink" },
-  { name: "Legend",   emoji: "⭐", minPts: 5000,  nextPts: Infinity, badgeClass: "bg-gold text-ink" },
-];
-
-function getLevel(pts: number): LevelTier & { progress: number } {
-  const tier = [...LEVELS].reverse().find((l) => pts >= l.minPts) ?? LEVELS[0];
-  const progress =
-    tier.nextPts === Infinity
-      ? 100
-      : Math.min(100, Math.round(((pts - tier.minPts) / (tier.nextPts - tier.minPts)) * 100));
-  return { ...tier, progress };
-}
 
 // ─────────────────────────────────────────────
 // Category config

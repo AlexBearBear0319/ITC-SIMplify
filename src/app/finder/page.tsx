@@ -1,27 +1,12 @@
 "use client";
 
-/**
- * Study Buddy Finder — /finder
- *
- * Supabase wiring:
- *   Replace INITIAL_GROUPS with:
- *     const { data } = await supabase
- *       .from("study_groups")
- *       .select("*, profiles(username, avatar_url), locations(name, category)")
- *       .eq("is_active", true)
- *       .order("created_at", { ascending: false });
- *
- *   study_group_members junction table:
- *     Join:  supabase.from("study_group_members").insert({ group_id, user_id })
- *     Leave: supabase.from("study_group_members").delete().match({ group_id, user_id })
- *     List:  supabase.from("study_group_members").select("*, profiles(username, avatar_url)").eq("group_id", id)
- */
 
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { createClient } from "@/utils/supabase/client";
 import { joinStudyGroup, leaveStudyGroup, createStudyGroup } from "@/lib/db/study-groups";
+import { awardPoints, POINT_ACTIONS } from "@/lib/db/points";
 import QRScannerModal from "@/components/features/QRScannerModal";
 import { motion } from "framer-motion";
 import {
@@ -63,6 +48,8 @@ type UserProfile = {
   id: string;
   username: string;
   avatar_url: string | null;
+  school_id: number | null;
+  major_id: number | null;
 };
 
 type CreateForm = {
@@ -74,6 +61,8 @@ type CreateForm = {
 
 
 const POPULAR_SUBJECTS = ["Python", "React", "Statistics", "Writing", "DSA", "Security", "Design"];
+
+type Subject = { id: number; name: string; course_code: string | null };
 
 // ─────────────────────────────────────────────
 // Animation variants
@@ -198,13 +187,7 @@ function GroupDetailDialog({
               </div>
             </div>
 
-            {/* Participants
-                TODO: Replace mock slots with:
-                  const { data: members } = await supabase
-                    .from("study_group_members")
-                    .select("*, profiles(username, avatar_url)")
-                    .eq("group_id", group.id);
-            */}
+            {/* Participants — slots are visual only; members are tracked in study_group_members */}
             <div>
               <p className="text-xs font-semibold text-ink-muted mb-2.5">
                 Participants ({group.current_members}/{group.max_members})
@@ -437,11 +420,13 @@ function CreateGroupDialog({
   onOpenChange,
   onSubmit,
   locationsList,
+  subjects,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (form: CreateForm) => Promise<void>;
   locationsList: { id: number; name: string }[];
+  subjects: Subject[];
 }) {
   const EMPTY_FORM: CreateForm = { subject: "", description: "", location_id: 0, max_members: 4 };
   const [form,        setForm]        = useState<CreateForm>(EMPTY_FORM);
@@ -518,14 +503,41 @@ function CreateGroupDialog({
                   <label className={FORM_LABEL}>
                     Subject <span className="text-alert">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={form.subject}
-                    onChange={(e) => set("subject", e.target.value)}
-                    placeholder="e.g., Python for Data Science"
-                    maxLength={80}
-                    className={FORM_INPUT}
-                  />
+                  {subjects.length > 0 ? (
+                    <div className="relative">
+                      <select
+                        value={form.subject}
+                        onChange={(e) => set("subject", e.target.value)}
+                        className={`${FORM_INPUT} appearance-none pr-8 cursor-pointer`}
+                      >
+                        <option value="">Choose a subject…</option>
+                        {subjects.map((s) => {
+                          const label = s.course_code ? `${s.course_code} — ${s.name}` : s.name;
+                          return (
+                            <option key={s.id} value={label}>{label}</option>
+                          );
+                        })}
+                      </select>
+                      <ChevronDown
+                        size={13}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        value={form.subject}
+                        onChange={(e) => set("subject", e.target.value)}
+                        placeholder="e.g., Python for Data Science"
+                        maxLength={80}
+                        className={FORM_INPUT}
+                      />
+                      <p className="text-xs text-ink-faint mt-1">
+                        Set your school &amp; major in your profile to see subject options.
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 <div>
@@ -658,6 +670,7 @@ function FinderPageContent() {
   const [currentUser,     setCurrentUser]     = useState<UserProfile | null>(null);
   const [groups,          setGroups]          = useState<StudyGroup[]>([]);
   const [locationsList,   setLocationsList]   = useState<{ id: number; name: string }[]>([]);
+  const [subjects,        setSubjects]        = useState<Subject[]>([]);
   const [loading,         setLoading]         = useState(true);
   const [searchQuery,     setSearchQuery]     = useState("");
   const [locationFilter,  setLocationFilter]  = useState("all");
@@ -673,16 +686,46 @@ function FinderPageContent() {
     setLoading(false);
   };
 
-  // Fetch the real logged-in user's profile
+  // Fetch the logged-in user's profile (including school/major for subject filtering)
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
       const { data } = await supabase
         .from("profiles")
-        .select("id, username, avatar_url")
+        .select("id, username, avatar_url, school_id, major_id")
         .eq("id", user.id)
         .single();
-      if (data) setCurrentUser(data as UserProfile);
+      if (data) {
+        setCurrentUser(data as UserProfile);
+
+        // Restore the user's active group across page refreshes.
+        // Two-step: find their group memberships, then pick the one that's still active.
+        supabase
+          .from("study_group_members")
+          .select("group_id")
+          .eq("user_id", data.id)
+          .then(async ({ data: memberships }) => {
+            if (!memberships?.length) return;
+            const { data: active } = await supabase
+              .from("study_groups")
+              .select("id")
+              .eq("is_active", true)
+              .in("id", memberships.map((m) => m.group_id))
+              .limit(1)
+              .maybeSingle();
+            if (active) setActiveGroupId(active.id);
+          });
+
+        // Load subjects for this user's major
+        if (data.major_id) {
+          supabase
+            .from("subjects")
+            .select("id, name, course_code")
+            .eq("major_id", data.major_id)
+            .order("name")
+            .then(({ data: subs }) => { if (subs) setSubjects(subs); });
+        }
+      }
     });
   }, []);
 
@@ -757,6 +800,7 @@ function FinderPageContent() {
     if (!group || group.current_members >= group.max_members) return;
     const { error } = await joinStudyGroup(supabase, id, currentUser.id);
     if (error) { console.error("[handleJoinGroup]", error); return; }
+    await awardPoints(supabase, currentUser.id, POINT_ACTIONS.JOIN_STUDY_GROUP);
     setActiveGroupId(id);
     await fetchGroups();
   };
@@ -770,7 +814,7 @@ function FinderPageContent() {
   };
 
   const handleCreate = async (form: CreateForm) => {
-    if (!currentUser) return;
+    if (!currentUser || activeGroupId !== null) return;
     const { data, error } = await createStudyGroup(supabase, {
       host_id:     currentUser.id,
       location_id: form.location_id,
@@ -779,6 +823,7 @@ function FinderPageContent() {
       max_members: form.max_members,
     });
     if (error || !data) { console.error("[handleCreate]", error); return; }
+    await awardPoints(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);
     setActiveGroupId(data.id);
     await fetchGroups();
   };
@@ -808,6 +853,7 @@ function FinderPageContent() {
         onOpenChange={setCreateOpen}
         onSubmit={handleCreate}
         locationsList={locationsList}
+        subjects={subjects}
       />
 
       <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">

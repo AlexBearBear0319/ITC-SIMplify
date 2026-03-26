@@ -1,29 +1,5 @@
 "use client";
 
-/**
- * Login / Sign-up — /auth/login
- *
- * Supabase wiring (swap in when ready):
- *
- *   Sign in:
- *     const { error } = await supabase.auth.signInWithPassword({ email, password });
- *     if (error) throw error;
- *     router.push("/");
- *
- *   Sign up:
- *     const { error } = await supabase.auth.signUp({
- *       email,
- *       password,
- *       options: { data: { full_name: fullName } },
- *     });
- *     if (error) throw error;
- *     // Show "check your email" message or redirect
- *
- *   Session guard (server component or middleware):
- *     const { data: { session } } = await supabase.auth.getSession();
- *     if (session) redirect("/");
- */
-
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";

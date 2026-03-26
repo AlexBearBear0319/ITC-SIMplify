@@ -1,33 +1,8 @@
 "use client";
 
-/**
- * User Profile — /profile
- *
- * Supabase wiring:
- *   Replace MOCK_PROFILE with:
- *     const { data: profile } = await supabase
- *       .from("profiles")
- *       .select("id, full_name, username, avatar_url, points_balance, streak_days, total_checkins, joined_at")
- *       .eq("id", session.user.id)
- *       .single();
- *
- *   Replace MOCK_ACHIEVEMENTS with:
- *     const { data } = await supabase
- *       .from("user_achievements")
- *       .select("*, achievements(id, name, description, icon_key, rarity)")
- *       .eq("user_id", session.user.id);
- *
- *   Replace MOCK_ACTIVITY with:
- *     const { data } = await supabase
- *       .from("activity_log")
- *       .select("*")
- *       .eq("user_id", session.user.id)
- *       .order("created_at", { ascending: false })
- *       .limit(6);
- */
-
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { getLevel } from "@/lib/levels";
 import {
   motion,
   AnimatePresence,
@@ -35,7 +10,6 @@ import {
   useTransform,
   animate,
 } from "framer-motion";
-import Link from "next/link";
 import {
   MapPin,
   Users,
@@ -50,11 +24,12 @@ import {
   Gift,
   Settings,
   CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 // ─────────────────────────────────────────────
-// Types  (shapes match Supabase schema)
+// Types
 // ─────────────────────────────────────────────
 
 type UserProfile = {
@@ -65,8 +40,26 @@ type UserProfile = {
   points: number;
   streak_days: number;
   total_checkins: number;
-  joined_at: string;        // sourced from auth user.created_at
+  joined_at: string;
+  age: number | null;
+  school_id: number | null;
+  major_id: number | null;
+  education_level: string | null;
+  semester_term: string | null;
 };
+
+type EditForm = {
+  full_name: string;
+  username: string;
+  age: string;
+  school_id: number;
+  major_id: number;
+  education_level: string;
+  semester_term: string;
+};
+
+type School = { id: number; name: string; abbr: string };
+type Major  = { id: number; name: string };
 
 type AchievementRarity = "common" | "rare" | "epic";
 
@@ -91,22 +84,6 @@ type ActivityItem = {
 };
 
 // ─────────────────────────────────────────────
-// Level system  (mirrors rewards/page.tsx tiers)
-// ─────────────────────────────────────────────
-
-const LEVELS = [
-  { name: "Seedling", emoji: "🌱", minPts: 0,    badgeClass: "bg-success-light text-success"  },
-  { name: "Explorer", emoji: "🔍", minPts: 500,   badgeClass: "bg-brand-faint text-brand-dark" },
-  { name: "Scholar",  emoji: "📚", minPts: 1500,  badgeClass: "bg-brand-light text-ink"        },
-  { name: "Champion", emoji: "🏆", minPts: 3000,  badgeClass: "bg-gold-light text-ink"         },
-  { name: "Legend",   emoji: "⭐", minPts: 5000,  badgeClass: "bg-gold text-ink"               },
-];
-
-function getCurrentLevel(pts: number) {
-  return [...LEVELS].reverse().find((l) => pts >= l.minPts) ?? LEVELS[0];
-}
-
-// ─────────────────────────────────────────────
 // Config maps
 // ─────────────────────────────────────────────
 
@@ -124,10 +101,6 @@ const ACTIVITY_CONFIG: Record<ActivityType, { icon: LucideIcon; bg: string; icon
   badge:      { icon: Trophy,       bg: "bg-brand-light",   iconClass: "text-brand-dark" },
 };
 
-// ─────────────────────────────────────────────
-// Icon map  (DB icon_key → Lucide component)
-// ─────────────────────────────────────────────
-
 const ICON_MAP: Record<string, LucideIcon> = {
   book_open:     BookOpen,
   map_pin:       MapPin,
@@ -141,7 +114,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
 };
 
 // ─────────────────────────────────────────────
-// timeAgo helper
+// Helpers
 // ─────────────────────────────────────────────
 
 function timeAgo(dateStr: string): string {
@@ -155,8 +128,12 @@ function timeAgo(dateStr: string): string {
   return `${days} days ago`;
 }
 
+const FIELD_INPUT =
+  "w-full px-4 py-2.5 rounded-xl border border-border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow";
+const FIELD_LABEL = "block text-sm font-medium text-ink mb-1.5";
+
 // ─────────────────────────────────────────────
-// CountUp  (animates 0 → target on mount)
+// CountUp
 // ─────────────────────────────────────────────
 
 function CountUp({
@@ -168,10 +145,8 @@ function CountUp({
   suffix?: string;
   duration?: number;
 }) {
-  const count = useMotionValue(0);
-  const display = useTransform(count, (v) =>
-    `${Math.round(v).toLocaleString()}${suffix}`
-  );
+  const count   = useMotionValue(0);
+  const display = useTransform(count, (v) => `${Math.round(v).toLocaleString()}${suffix}`);
 
   useEffect(() => {
     const controls = animate(count, to, {
@@ -209,18 +184,34 @@ const cardVariants = {
 // Page
 // ─────────────────────────────────────────────
 
+type SaveState = "idle" | "saving" | "saved" | "error";
+
 export default function ProfilePage() {
+  const supabase = createClient();
+
   const [profile,      setProfile]      = useState<UserProfile | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [activity,     setActivity]     = useState<ActivityItem[]>([]);
   const [loading,      setLoading]      = useState(true);
 
+  // Edit form state
+  const [editForm,        setEditForm]        = useState<EditForm>({
+    full_name: "", username: "", age: "", school_id: 0, major_id: 0,
+    education_level: "", semester_term: "",
+  });
+  const [schools,         setSchools]         = useState<School[]>([]);
+  const [majors,          setMajors]          = useState<Major[]>([]);
+  const [saveState,       setSaveState]       = useState<SaveState>("idle");
+  const [saveError,       setSaveError]       = useState<string | null>(null);
+
+  const setEdit = <K extends keyof EditForm>(k: K, v: EditForm[K]) =>
+    setEditForm((f) => ({ ...f, [k]: v }));
+
+  // ── Initial data load ──
   useEffect(() => {
-    const supabase = createClient();
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
 
-      // Fetch profile, check-in count, all achievements, user's unlocked achievements, activity log
       const [
         { data: prof },
         { count },
@@ -230,7 +221,7 @@ export default function ProfilePage() {
       ] = await Promise.all([
         supabase
           .from("profiles")
-          .select("id, full_name, username, avatar_url, points, streak_days")
+          .select("id, full_name, username, avatar_url, points, streak_days, age, school_id, major_id, education_level, semester_term")
           .eq("id", user.id)
           .single(),
         supabase
@@ -254,10 +245,10 @@ export default function ProfilePage() {
       ]);
 
       if (prof) {
-        const pts       = prof.points      ?? 0;
-        const streak    = prof.streak_days ?? 0;
+        const pts    = prof.points      ?? 0;
+        const streak = prof.streak_days ?? 0;
 
-        setProfile({
+        const loaded: UserProfile = {
           ...prof,
           full_name:      prof.full_name ?? "Unknown",
           username:       prof.username  ?? "unknown",
@@ -265,19 +256,33 @@ export default function ProfilePage() {
           streak_days:    streak,
           total_checkins: count ?? 0,
           joined_at:      user.created_at,
+          age:            prof.age            ?? null,
+          school_id:      prof.school_id      ?? null,
+          major_id:       prof.major_id       ?? null,
+          education_level: prof.education_level ?? null,
+          semester_term:  prof.semester_term  ?? null,
+        };
+        setProfile(loaded);
+
+        // Initialise the edit form from loaded profile data
+        setEditForm({
+          full_name:       loaded.full_name,
+          username:        loaded.username,
+          age:             loaded.age != null ? String(loaded.age) : "",
+          school_id:       loaded.school_id  ?? 0,
+          major_id:        loaded.major_id   ?? 0,
+          education_level: loaded.education_level ?? "",
+          semester_term:   loaded.semester_term   ?? "",
         });
 
-        // Map unlocked achievements into a quick lookup
         const unlockedMap = new Map(
           (userAchievements ?? []).map((ua) => [ua.achievement_id, ua.unlocked_at])
         );
 
-        // Merge all achievements with unlock status
         const mapped: Achievement[] = (allAchievements ?? []).map((a) => {
           const unlockedAt = unlockedMap.get(a.id);
           const icon       = ICON_MAP[a.icon_key] ?? BookOpen;
 
-          // Progress text for locked achievements that have measurable thresholds
           let progress: string | undefined;
           if (!unlockedAt) {
             if (a.name === "Dedicated")    progress = `${streak} / 30 days`;
@@ -300,7 +305,6 @@ export default function ProfilePage() {
         setAchievements(mapped);
       }
 
-      // Map activity log rows
       setActivity(
         (activityData ?? []).map((a) => ({
           id:          a.id,
@@ -314,11 +318,83 @@ export default function ProfilePage() {
     });
   }, []);
 
+  // ── Load schools on mount ──
+  useEffect(() => {
+    supabase
+      .from("schools")
+      .select("id, name, abbr")
+      .order("name")
+      .then(({ data }) => { if (data) setSchools(data); });
+  }, []);
+
+  // ── Reload majors whenever school changes ──
+  useEffect(() => {
+    if (editForm.school_id === 0) {
+      setMajors([]);
+      return;
+    }
+    supabase
+      .from("majors")
+      .select("id, name")
+      .eq("school_id", editForm.school_id)
+      .order("name")
+      .then(({ data }) => { if (data) setMajors(data); });
+  }, [editForm.school_id]);
+
+  // ── Save profile edits ──
+  async function handleSaveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    setSaveState("saving");
+    setSaveError(null);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        full_name:       editForm.full_name.trim(),
+        username:        editForm.username.trim(),
+        age:             editForm.age ? Number(editForm.age) : null,
+        school_id:       editForm.school_id || null,
+        major_id:        editForm.major_id  || null,
+        education_level: editForm.education_level || null,
+        semester_term:   editForm.semester_term.trim() || null,
+      })
+      .eq("id", user.id);
+
+    if (error) {
+      setSaveState("error");
+      setSaveError(error.message);
+      return;
+    }
+
+    // Reflect changes in the hero card immediately
+    setProfile((prev) =>
+      prev
+        ? {
+            ...prev,
+            full_name:       editForm.full_name.trim(),
+            username:        editForm.username.trim(),
+            age:             editForm.age ? Number(editForm.age) : null,
+            school_id:       editForm.school_id || null,
+            major_id:        editForm.major_id  || null,
+            education_level: editForm.education_level || null,
+            semester_term:   editForm.semester_term.trim() || null,
+          }
+        : prev
+    );
+
+    setSaveState("saved");
+    setTimeout(() => setSaveState("idle"), 2500);
+  }
+
   if (loading || !profile) {
     return (
       <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
         <div className="max-w-2xl mx-auto space-y-6">
           <div className="h-36 rounded-2xl bg-surface border border-border animate-pulse" />
+          <div className="h-52 rounded-2xl bg-surface border border-border animate-pulse" />
           <div className="grid grid-cols-3 gap-3">
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-28 rounded-2xl bg-surface border border-border animate-pulse" />
@@ -330,7 +406,7 @@ export default function ProfilePage() {
     );
   }
 
-  const level = getCurrentLevel(profile.points);
+  const level      = getLevel(profile.points);
   const joinedLabel = new Date(profile.joined_at).toLocaleDateString("en-SG", {
     month: "short",
     year: "numeric",
@@ -350,12 +426,10 @@ export default function ProfilePage() {
           }}
           className="relative overflow-hidden bg-surface rounded-2xl p-6 shadow-sm border border-border"
         >
-          {/* Ambient blobs */}
           <div className="pointer-events-none absolute -top-8 -left-8 w-36 h-36 rounded-full bg-brand opacity-20 blur-2xl" />
           <div className="pointer-events-none absolute -bottom-4 right-6 w-28 h-28 rounded-full bg-brand-light opacity-30 blur-xl" />
 
           <div className="relative flex flex-col sm:flex-row sm:items-start gap-4">
-            {/* Avatar */}
             <div className="shrink-0 w-20 h-20 rounded-2xl bg-brand-light flex items-center justify-center text-3xl font-extrabold text-ink shadow-sm select-none">
               {profile.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -369,7 +443,6 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Name, username, badges */}
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -378,13 +451,13 @@ export default function ProfilePage() {
                   </h1>
                   <p className="text-sm text-ink-muted">@{profile.username}</p>
                 </div>
-                <Link
-                  href="/settings"
+                <a
+                  href="#edit-profile"
                   className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors duration-150"
                 >
                   <Settings size={12} />
                   Edit
-                </Link>
+                </a>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -395,9 +468,183 @@ export default function ProfilePage() {
                   Member since {joinedLabel}
                 </span>
               </div>
+
+              {/* School / major / education info */}
+              {(profile.education_level || profile.semester_term) && (
+                <p className="text-xs text-ink-faint mt-1.5">
+                  {[profile.education_level, profile.semester_term]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              )}
             </div>
           </div>
         </motion.div>
+
+        {/* ── Edit Profile ── */}
+        <section
+          id="edit-profile"
+          className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden"
+        >
+          <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+            <Settings size={16} className="text-ink-muted" />
+            <h2 className="font-semibold text-ink">Edit Profile</h2>
+          </div>
+
+          <form onSubmit={handleSaveProfile} className="p-5 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+              {/* Full Name */}
+              <div>
+                <label className={FIELD_LABEL}>Full Name</label>
+                <input
+                  type="text"
+                  value={editForm.full_name}
+                  onChange={(e) => setEdit("full_name", e.target.value)}
+                  required
+                  className={FIELD_INPUT}
+                  placeholder="Your full name"
+                />
+              </div>
+
+              {/* Username */}
+              <div>
+                <label className={FIELD_LABEL}>Username</label>
+                <input
+                  type="text"
+                  value={editForm.username}
+                  onChange={(e) => setEdit("username", e.target.value)}
+                  required
+                  className={FIELD_INPUT}
+                  placeholder="your_username"
+                />
+              </div>
+
+              {/* Age */}
+              <div>
+                <label className={FIELD_LABEL}>Age</label>
+                <input
+                  type="number"
+                  min={16}
+                  max={100}
+                  value={editForm.age}
+                  onChange={(e) => setEdit("age", e.target.value)}
+                  className={FIELD_INPUT}
+                  placeholder="e.g. 21"
+                />
+              </div>
+
+              {/* Education Level */}
+              <div>
+                <label className={FIELD_LABEL}>Education Level</label>
+                <div className="relative">
+                  <select
+                    value={editForm.education_level}
+                    onChange={(e) => setEdit("education_level", e.target.value)}
+                    className={`${FIELD_INPUT} appearance-none cursor-pointer pr-8`}
+                  >
+                    <option value="">Select…</option>
+                    <option value="Diploma">Diploma</option>
+                    <option value="Undergraduate">Undergraduate</option>
+                    <option value="Postgraduate">Postgraduate</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* School */}
+              <div>
+                <label className={FIELD_LABEL}>School</label>
+                <div className="relative">
+                  <select
+                    value={editForm.school_id}
+                    onChange={(e) => {
+                      setEdit("school_id", Number(e.target.value));
+                      setEdit("major_id", 0);
+                    }}
+                    className={`${FIELD_INPUT} appearance-none cursor-pointer pr-8`}
+                  >
+                    <option value={0}>Select school…</option>
+                    {schools.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.abbr} — {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Major */}
+              <div>
+                <label className={FIELD_LABEL}>Major</label>
+                <div className="relative">
+                  <select
+                    value={editForm.major_id}
+                    onChange={(e) => setEdit("major_id", Number(e.target.value))}
+                    disabled={editForm.school_id === 0 || majors.length === 0}
+                    className={`${FIELD_INPUT} appearance-none cursor-pointer pr-8 disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    <option value={0}>
+                      {editForm.school_id === 0 ? "Select school first…" : "Select major…"}
+                    </option>
+                    {majors.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Semester / Term */}
+              <div className="sm:col-span-2">
+                <label className={FIELD_LABEL}>Semester / Term</label>
+                <input
+                  type="text"
+                  value={editForm.semester_term}
+                  onChange={(e) => setEdit("semester_term", e.target.value)}
+                  className={FIELD_INPUT}
+                  placeholder="e.g. Autumn 2025, Trimester 1"
+                />
+              </div>
+            </div>
+
+            {/* Save row */}
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="submit"
+                disabled={saveState === "saving"}
+                className="px-5 py-2.5 rounded-full bg-ink text-surface text-sm font-medium hover:bg-ink/80 active:scale-95 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {saveState === "saving" ? "Saving…" : "Save Profile"}
+              </button>
+
+              <AnimatePresence>
+                {saveState === "saved" && (
+                  <motion.div
+                    key="saved"
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="flex items-center gap-1.5 text-success text-sm"
+                  >
+                    <CheckCircle2 size={15} />
+                    <span>Saved!</span>
+                  </motion.div>
+                )}
+                {saveState === "error" && (
+                  <motion.div
+                    key="error"
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="flex items-center gap-1.5 text-alert text-sm"
+                  >
+                    <XCircle size={15} />
+                    <span>{saveError ?? "Failed to save."}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </form>
+        </section>
 
         {/* ── Stats grid ── */}
         <motion.div
@@ -408,9 +655,9 @@ export default function ProfilePage() {
         >
           {(
             [
-              { label: "Total Points", value: profile.points,         suffix: "",      icon: Coins,  iconClass: "text-gold",       bg: "bg-gold-light"   },
-              { label: "Study Streak", value: profile.streak_days,    suffix: " days", icon: Flame,  iconClass: "text-alert",      bg: "bg-alert-light"  },
-              { label: "Check-ins",    value: profile.total_checkins, suffix: "",      icon: MapPin, iconClass: "text-brand-dark", bg: "bg-brand-faint"  },
+              { label: "Total Points", value: profile.points,         suffix: "",      icon: Coins,  iconClass: "text-gold",       bg: "bg-gold-light"  },
+              { label: "Study Streak", value: profile.streak_days,    suffix: " days", icon: Flame,  iconClass: "text-alert",      bg: "bg-alert-light" },
+              { label: "Check-ins",    value: profile.total_checkins, suffix: "",      icon: MapPin, iconClass: "text-brand-dark", bg: "bg-brand-faint" },
             ] as const
           ).map(({ label, value, suffix, icon: Icon, iconClass, bg }) => (
             <motion.div
@@ -511,7 +758,7 @@ export default function ProfilePage() {
               {activity.length === 0 ? (
                 <p className="px-4 py-6 text-sm text-ink-muted text-center">No activity yet.</p>
               ) : activity.map((item, index) => {
-                const cfg = ACTIVITY_CONFIG[item.type];
+                const cfg  = ACTIVITY_CONFIG[item.type];
                 const Icon = cfg.icon;
                 return (
                   <div
