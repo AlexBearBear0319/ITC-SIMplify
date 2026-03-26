@@ -1,15 +1,16 @@
 // ============================================================
-// DATABASE QUERIES: ACTIVE SESSIONS (Check-in / Check-out)
+// DB QUERIES: ACTIVE SESSIONS (check-in / check-out)
 // ============================================================
-// Handles the core feature: students checking in/out of study spots.
+// This handles the main feature of the app: students checking
+// in and out of study spots.
 //
-// FLOW:
+// The flow goes something like:
 //   1. Student scans QR code at a location
-//   2. App calls checkIn() → creates a session record
-//   3. Student is now "occupying" the spot
-//   4. App calls awardCheckInPoints() → student earns points
-//   5. App calls recalculateLocationStatus() → spot status updates
-//   6. When done, student calls checkOut() → session ends
+//   2. We call checkIn() to create a session row
+//   3. Student is now "occupying" a spot
+//   4. Call awardPoints() from points.ts to give them their check-in points
+//   5. The DB trigger updates location status automatically
+//   6. When they're done, checkOut() marks the session as inactive
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -18,26 +19,26 @@ import type { ActiveSession, DbResult } from '@/lib/types/database'
 // ─── CHECK IN ─────────────────────────────────────────────────────────────────
 
 /**
- * Data needed when a student checks in to a study spot.
+ * The data we need from the student when they check in.
  */
 export type CheckInData = {
-  user_id: string          // The student's profile ID
-  location_id: number      // Which study spot they're at
-  activity: string         // What they're doing, e.g., "Studying", "Group Work"
-  module: string | null    // Subject/module they're studying, e.g., "CS101" (optional)
-  duration_minutes: number // How long they plan to stay
-  seats_taken?: number     // How many seats their group takes (defaults to 1)
+  user_id: string          // the student's profile ID
+  location_id: number      // which study spot they're at
+  activity: string         // what they're doing, e.g. "Studying", "Group Work"
+  module: string | null    // subject they're studying, e.g. "CS101" (can be null)
+  duration_minutes: number // how long they plan to stay
+  seats_taken?: number     // how many seats their group needs (defaults to 1)
 }
 
 /**
- * Creates a new active session when a student checks in to a study spot.
- * This is the main entry point for the check-in feature.
+ * Creates a new session row when a student checks in.
+ * This is basically the entry point for the whole check-in flow.
  *
- * After calling this, you should also:
- *   - Call awardPoints() from '@/lib/db/points' to give them check-in points
- *   - Call recalculateLocationStatus() from '@/lib/db/locations' to update the map
+ * After calling this you should also:
+ *   - call awardPoints() from points.ts to give them their check-in points
+ *   - the DB trigger handles updating location status automatically
  *
- * @param data - The check-in details (see CheckInData type)
+ * @param data - the check-in info (see CheckInData above)
  */
 export async function checkIn(
   supabase: SupabaseClient,
@@ -51,10 +52,10 @@ export async function checkIn(
       activity: data.activity,
       module: data.module,
       duration_minutes: data.duration_minutes,
-      seats_taken: data.seats_taken ?? 1,  // Default to 1 seat if not specified
+      seats_taken: data.seats_taken ?? 1,  // default to 1 seat if they didn't specify
       is_active: true,
     })
-    .select()    // Return the newly created row
+    .select()    // need to return the new row so we have the generated ID
     .single()
 
   if (error) {
@@ -68,13 +69,12 @@ export async function checkIn(
 // ─── CHECK OUT ────────────────────────────────────────────────────────────────
 
 /**
- * Ends a student's session at a study spot by marking it as inactive.
- * Call this when the student taps "Check Out" in the app.
+ * Ends a student's session by flipping is_active to false.
+ * This is a soft delete, we keep the row for history/analytics.
  *
- * After calling this, you should also:
- *   - Call recalculateLocationStatus() from '@/lib/db/locations'
+ * The DB trigger picks up the UPDATE and recalculates location status.
  *
- * @param sessionId - The ID of the active session to end
+ * @param sessionId - ID of the session to end
  */
 export async function checkOut(
   supabase: SupabaseClient,
@@ -82,7 +82,7 @@ export async function checkOut(
 ): Promise<DbResult<ActiveSession>> {
   const { data, error } = await supabase
     .from('active_sessions')
-    .update({ is_active: false })  // Mark as inactive (soft delete — keeps history)
+    .update({ is_active: false })  // soft delete, keeps the row for history
     .eq('id', sessionId)
     .select()
     .single()
@@ -98,13 +98,14 @@ export async function checkOut(
 // ─── GET USER'S CURRENT SESSION ───────────────────────────────────────────────
 
 /**
- * Finds the student's currently active session (if any).
- * Use this to check if a user is already checked in somewhere before
- * allowing them to check in at a new location.
+ * Looks up the student's currently active session, if they have one.
+ * Useful for checking "is this person already checked in somewhere" before
+ * letting them check in again.
  *
- * Returns null data (not an error) if the user isn't checked in anywhere.
+ * Returns null data (not an error) if they're not checked in anywhere,
+ * that's the normal case for users who just opened the app.
  *
- * @param userId - The student's profile ID
+ * @param userId - the student's profile ID
  */
 export async function getUserActiveSession(
   supabase: SupabaseClient,
@@ -114,8 +115,8 @@ export async function getUserActiveSession(
     .from('active_sessions')
     .select('*')
     .eq('user_id', userId)
-    .eq('is_active', true)   // Only look at sessions that haven't ended yet
-    .maybeSingle()           // Returns null instead of error if no row found
+    .eq('is_active', true)   // only look at sessions that havent ended yet
+    .maybeSingle()           // returns null instead of throwing if no row found
 
   if (error) {
     console.error(`[getUserActiveSession] userId=${userId}`, error.message)
@@ -128,11 +129,11 @@ export async function getUserActiveSession(
 // ─── GET ALL ACTIVE SESSIONS AT A LOCATION ───────────────────────────────────
 
 /**
- * Fetches all ongoing sessions at a specific study spot.
- * Used to calculate how many people are currently there and
- * to show the "Study Buddy" list of people at the location.
+ * Gets all ongoing sessions at a specific study spot.
+ * Used to figure out how many people are currently there and
+ * to show the "Study Buddy" list on the location detail page.
  *
- * @param locationId - The location to check
+ * @param locationId - the location to check
  */
 export async function getActiveSessionsAtLocation(
   supabase: SupabaseClient,
@@ -156,11 +157,13 @@ export async function getActiveSessionsAtLocation(
 // ─── COUNT SEATS TAKEN AT A LOCATION ─────────────────────────────────────────
 
 /**
- * Counts the total number of seats currently occupied at a location.
- * Each session can take more than 1 seat if the student brought a group.
+ * Adds up all the seats_taken from active sessions at a location.
+ * One session can take multiple seats if the student brought a group.
  *
- * @param locationId - The location to count seats for
- * @returns The total seats taken (a number), or an error
+ * This is basically a reduce/sum operation, O(n) on the number of active sessions.
+ *
+ * @param locationId - the location to count seats for
+ * @returns total seats currently occupied (a number), or an error
  */
 export async function countSeatsTakenAtLocation(
   supabase: SupabaseClient,
@@ -170,7 +173,7 @@ export async function countSeatsTakenAtLocation(
 
   if (error) return { data: null, error }
 
-  // Add up the seats_taken from each active session
+  // sum up seats_taken across all active sessions at this spot
   const total = (data ?? []).reduce(
     (sum, session) => sum + (session.seats_taken ?? 1),
     0,
@@ -182,11 +185,14 @@ export async function countSeatsTakenAtLocation(
 // ─── UPDATE SESSION ───────────────────────────────────────────────────────────
 
 /**
- * Updates an existing active session's details.
- * Call this when the student wants to edit their session after checking in.
+ * Updates fields on an existing active session.
+ * For when the student wants to edit their check-in after the fact.
  *
- * @param sessionId - The ID of the session to update
- * @param updates   - Fields to change: activity, module, duration_minutes, seats_taken
+ * Only updates sessions that are still active (safety check so we dont
+ * accidentally edit old history rows).
+ *
+ * @param sessionId - ID of the session to update
+ * @param updates   - only the fields that need changing (Partial type so you dont have to pass everything)
  */
 export async function updateSession(
   supabase: SupabaseClient,
@@ -197,7 +203,7 @@ export async function updateSession(
     .from('active_sessions')
     .update(updates)
     .eq('id', sessionId)
-    .eq('is_active', true)   // Safety: only update sessions that are still active
+    .eq('is_active', true)   // only touch sessions that are still active
     .select()
     .single()
 
@@ -212,17 +218,15 @@ export async function updateSession(
 // ─── GET SESSIONS OPEN TO STUDY BUDDY ────────────────────────────────────────
 
 /**
- * Fetches active sessions where the student has opted in to finding a study buddy.
- * Can optionally filter by module so students can find people studying
- * the same subject.
+ * Gets active sessions where the student is open to finding a study buddy.
+ * Can optionally filter by module so you only see people studying the same thing.
  *
- * Note: "Open to study buddy" is determined by the student's session having
- * a module set. Students who leave module as null are treating their session
- * as private. Add an explicit `open_to_buddy` boolean column to active_sessions
- * in Supabase if you need more control over this.
+ * We use module != null as a proxy for "open to study buddy". If a student
+ * didnt set a module, we treat their session as private. Could add an explicit
+ * open_to_buddy boolean column later if we need more control.
  *
- * @param locationId      - The location to search at
- * @param filterByModule  - Optional: only return sessions studying this module
+ * @param locationId      - the location to search
+ * @param filterByModule  - optional, only return sessions with this module
  */
 export async function getStudyBuddySessionsAtLocation(
   supabase: SupabaseClient,
@@ -234,10 +238,10 @@ export async function getStudyBuddySessionsAtLocation(
     .select('*')
     .eq('location_id', locationId)
     .eq('is_active', true)
-    .not('module', 'is', null)  // Only sessions with a module are "open to study buddy"
+    .not('module', 'is', null)  // only sessions with a module set are "open"
 
   if (filterByModule) {
-    // Case-insensitive module match — e.g., "cs101" matches "CS101"
+    // case-insensitive match so "cs101" still finds "CS101"
     query = query.ilike('module', filterByModule)
   }
 

@@ -707,6 +707,20 @@ function FinderPageContent() {
     });
   }, []);
 
+  // Restore active group membership from DB (survives page refresh / navigation)
+  useEffect(() => {
+    if (!currentUser) return;
+    supabase
+      .from("study_group_members")
+      .select("group_id, study_groups!inner(is_active)")
+      .eq("user_id", currentUser.id)
+      .eq("study_groups.is_active", true)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setActiveGroupId(data.group_id);
+      });
+  }, [currentUser]);
+
   // Initial data load: groups + locations list
   useEffect(() => {
     fetchGroups();
