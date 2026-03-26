@@ -78,7 +78,9 @@ export default function SettingsPage() {
   const [pushEnabled,      setPushEnabled]      = useState(true);
   const [remindersEnabled, setRemindersEnabled] = useState(true);
 
-  const [logoutConfirm, setLogoutConfirm] = useState(false);
+  const [logoutConfirm,  setLogoutConfirm]  = useState(false);
+  const [deleteConfirm,  setDeleteConfirm]  = useState(false);
+  const [deleteError,    setDeleteError]    = useState<string | null>(null);
 
   // ── Load profile on mount ──
   useEffect(() => {
@@ -135,11 +137,33 @@ export default function SettingsPage() {
     }
 
     setSaveState("saved");
+    window.dispatchEvent(new Event("profile-updated"));
     setTimeout(() => setSaveState("idle"), 2500);
   }
 
   // ── Sign out ──
   async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push("/auth/login");
+  }
+
+  // ── Delete account ──
+  async function handleDeleteAccount() {
+    setDeleteError(null);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from("profiles")
+      .delete()
+      .eq("id", user.id);
+
+    if (error) {
+      setDeleteError(error.message);
+      setDeleteConfirm(false);
+      return;
+    }
+
     await supabase.auth.signOut();
     router.push("/auth/login");
   }
@@ -310,7 +334,8 @@ export default function SettingsPage() {
             <h2 className="font-semibold text-alert">Danger Zone</h2>
           </div>
 
-          <div className="p-5">
+          <div className="p-5 space-y-5">
+            {/* Sign out row */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-ink">Sign out of your account</p>
@@ -354,6 +379,57 @@ export default function SettingsPage() {
                   >
                     <LogOut size={14} />
                     Log Out
+                  </motion.button>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Delete account row */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-4 border-t border-alert/20">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-alert">Delete Account</p>
+                <p className="text-xs text-ink-muted mt-0.5">
+                  Permanently removes your profile and all data. This cannot be undone.
+                </p>
+                {deleteError && (
+                  <p className="text-xs text-alert mt-1">{deleteError}</p>
+                )}
+              </div>
+
+              <AnimatePresence mode="wait">
+                {deleteConfirm ? (
+                  <motion.div
+                    key="delete-confirm"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="flex items-center gap-2 shrink-0"
+                  >
+                    <button
+                      onClick={handleDeleteAccount}
+                      className="px-4 py-2 rounded-full bg-alert text-surface text-sm font-medium hover:bg-alert/80 active:scale-95 transition-all duration-150"
+                    >
+                      Yes, delete
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(false)}
+                      className="px-4 py-2 rounded-full border border-border text-sm text-ink-muted hover:text-ink transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.button
+                    key="delete-btn"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    onClick={() => setDeleteConfirm(true)}
+                    className="shrink-0 px-4 py-2 rounded-full border border-alert/30 text-alert text-sm font-medium hover:bg-alert-light transition-colors duration-150"
+                  >
+                    Delete Account
                   </motion.button>
                 )}
               </AnimatePresence>

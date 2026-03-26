@@ -190,6 +190,34 @@ export async function updateStreak(
   return { data: data as Profile, error: null }
 }
 
+// ─── DELETE PROFILE ───────────────────────────────────────────────────────────
+
+/**
+ * Deletes a student's profile row from the profiles table.
+ * Call this when the student chooses to delete their account.
+ *
+ * After calling this, sign out the user via supabase.auth.signOut()
+ * and redirect them to the login page.
+ *
+ * @param userId - The student's UUID
+ */
+export async function deleteProfile(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<DbResult<null>> {
+  const { error } = await supabase
+    .from('profiles')
+    .delete()
+    .eq('id', userId)
+
+  if (error) {
+    console.error(`[deleteProfile] userId=${userId}`, error.message)
+    return { data: null, error: error.message }
+  }
+
+  return { data: null, error: null }
+}
+
 // ─── GET LEADERBOARD ──────────────────────────────────────────────────────────
 
 /**

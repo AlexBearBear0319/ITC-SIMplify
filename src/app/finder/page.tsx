@@ -22,7 +22,9 @@ import { useSearchParams } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { createClient } from "@/utils/supabase/client";
 import { joinStudyGroup, leaveStudyGroup, createStudyGroup } from "@/lib/db/study-groups";
+import { POINT_ACTIONS } from "@/lib/db/points";
 import QRScannerModal from "@/components/features/QRScannerModal";
+import FeedbackModal, { type FeedbackData } from "@/components/features/FeedbackModal";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -116,12 +118,14 @@ function getCapacityInfo(current: number, max: number) {
 function GroupDetailDialog({
   group,
   activeGroupId,
+  currentUserId,
   onJoin,
   onLeave,
   onClose,
 }: {
   group: StudyGroup;
   activeGroupId: number | null;
+  currentUserId: string | null;
   onJoin: (id: number) => void;
   onLeave: (id: number) => void;
   onClose: () => void;
@@ -130,6 +134,7 @@ function GroupDetailDialog({
   const isFull             = group.current_members >= group.max_members;
   const isThisGroupActive  = activeGroupId === group.id;
   const hasOtherActiveGroup = activeGroupId !== null && activeGroupId !== group.id;
+  const isOwnGroup         = currentUserId === group.host_id;
   const hostInitials       = group.profiles.username.slice(0, 2).toUpperCase();
   const emptySlots         = Math.max(0, group.max_members - group.current_members);
 
@@ -255,7 +260,15 @@ function GroupDetailDialog({
 
           {/* Footer action */}
           <div className="px-6 pb-6">
-            {isThisGroupActive ? (
+            {isOwnGroup ? (
+              <button
+                onClick={() => onLeave(group.id)}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-alert-light hover:bg-alert/20 text-alert border border-alert/40 font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
+              >
+                <LogOut size={15} />
+                End Session
+              </button>
+            ) : isThisGroupActive ? (
               <button
                 onClick={() => onLeave(group.id)}
                 className="w-full flex items-center justify-center gap-2 py-3 bg-alert-light hover:bg-alert/20 text-alert border border-alert/40 font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
@@ -299,12 +312,14 @@ function GroupDetailDialog({
 function StudyGroupCard({
   group,
   activeGroupId,
+  currentUserId,
   onSelect,
   onJoin,
   onLeave,
 }: {
   group: StudyGroup;
   activeGroupId: number | null;
+  currentUserId: string | null;
   onSelect: () => void;
   onJoin: (id: number) => void;
   onLeave: (id: number) => void;
@@ -315,6 +330,7 @@ function StudyGroupCard({
   const initials         = group.profiles.username.slice(0, 2).toUpperCase();
   const isThisGroupActive  = activeGroupId === group.id;
   const hasOtherActiveGroup = activeGroupId !== null && activeGroupId !== group.id;
+  const isOwnGroup         = currentUserId === group.host_id;
   const pipCount  = Math.min(group.max_members, 8);
   const pipFilled = Math.min(group.current_members, pipCount);
 
@@ -392,24 +408,29 @@ function StudyGroupCard({
         <button
           onClick={(e) => {
             e.stopPropagation();
+            if (isOwnGroup) { onLeave(group.id); return; }
             if (isThisGroupActive) onLeave(group.id);
             else if (!hasOtherActiveGroup && !isFull) onJoin(group.id);
           }}
-          disabled={hasOtherActiveGroup || (!isThisGroupActive && isFull)}
+          disabled={hasOtherActiveGroup || (!isThisGroupActive && !isOwnGroup && isFull)}
           className={`
             shrink-0 flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-full
             transition-all duration-200 active:scale-[0.97]
-            ${isThisGroupActive
+            ${isOwnGroup
               ? "bg-alert-light text-alert border border-alert/40 hover:bg-alert/20"
-              : hasOtherActiveGroup
-                ? "bg-canvas text-ink-faint border border-border cursor-not-allowed"
-                : isFull
+              : isThisGroupActive
+                ? "bg-alert-light text-alert border border-alert/40 hover:bg-alert/20"
+                : hasOtherActiveGroup
                   ? "bg-canvas text-ink-faint border border-border cursor-not-allowed"
-                  : "bg-brand hover:bg-brand-dark text-ink border border-brand hover:border-brand-dark hover:shadow-sm"
+                  : isFull
+                    ? "bg-canvas text-ink-faint border border-border cursor-not-allowed"
+                    : "bg-brand hover:bg-brand-dark text-ink border border-brand hover:border-brand-dark hover:shadow-sm"
             }
           `}
         >
-          {isThisGroupActive ? (
+          {isOwnGroup ? (
+            <><LogOut size={12} /> End</>
+          ) : isThisGroupActive ? (
             <><LogOut size={12} /> Leave</>
           ) : isFull ? (
             <><Users size={12} /> Full</>
@@ -714,8 +735,11 @@ function FinderPageContent() {
   const [slotsFilter,     setSlotsFilter]     = useState("all");
   const [activeGroupId,   setActiveGroupId]   = useState<number | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
-  const [qrScanOpen,      setQrScanOpen]      = useState(false);
-  const [createOpen,      setCreateOpen]      = useState(false);
+  const [qrScanOpen,               setQrScanOpen]               = useState(false);
+  const [createOpen,               setCreateOpen]               = useState(false);
+  const [feedbackOpen,             setFeedbackOpen]             = useState(false);
+  const [endedGroupLocationId,     setEndedGroupLocationId]     = useState<number | null>(null);
+  const [endedGroupLocationName,   setEndedGroupLocationName]   = useState<string>("");
 
   // Always derive live group data from current state so dialog re-renders on join/leave
   const selectedGroup = selectedGroupId !== null
@@ -757,16 +781,66 @@ function FinderPageContent() {
     if (!group || group.current_members >= group.max_members) return;
     const { error } = await joinStudyGroup(supabase, id, currentUser.id);
     if (error) { console.error("[handleJoinGroup]", error); return; }
+
+    // Award points for joining a study group
+    const { data: rule } = await supabase
+      .from("point_rules")
+      .select("points_awarded")
+      .eq("action_name", POINT_ACTIONS.JOIN_STUDY_GROUP)
+      .eq("is_active", true)
+      .single();
+    if (rule?.points_awarded) {
+      await supabase.rpc("increment_points", {
+        user_id: currentUser.id,
+        amount:  rule.points_awarded,
+      });
+    }
+
     setActiveGroupId(id);
     await fetchGroups();
   };
 
   const handleLeaveGroup = async (id: number) => {
-    if (!currentUser || activeGroupId !== id) return;
+    if (!currentUser) return;
+    const group = groups.find((g) => g.id === id);
     const { error } = await leaveStudyGroup(supabase, id, currentUser.id);
     if (error) { console.error("[handleLeaveGroup]", error); return; }
     setActiveGroupId(null);
+    setSelectedGroupId(null);
     await fetchGroups();
+    if (group) {
+      setEndedGroupLocationId(group.location_id);
+      setEndedGroupLocationName(group.locations.name);
+      setFeedbackOpen(true);
+    }
+  };
+
+  const handleGroupFeedbackSubmit = async (data: FeedbackData) => {
+    setFeedbackOpen(false);
+    if (!currentUser || !endedGroupLocationId) return;
+    if (data.comment.trim()) {
+      const rating =
+        data.crowd_status === "empty" ? 5 :
+        data.crowd_status === "busy"  ? 3 : 1;
+      await supabase.from("reviews").insert({
+        location_id: endedGroupLocationId,
+        user_id:     currentUser.id,
+        comment:     data.comment,
+        rating,
+      });
+      const { data: rule } = await supabase
+        .from("point_rules")
+        .select("points_awarded")
+        .eq("action_name", "leave_review")
+        .eq("is_active", true)
+        .single();
+      if (rule?.points_awarded) {
+        await supabase.rpc("increment_points", {
+          user_id: currentUser.id,
+          amount:  rule.points_awarded,
+        });
+      }
+    }
   };
 
   const handleCreate = async (form: CreateForm) => {
@@ -779,6 +853,21 @@ function FinderPageContent() {
       max_members: form.max_members,
     });
     if (error || !data) { console.error("[handleCreate]", error); return; }
+
+    // Award points for creating a study group
+    const { data: rule } = await supabase
+      .from("point_rules")
+      .select("points_awarded")
+      .eq("action_name", POINT_ACTIONS.CREATE_STUDY_GROUP)
+      .eq("is_active", true)
+      .single();
+    if (rule?.points_awarded) {
+      await supabase.rpc("increment_points", {
+        user_id: currentUser.id,
+        amount:  rule.points_awarded,
+      });
+    }
+
     setActiveGroupId(data.id);
     await fetchGroups();
   };
@@ -790,11 +879,20 @@ function FinderPageContent() {
         <GroupDetailDialog
           group={selectedGroup}
           activeGroupId={activeGroupId}
+          currentUserId={currentUser?.id ?? null}
           onJoin={handleJoinGroup}
           onLeave={handleLeaveGroup}
           onClose={() => setSelectedGroupId(null)}
         />
       )}
+
+      {/* Review modal — shown after ending/leaving a study group */}
+      <FeedbackModal
+        open={feedbackOpen}
+        locationName={endedGroupLocationName}
+        onOpenChange={(open) => { if (!open) setFeedbackOpen(false); }}
+        onSubmit={handleGroupFeedbackSubmit}
+      />
 
       {/* QR scanner — gates the create flow */}
       <QRScannerModal
@@ -981,6 +1079,7 @@ function FinderPageContent() {
                 <StudyGroupCard
                   group={group}
                   activeGroupId={activeGroupId}
+                  currentUserId={currentUser?.id ?? null}
                   onSelect={() => setSelectedGroupId(group.id)}
                   onJoin={handleJoinGroup}
                   onLeave={handleLeaveGroup}

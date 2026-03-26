@@ -179,6 +179,36 @@ export async function countSeatsTakenAtLocation(
   return { data: total, error: null }
 }
 
+// ─── UPDATE SESSION ───────────────────────────────────────────────────────────
+
+/**
+ * Updates an existing active session's details.
+ * Call this when the student wants to edit their session after checking in.
+ *
+ * @param sessionId - The ID of the session to update
+ * @param updates   - Fields to change: activity, module, duration_minutes, seats_taken
+ */
+export async function updateSession(
+  supabase: SupabaseClient,
+  sessionId: number,
+  updates: Partial<Pick<ActiveSession, 'activity' | 'module' | 'duration_minutes' | 'seats_taken'>>,
+): Promise<DbResult<ActiveSession>> {
+  const { data, error } = await supabase
+    .from('active_sessions')
+    .update(updates)
+    .eq('id', sessionId)
+    .eq('is_active', true)   // Safety: only update sessions that are still active
+    .select()
+    .single()
+
+  if (error) {
+    console.error(`[updateSession] sessionId=${sessionId}`, error.message)
+    return { data: null, error: error.message }
+  }
+
+  return { data: data as ActiveSession, error: null }
+}
+
 // ─── GET SESSIONS OPEN TO STUDY BUDDY ────────────────────────────────────────
 
 /**

@@ -8,6 +8,7 @@ import CheckInModal, { type CheckInData } from "@/components/features/CheckInMod
 import FeedbackModal, { type FeedbackData } from "@/components/features/FeedbackModal";
 import QRScannerModal from "@/components/features/QRScannerModal";
 import { createClient } from "@/utils/supabase/client";
+import { leaveStudyGroup } from "@/lib/db/study-groups";
 import {
   MapPin,
   Flame,
@@ -24,6 +25,7 @@ import {
   Clock,
   Users,
   Zap,
+  Pencil,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -415,6 +417,7 @@ export default function DashboardPage() {
   const [qrScanOpen, setQrScanOpen]           = useState(false);
   const [checkInOpen, setCheckInOpen]         = useState(false);
   const [feedbackOpen, setFeedbackOpen]       = useState(false);
+  const [editSessionOpen, setEditSessionOpen] = useState(false);
 
   // ── User profile data (fetched from 'profiles' table) ──────────────────────
   // Replaces the hardcoded "Alex", "5-day streak", "1,240 pts", "Level 4"
@@ -492,15 +495,21 @@ export default function DashboardPage() {
         .maybeSingle();
 
       if (existing) {
+        // Fetch the location name directly so the banner never shows "Loading…"
+        const { data: locData } = await supabase
+          .from("locations")
+          .select("name")
+          .eq("id", existing.location_id)
+          .single();
+
         setActiveSessionId(existing.id);
         setActiveSession({
           locationId:       existing.location_id,
-          locationName:     "Loading…", // filled in once locations load below
+          locationName:     locData?.name ?? "Unknown",
           seats_needed:     existing.seats_taken ?? 1,
           activity:         existing.activity as "study" | "eating",
           module:           existing.module ?? "",
           duration_minutes: existing.duration_minutes,
-          // Calculate when the session was supposed to end
           endsAt: new Date(
             new Date(existing.check_in_time).getTime() +
             existing.duration_minutes * 60_000
@@ -538,13 +547,6 @@ export default function DashboardPage() {
       }));
 
       setLocations(mapped);
-
-      // Fill in the location name for any session restored by the profile useEffect
-      setActiveSession((prev) =>
-        prev && prev.locationName === "Loading…"
-          ? { ...prev, locationName: mapped.find((l) => l.id === prev.locationId)?.name ?? "Unknown" }
-          : prev
-      );
 
       // ── Compute busiest location from live active_sessions ──
       // This powers the Peak Hour Alert banner — it shows the most crowded spot right now.
@@ -795,29 +797,8 @@ export default function DashboardPage() {
       );
     }
 
-    // Step 4: Recalculate the location's status based on how full it now is.
-    // Fetch the updated seat count, then pick the right status label.
-    const { data: activeSessions } = await supabase
-      .from("active_sessions")
-      .select("seats_taken")
-      .eq("location_id", selectedLocation.id)
-      .eq("is_active", true);
-
-    const totalOccupied = (activeSessions ?? []).reduce(
-      (sum, s) => sum + (s.seats_taken ?? 1), 0
-    );
-    const totalSeats = selectedLocation.total_seats ?? 0;
-    const fillPct    = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
-    // 0% = empty, up to 60% = still empty, 61–90% = busy, 91%+ = full
-    const newStatus: LocationStatus =
-      fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
-
-    await supabase
-      .from("locations")
-      .update({ current_status: newStatus })
-      .eq("id", selectedLocation.id);
-
-    // Step 5: Update local state so the UI responds immediately
+    // Step 4: Update local state so the UI responds immediately
+    // (DB trigger handles recalculating current_status on the locations table)
     setActiveSession({
       locationId:   selectedLocation.id,
       locationName: selectedLocation.name,
@@ -825,6 +806,39 @@ export default function DashboardPage() {
       endsAt: new Date(Date.now() + data.duration_minutes * 60_000),
     });
     setCheckInOpen(false);
+  };
+
+  // ── Edit session handler ─────────────────────────────────────────────────────
+  // Called when the student updates their session details from the Edit modal.
+  const handleUpdateSession = async (data: CheckInData) => {
+    if (!activeSessionId || !activeSession) return;
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("active_sessions")
+      .update({
+        activity:         data.activity,
+        module:           data.module || null,
+        duration_minutes: data.duration_minutes,
+        seats_taken:      data.seats_needed,
+      })
+      .eq("id", activeSessionId)
+      .eq("is_active", true);
+
+    if (error) {
+      console.error("[edit-session] Failed to update session:", error.message);
+      return;
+    }
+
+    // Sync local state so the UI reflects the change immediately
+    setActiveSession({
+      ...activeSession,
+      activity:         data.activity,
+      module:           data.module,
+      duration_minutes: data.duration_minutes,
+      seats_needed:     data.seats_needed,
+    });
+    setEditSessionOpen(false);
   };
 
   // ── Feedback / check-out handler ────────────────────────────────────────────
@@ -841,6 +855,16 @@ export default function DashboardPage() {
       .update({ is_active: false })
       .eq("id", activeSessionId);
 
+    // Step 1b: Leave any active study groups the user belongs to
+    const { data: memberships } = await supabase
+      .from("study_group_members")
+      .select("group_id")
+      .eq("user_id", userId);
+
+    for (const m of memberships ?? []) {
+      await leaveStudyGroup(supabase, m.group_id, userId);
+    }
+
     // Step 2: If the student left a comment, save it as a review
     if (data.comment.trim()) {
       // Map the crowd_status they reported to a numeric 1–5 star rating
@@ -854,32 +878,38 @@ export default function DashboardPage() {
         comment:     data.comment,
         rating,
       });
+
+      // Award points for leaving a review
+      const { data: rule } = await supabase
+        .from("point_rules")
+        .select("points_awarded")
+        .eq("action_name", "leave_review")
+        .eq("is_active", true)
+        .single();
+
+      if (rule?.points_awarded) {
+        await supabase.rpc("increment_points", {
+          user_id: userId,
+          amount:  rule.points_awarded,
+        });
+        setProfile((prev) =>
+          prev ? { ...prev, points: prev.points + rule.points_awarded } : prev
+        );
+      }
     }
 
-    // Step 3: Recalculate location status now that this session has ended
-    const { data: remaining } = await supabase
-      .from("active_sessions")
-      .select("seats_taken")
-      .eq("location_id", selectedLocation.id)
-      .eq("is_active", true);
-
-    const totalOccupied = (remaining ?? []).reduce(
-      (sum, s) => sum + (s.seats_taken ?? 1), 0
-    );
-    const totalSeats = selectedLocation.total_seats ?? 0;
-    const fillPct    = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
-    const newStatus: LocationStatus =
-      fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
-
-    await supabase
+    // Step 3: Re-fetch the trigger-updated status and sync local map state
+    const { data: updatedLoc } = await supabase
       .from("locations")
-      .update({ current_status: newStatus })
-      .eq("id", selectedLocation.id);
+      .select("current_status")
+      .eq("id", selectedLocation.id)
+      .single();
 
-    // Step 4: Update local state so the map and cards reflect the new status instantly
     setLocations((prev) =>
       prev.map((l) =>
-        l.id === selectedLocation.id ? { ...l, current_status: newStatus } : l
+        l.id === selectedLocation.id
+          ? { ...l, current_status: (updatedLoc?.current_status ?? l.current_status) as LocationStatus }
+          : l
       )
     );
     setActiveSession(null);
@@ -931,6 +961,23 @@ export default function DashboardPage() {
           locationName={selectedLocation.name}
           onOpenChange={(open) => { if (!open) setFeedbackOpen(false); }}
           onSubmit={handleFeedbackSubmit}
+        />
+      )}
+
+      {/* ── Edit session modal ── */}
+      {activeSession && (
+        <CheckInModal
+          open={editSessionOpen}
+          locationName={activeSession.locationName}
+          onOpenChange={(open) => { if (!open) setEditSessionOpen(false); }}
+          onSubmit={handleUpdateSession}
+          editMode
+          defaultValues={{
+            seats_needed:     activeSession.seats_needed,
+            activity:         activeSession.activity,
+            module:           activeSession.module,
+            duration_minutes: activeSession.duration_minutes,
+          }}
         />
       )}
 
@@ -1035,6 +1082,12 @@ export default function DashboardPage() {
                   {activeSession.seats_needed} seat{activeSession.seats_needed !== 1 ? "s" : ""} reserved
                 </p>
               </div>
+              <button
+                onClick={() => setEditSessionOpen(true)}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full bg-canvas text-ink-muted border border-border hover:text-ink hover:bg-brand-faint transition-colors"
+              >
+                <Pencil size={12} /> Edit
+              </button>
               <button
                 onClick={() => {
                   const loc = locations.find((l) => l.id === activeSession.locationId);

@@ -7,6 +7,7 @@ import { createClient } from "@/utils/supabase/client";
 
 type SidebarProfile = {
   username: string;
+  full_name: string | null;
   avatar_url: string | null;
   points: number;
 };
@@ -62,18 +63,25 @@ export default function Sidebar() {
     setIsOpen(false);
   }, [pathname]);
 
-  // Fetch user profile on mount
-  useEffect(() => {
+  // Fetch user profile — re-runs on navigation and when Settings dispatches 'profile-updated'
+  const fetchProfile = () => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
       supabase
         .from("profiles")
-        .select("username, avatar_url, points")
+        .select("username, full_name, avatar_url, points")
         .eq("id", user.id)
         .single()
         .then(({ data }) => { if (data) setProfile(data as SidebarProfile); });
     });
+  };
+
+  useEffect(() => { fetchProfile(); }, [pathname]);
+
+  useEffect(() => {
+    window.addEventListener("profile-updated", fetchProfile);
+    return () => window.removeEventListener("profile-updated", fetchProfile);
   }, []);
 
   const isActive = (href: string) =>
@@ -215,12 +223,12 @@ export default function Sidebar() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={profile.avatar_url} alt={profile.username} className="w-full h-full object-cover" />
               ) : (
-                profile?.username.slice(0, 2).toUpperCase() ?? "…"
+                (profile?.full_name || profile?.username)?.slice(0, 2).toUpperCase() ?? "…"
               )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-ink truncate leading-tight">
-                {profile?.username ?? "Loading…"}
+                {profile?.full_name || profile?.username || "Loading…"}
               </p>
               <p className="text-xs text-gold font-medium leading-tight mt-0.5">
                 ✦ {profile?.points.toLocaleString() ?? "—"} pts
