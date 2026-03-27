@@ -747,13 +747,44 @@ function FinderPageContent() {
   const [locationFilter,  setLocationFilter]  = useState("all");
 
   // ── Fetch all active study groups (with joined profile + location data) ──
+  // Always computes current_members from actual study_group_members rows so
+  // the card count can never be stale or inflated by a counter drift.
   const fetchGroups = async () => {
     const { data } = await supabase
       .from("study_groups")
       .select("*, profiles(username, avatar_url), locations(name, category)")
       .eq("is_active", true)
       .order("created_at", { ascending: false });
-    if (data) setGroups(data as StudyGroup[]);
+
+    if (!data) { setLoading(false); return; }
+
+    // One extra query: pull every member row for these groups to get real counts.
+    const ids = data.map((g) => g.id as number);
+    const { data: memberRows } = ids.length
+      ? await supabase.from("study_group_members").select("group_id").in("group_id", ids)
+      : { data: [] };
+
+    // Build a map: groupId → real member count
+    const countMap: Record<number, number> = {};
+    (memberRows ?? []).forEach((m: { group_id: number }) => {
+      countMap[m.group_id] = (countMap[m.group_id] ?? 0) + 1;
+    });
+
+    // Override current_members with the real count and self-heal stale DB counters
+    const mapped = data.map((g) => {
+      const real = countMap[g.id] ?? 0;
+      if (g.current_members !== real) {
+        // Fire-and-forget: sync the counter in the background
+        supabase
+          .from("study_groups")
+          .update({ current_members: real })
+          .eq("id", g.id)
+          .then(() => {});
+      }
+      return { ...g, current_members: real };
+    });
+
+    setGroups(mapped as StudyGroup[]);
     setLoading(false);
   };
 
