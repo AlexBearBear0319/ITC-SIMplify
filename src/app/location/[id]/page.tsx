@@ -19,10 +19,12 @@ import {
   UserCircle,
   Coins,
   Plus,
+  LogOut,
+  AlertCircle,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
-// Types  (shapes match Supabase schema exactly)
+// Types
 // ─────────────────────────────────────────────
 
 type LocationStatus = "empty" | "busy" | "full";
@@ -65,6 +67,14 @@ type StudyGroup = {
   profiles: { username: string };
 };
 
+type ActiveSessionInfo = {
+  id: number;
+  location_id: number | null;
+  check_in_time: string | null;
+  duration_minutes: number;
+  activity: string;
+};
+
 // ─────────────────────────────────────────────
 // Config
 // ─────────────────────────────────────────────
@@ -73,9 +83,9 @@ const STATUS_CONFIG: Record<
   LocationStatus,
   { label: string; dot: string; text: string; bg: string; border: string; barWidth: string }
 > = {
-  empty: { label: "Empty",  dot: "bg-success", text: "text-success", bg: "bg-success-light", border: "border-success/40",  barWidth: "w-1/5"   },
-  busy:  { label: "Busy",   dot: "bg-gold",    text: "text-gold",    bg: "bg-gold-light",    border: "border-gold/40",    barWidth: "w-3/5"   },
-  full:  { label: "Full",   dot: "bg-alert",   text: "text-alert",   bg: "bg-alert-light",   border: "border-alert/40",   barWidth: "w-full"  },
+  empty: { label: "Empty", dot: "bg-success", text: "text-success", bg: "bg-success-light", border: "border-success/40",  barWidth: "w-1/5"  },
+  busy:  { label: "Busy",  dot: "bg-gold",    text: "text-gold",    bg: "bg-gold-light",    border: "border-gold/40",    barWidth: "w-3/5"  },
+  full:  { label: "Full",  dot: "bg-alert",   text: "text-alert",   bg: "bg-alert-light",   border: "border-alert/40",   barWidth: "w-full" },
 };
 
 const STATUS_UPDATE_OPTIONS: {
@@ -86,30 +96,9 @@ const STATUS_UPDATE_OPTIONS: {
   activeClasses: string;
   inactiveClasses: string;
 }[] = [
-  {
-    value: "empty",
-    label: "Empty",
-    description: "Plenty of seats available",
-    emoji: "🟢",
-    activeClasses:   "bg-success border-success text-ink shadow-md scale-[1.02]",
-    inactiveClasses: "bg-success-light border-success/30 text-success hover:scale-[1.01] hover:shadow-sm",
-  },
-  {
-    value: "busy",
-    label: "Busy",
-    description: "Some seats taken",
-    emoji: "🟡",
-    activeClasses:   "bg-gold border-gold text-ink shadow-md scale-[1.02]",
-    inactiveClasses: "bg-gold-light border-gold/30 text-gold hover:scale-[1.01] hover:shadow-sm",
-  },
-  {
-    value: "full",
-    label: "Full",
-    description: "No seats available",
-    emoji: "🔴",
-    activeClasses:   "bg-alert border-alert text-surface shadow-md scale-[1.02]",
-    inactiveClasses: "bg-alert-light border-alert/30 text-alert hover:scale-[1.01] hover:shadow-sm",
-  },
+  { value: "empty", label: "Empty", description: "Plenty of seats available", emoji: "🟢", activeClasses: "bg-success border-success text-ink shadow-md scale-[1.02]",    inactiveClasses: "bg-success-light border-success/30 text-success hover:scale-[1.01] hover:shadow-sm" },
+  { value: "busy",  label: "Busy",  description: "Some seats taken",          emoji: "🟡", activeClasses: "bg-gold border-gold text-ink shadow-md scale-[1.02]",            inactiveClasses: "bg-gold-light border-gold/30 text-gold hover:scale-[1.01] hover:shadow-sm"         },
+  { value: "full",  label: "Full",  description: "No seats available",        emoji: "🔴", activeClasses: "bg-alert border-alert text-surface shadow-md scale-[1.02]",      inactiveClasses: "bg-alert-light border-alert/30 text-alert hover:scale-[1.01] hover:shadow-sm"       },
 ];
 
 // ─────────────────────────────────────────────
@@ -123,6 +112,13 @@ function timeAgo(dateStr: string): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24)  return `${hrs} hr${hrs > 1 ? "s" : ""} ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+/** Returns true if a session is still within its duration window */
+function isSessionExpired(session: ActiveSessionInfo): boolean {
+  if (!session.check_in_time) return true;
+  const expiresAt = new Date(session.check_in_time).getTime() + session.duration_minutes * 60_000;
+  return Date.now() > expiresAt;
 }
 
 function StarRating({ rating }: { rating: number }) {
@@ -141,10 +137,7 @@ function CrowdMeter({ status }: { status: LocationStatus }) {
   return (
     <div className="flex gap-1 items-center" aria-label={`Crowd level: ${status}`}>
       {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          key={i}
-          className={`h-1.5 w-4 rounded-full transition-colors duration-300 ${i < filled ? color : "bg-surface/30"}`}
-        />
+        <div key={i} className={`h-1.5 w-4 rounded-full transition-colors duration-300 ${i < filled ? color : "bg-surface/30"}`} />
       ))}
     </div>
   );
@@ -154,15 +147,8 @@ function CrowdMeter({ status }: { status: LocationStatus }) {
 // Animation variants
 // ─────────────────────────────────────────────
 
-const cardVariants = {
-  hidden: { opacity: 0, y: 16 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } },
-};
-
-const containerVariants = {
-  hidden: {},
-  show:   { transition: { staggerChildren: 0.08, delayChildren: 0.05 } },
-};
+const cardVariants    = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } } };
+const containerVariants = { hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } } };
 
 // ─────────────────────────────────────────────
 // Main Page
@@ -173,46 +159,36 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const locationId = Number(id);
   const supabase = useMemo(() => createClient(), []);
 
-  const [location,      setLocation]      = useState<LocationDetail | null>(null);
-  const [statusLogs,    setStatusLogs]    = useState<StatusLog[]>([]);
-  const [reviews,       setReviews]       = useState<Review[]>([]);
-  const [studyGroups,   setStudyGroups]   = useState<StudyGroup[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [activeStatus,  setActiveStatus]  = useState<LocationStatus>("empty");
-  const [qrOpen,        setQrOpen]        = useState(false);
-  const [submitState,   setSubmitState]   = useState<"idle" | "submitting" | "done">("idle");
-  const [pointsDelta,   setPointsDelta]   = useState<number | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [checkInDone,   setCheckInDone]   = useState(false);
+  const [location,       setLocation]       = useState<LocationDetail | null>(null);
+  const [statusLogs,     setStatusLogs]     = useState<StatusLog[]>([]);
+  const [reviews,        setReviews]        = useState<Review[]>([]);
+  const [studyGroups,    setStudyGroups]    = useState<StudyGroup[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [activeStatus,   setActiveStatus]   = useState<LocationStatus>("empty");
+  const [qrOpen,         setQrOpen]         = useState(false);
+  const [submitState,    setSubmitState]    = useState<"idle" | "submitting" | "done">("idle");
+  const [pointsDelta,    setPointsDelta]    = useState<number | null>(null);
+  const [currentUserId,  setCurrentUserId]  = useState<string | null>(null);
+  const [checkInDone,    setCheckInDone]    = useState(false);
 
+  // Active session state (either solo or study-group)
+  const [existingSession,  setExistingSession]  = useState<ActiveSessionInfo | null>(null);
+  const [existingGroupId,  setExistingGroupId]  = useState<number | null>(null);   // study group
+  const [alreadyEarnedToday, setAlreadyEarnedToday] = useState(false);
+  const [endingSession,    setEndingSession]    = useState(false);
+
+  // ── Load everything ──────────────────────────────────────
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) setCurrentUserId(user.id);
+      const userId = user?.id ?? null;
+      if (userId) setCurrentUserId(userId);
 
       const [locRes, logsRes, revsRes, groupsRes] = await Promise.all([
-        supabase
-          .from("locations")
-          .select("id, name, category, current_status, image_url, coordinates_x, coordinates_y, description, total_seats, location_text")
-          .eq("id", locationId)
-          .single(),
-        supabase
-          .from("status_logs")
-          .select("id, status, created_at, profiles(username)")
-          .eq("location_id", locationId)
-          .order("created_at", { ascending: false })
-          .limit(10),
-        supabase
-          .from("reviews")
-          .select("id, rating, comment, created_at, profiles(username, avatar_url)")
-          .eq("location_id", locationId)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("study_groups")
-          .select("id, subject, current_members, max_members, is_active, created_at, profiles(username)")
-          .eq("location_id", locationId)
-          .eq("is_active", true)
-          .order("created_at", { ascending: false }),
+        supabase.from("locations").select("id, name, category, current_status, image_url, coordinates_x, coordinates_y, description, total_seats, location_text").eq("id", locationId).single(),
+        supabase.from("status_logs").select("id, status, created_at, profiles(username)").eq("location_id", locationId).order("created_at", { ascending: false }).limit(10),
+        supabase.from("reviews").select("id, rating, comment, created_at, profiles(username, avatar_url)").eq("location_id", locationId).order("created_at", { ascending: false }),
+        supabase.from("study_groups").select("id, subject, current_members, max_members, is_active, created_at, profiles(username)").eq("location_id", locationId).eq("is_active", true).order("created_at", { ascending: false }),
       ]);
 
       if (locRes.data) {
@@ -223,21 +199,71 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       setStatusLogs((logsRes.data ?? []) as unknown as StatusLog[]);
       setReviews((revsRes.data ?? []) as unknown as Review[]);
       setStudyGroups((groupsRes.data ?? []) as unknown as StudyGroup[]);
+
+      // ── Check for any existing active session for this user ──
+      if (userId) {
+        // 1. Solo active_session
+        const { data: soloSession } = await supabase
+          .from("active_sessions")
+          .select("id, location_id, check_in_time, duration_minutes, activity")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (soloSession && !isSessionExpired(soloSession as ActiveSessionInfo)) {
+          setExistingSession(soloSession as ActiveSessionInfo);
+        } else if (soloSession && isSessionExpired(soloSession as ActiveSessionInfo)) {
+          // Auto-expire stale session
+          await supabase.from("active_sessions").update({ is_active: false }).eq("id", soloSession.id);
+        }
+
+        // 2. Active study group membership
+        const { data: memberships } = await supabase
+          .from("study_group_members")
+          .select("group_id")
+          .eq("user_id", userId);
+        if (memberships?.length) {
+          const { data: activeGroup } = await supabase
+            .from("study_groups")
+            .select("id")
+            .eq("is_active", true)
+            .in("id", memberships.map((m: { group_id: number }) => m.group_id))
+            .maybeSingle();
+          if (activeGroup) setExistingGroupId(activeGroup.id);
+        }
+
+        // 3. Daily cooldown: has this user already done a check-in today?
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const { count } = await supabase
+          .from("active_sessions")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .gte("check_in_time", todayStart.toISOString());
+        if ((count ?? 0) > 0) setAlreadyEarnedToday(true);
+      }
+
       setLoading(false);
     }
     load();
   }, [locationId, supabase]);
 
+  // ── End solo session ──────────────────────────────────────
+  const handleEndSession = useCallback(async () => {
+    if (!existingSession) return;
+    setEndingSession(true);
+    await supabase.from("active_sessions").update({ is_active: false }).eq("id", existingSession.id);
+    setExistingSession(null);
+    setCheckInDone(false);
+    setEndingSession(false);
+  }, [existingSession, supabase]);
+
+  // ── Status update ─────────────────────────────────────────
   const handleStatusUpdate = async (newStatus: LocationStatus) => {
     if (!location || newStatus === activeStatus) return;
     setSubmitState("submitting");
-    await supabase
-      .from("status_logs")
-      .insert({ location_id: locationId, user_id: currentUserId, status: newStatus });
-    await supabase
-      .from("locations")
-      .update({ current_status: newStatus })
-      .eq("id", locationId);
+    await supabase.from("status_logs").insert({ location_id: locationId, user_id: currentUserId, status: newStatus });
+    await supabase.from("locations").update({ current_status: newStatus }).eq("id", locationId);
     setActiveStatus(newStatus);
     setStatusLogs((prev) => [
       { id: Date.now(), status: newStatus, created_at: new Date().toISOString(), profiles: { username: "you" } },
@@ -247,10 +273,17 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
     setTimeout(() => setSubmitState("idle"), 2000);
   };
 
+  // ── Solo Check-in ─────────────────────────────────────────
   const handleCheckIn = useCallback(async (_scannedLocationId: number) => {
     if (!currentUserId) return;
 
-    // Create active session record
+    // Guard: one active session at a time
+    if (existingSession || existingGroupId) {
+      // QRScannerModal has already been dismissed; the UI button is disabled anyway
+      return;
+    }
+
+    // Create active session
     await supabase.from("active_sessions").insert({
       user_id:          currentUserId,
       location_id:      locationId,
@@ -260,21 +293,30 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       is_active:        true,
     });
 
-    // Look up how many points check_in gives, then award them
-    const { data: rule } = await supabase
-      .from("point_rules")
-      .select("points_awarded")
-      .eq("action_name", POINT_ACTIONS.CHECK_IN)
-      .eq("is_active", true)
-      .maybeSingle();
-    const pts = (rule as { points_awarded: number } | null)?.points_awarded ?? 10;
-
-    await awardPoints(supabase, currentUserId, POINT_ACTIONS.CHECK_IN);
-
-    setPointsDelta(pts);
+    // Mark as checked in locally
     setCheckInDone(true);
-    setTimeout(() => setPointsDelta(null), 2500);
-  }, [currentUserId, locationId, supabase]);
+    setExistingSession({ id: -1, location_id: locationId, check_in_time: new Date().toISOString(), duration_minutes: 60, activity: "solo_study" });
+
+    // Daily cooldown: only award points once per day
+    if (!alreadyEarnedToday) {
+      const { data: rule } = await supabase
+        .from("point_rules")
+        .select("points_awarded")
+        .eq("action_name", POINT_ACTIONS.CHECK_IN)
+        .eq("is_active", true)
+        .maybeSingle();
+      const pts = (rule as { points_awarded: number } | null)?.points_awarded ?? 10;
+
+      await awardPoints(supabase, currentUserId, POINT_ACTIONS.CHECK_IN);
+
+      setPointsDelta(pts);
+      setTimeout(() => setPointsDelta(null), 2500);
+      setAlreadyEarnedToday(true);
+
+      // Signal profile page to refresh its points counter
+      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+    }
+  }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday]);
 
   if (loading || !location) {
     return (
@@ -287,9 +329,17 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   }
 
   const s = STATUS_CONFIG[activeStatus];
-  const avgRating = reviews.length > 0
-    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-    : 0;
+  const avgRating = reviews.length > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : 0;
+
+  // Is the user currently blocked from checking in?
+  const isBlocked = !!(existingSession || existingGroupId);
+  const blockReason = existingGroupId
+    ? "You're in an active study group session. Leave it first."
+    : existingSession
+    ? existingSession.location_id === locationId
+      ? "You're already checked in here."
+      : "You have an active session at another location."
+    : null;
 
   return (
     <>
@@ -301,7 +351,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         requiredLocationId={locationId}
       />
 
-      {/* Floating points animation */}
+      {/* Floating +pts animation */}
       <AnimatePresence>
         {pointsDelta !== null && (
           <motion.div
@@ -330,10 +380,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             )}
             <div className="absolute inset-0 bg-linear-to-t from-ink/65 via-ink/15 to-transparent" />
 
-            <Link
-              href="/location"
-              className="absolute top-4 left-4 flex items-center gap-1.5 bg-surface/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-medium text-ink border border-border/50 hover:bg-surface transition-colors shadow-sm"
-            >
+            <Link href="/location" className="absolute top-4 left-4 flex items-center gap-1.5 bg-surface/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-medium text-ink border border-border/50 hover:bg-surface transition-colors shadow-sm">
               <ChevronLeft size={13} />
               Back
             </Link>
@@ -341,36 +388,32 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             <div className="absolute bottom-0 left-0 right-0 p-5 md:p-6">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 {location.category && (
-                  <span className="px-2.5 py-0.5 bg-surface/90 backdrop-blur-sm rounded-full text-xs font-semibold text-ink-muted border border-border/50">
-                    {location.category}
-                  </span>
+                  <span className="px-2.5 py-0.5 bg-surface/90 backdrop-blur-sm rounded-full text-xs font-semibold text-ink-muted border border-border/50">{location.category}</span>
                 )}
                 <CrowdMeter status={activeStatus} />
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${s.bg} ${s.text} border ${s.border}`}>
-                  ● {s.label}
-                </span>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${s.bg} ${s.text} border ${s.border}`}>● {s.label}</span>
               </div>
-              <h1 className="text-2xl md:text-3xl font-bold text-surface leading-tight">
-                {location.name}
-              </h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-surface leading-tight">{location.name}</h1>
               <p className="text-sm text-surface/75 mt-1 flex items-center gap-1.5">
                 <MapPin size={12} className="shrink-0" />
-                {[location.location_text, location.total_seats ? `Capacity ${location.total_seats}` : null]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {[location.location_text, location.total_seats ? `Capacity ${location.total_seats}` : null].filter(Boolean).join(" · ")}
               </p>
             </div>
           </div>
         </motion.div>
 
-        {/* ── Sticky Action Bar — two distinct CTAs ── */}
+        {/* ── Sticky Action Bar ── */}
         <div className="sticky top-16 z-10 bg-surface/80 backdrop-blur-md border-b border-border">
           <div className="max-w-3xl mx-auto px-4 md:px-6 py-3 flex items-center gap-2">
-            {/* Solo Check-in */}
+            {/* Solo Check-in — disabled when blocked */}
             <button
-              onClick={() => setQrOpen(true)}
-              disabled={checkInDone}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={() => {
+                if (isBlocked) return; // shouldn't happen; button is disabled
+                setQrOpen(true);
+              }}
+              disabled={isBlocked || checkInDone}
+              title={blockReason ?? undefined}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {checkInDone ? (
                 <><CheckCircle2 size={16} /> Checked In</>
@@ -379,7 +422,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               )}
             </button>
 
-            {/* Study Buddy — navigates to finder pre-filtered by this location */}
+            {/* Study Buddy */}
             <Link
               href={`/finder?locationId=${locationId}`}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-canvas border border-border hover:bg-brand-faint text-ink-muted hover:text-ink font-semibold text-sm rounded-full transition-all duration-200"
@@ -388,10 +431,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               Study Buddy
             </Link>
 
-            <button
-              aria-label="Share location"
-              className="p-2.5 bg-canvas border border-border rounded-full text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-200"
-            >
+            <button aria-label="Share location" className="p-2.5 bg-canvas border border-border rounded-full text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-200">
               <Share2 size={16} />
             </button>
           </div>
@@ -400,7 +440,35 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         {/* ── Page Body ── */}
         <div className="max-w-3xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-4">
 
-          {/* Checked-in banner */}
+          {/* Blocked — existing session elsewhere */}
+          <AnimatePresence>
+            {isBlocked && !checkInDone && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="flex items-start gap-3 px-4 py-3.5 bg-gold-light border border-gold/30 rounded-2xl"
+              >
+                <AlertCircle size={16} className="text-gold shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-ink">Session already active</p>
+                  <p className="text-xs text-ink-muted mt-0.5">{blockReason}</p>
+                </div>
+                {existingSession && existingSession.location_id === locationId && (
+                  <button
+                    onClick={handleEndSession}
+                    disabled={endingSession}
+                    className="shrink-0 flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors disabled:opacity-50"
+                  >
+                    <LogOut size={12} />
+                    {endingSession ? "Ending…" : "End Session"}
+                  </button>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Checked-in success banner */}
           <AnimatePresence>
             {checkInDone && (
               <motion.div
@@ -410,10 +478,39 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                 className="flex items-center gap-3 px-4 py-3 bg-success-light border border-success/30 rounded-2xl"
               >
                 <CheckCircle2 size={16} className="text-success shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-ink">Checked in successfully!</p>
-                  <p className="text-xs text-ink-muted">Your presence at {location.name} is logged.</p>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-ink">Checked in at {location.name}!</p>
+                  <p className="text-xs text-ink-muted">
+                    {alreadyEarnedToday && !pointsDelta
+                      ? "Points already earned today — come back tomorrow."
+                      : "Points awarded. Session valid for 60 min."}
+                  </p>
                 </div>
+                <button
+                  onClick={handleEndSession}
+                  disabled={endingSession}
+                  className="shrink-0 flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors disabled:opacity-50"
+                >
+                  <LogOut size={12} />
+                  {endingSession ? "Ending…" : "Check Out"}
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Already earned today warning (shown when not blocked but cooldown active) */}
+          <AnimatePresence>
+            {alreadyEarnedToday && !isBlocked && !checkInDone && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-3 px-4 py-3 bg-brand-faint border border-brand/20 rounded-2xl"
+              >
+                <Coins size={15} className="text-brand-dark shrink-0" />
+                <p className="text-xs text-ink-muted">
+                  You&apos;ve already earned check-in points today. You can still check in but no extra points.
+                </p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -424,30 +521,25 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             </motion.p>
           )}
 
-          {/* ── Radix Tabs ── */}
+          {/* ── Tabs ── */}
           <motion.div variants={cardVariants}>
             <Tabs.Root defaultValue="live-status">
-
               <Tabs.List className="flex gap-1 p-1 bg-canvas rounded-xl border border-border mb-5">
                 {[
                   { value: "live-status", label: "Live Status",       icon: <Clock size={13} />   },
                   { value: "reviews",     label: "Reviews & Buddies", icon: <BookOpen size={13} /> },
                 ].map(({ value, label, icon }) => (
                   <Tabs.Trigger
-                    key={value}
-                    value={value}
+                    key={value} value={value}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium rounded-lg text-ink-muted transition-all duration-200 data-[state=active]:bg-surface data-[state=active]:text-ink data-[state=active]:shadow-sm hover:text-ink"
                   >
-                    {icon}
-                    {label}
+                    {icon}{label}
                   </Tabs.Trigger>
                 ))}
               </Tabs.List>
 
-              {/* ── Tab 1: Live Status ── */}
+              {/* ── Live Status tab ── */}
               <Tabs.Content value="live-status" className="space-y-5 outline-none">
-
-                {/* Crowd meter */}
                 <div className={`bg-surface rounded-2xl border ${s.border} p-5 shadow-sm`}>
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest">Current Status</p>
@@ -462,7 +554,6 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                   </div>
                 </div>
 
-                {/* Status update buttons */}
                 <div>
                   <p className="text-xs font-semibold text-ink-muted mb-3 flex items-center gap-1.5">
                     <Coins size={12} className="text-gold" />
@@ -474,51 +565,35 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                         key={value}
                         onClick={() => handleStatusUpdate(value)}
                         disabled={submitState === "submitting"}
-                        className={`
-                          relative flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2
-                          text-center font-semibold transition-all duration-200
-                          disabled:opacity-60 disabled:cursor-not-allowed
-                          ${activeStatus === value ? activeClasses : inactiveClasses}
-                        `}
+                        className={`relative flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 text-center font-semibold transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${activeStatus === value ? activeClasses : inactiveClasses}`}
                       >
                         <span className="text-xl leading-none">{emoji}</span>
                         <span className="text-sm">{label}</span>
                         <span className="text-[10px] font-normal opacity-75 leading-tight">{description}</span>
-                        {activeStatus === value && (
-                          <span className="absolute top-2 right-2"><CheckCircle2 size={13} /></span>
-                        )}
+                        {activeStatus === value && <span className="absolute top-2 right-2"><CheckCircle2 size={13} /></span>}
                       </button>
                     ))}
                   </div>
-                  {submitState === "submitting" && (
-                    <p className="text-xs text-ink-muted text-center mt-3 animate-pulse">Saving your update…</p>
-                  )}
-                  {submitState === "done" && (
-                    <p className="text-xs text-success text-center mt-3 font-medium">✓ Status updated!</p>
-                  )}
+                  {submitState === "submitting" && <p className="text-xs text-ink-muted text-center mt-3 animate-pulse">Saving…</p>}
+                  {submitState === "done"       && <p className="text-xs text-success text-center mt-3 font-medium">✓ Status updated!</p>}
                 </div>
 
-                {/* Recent status logs */}
                 {statusLogs.length > 0 && (
                   <div>
                     <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest mb-3">Recent Updates</p>
                     <div className="space-y-2">
                       {statusLogs.map((log) => {
-                        const logStatus = (log.status as LocationStatus) in STATUS_CONFIG
-                          ? (log.status as LocationStatus) : "empty";
+                        const logStatus = (log.status as LocationStatus) in STATUS_CONFIG ? (log.status as LocationStatus) : "empty";
                         const logS = STATUS_CONFIG[logStatus];
                         return (
                           <div key={log.id} className="flex items-center gap-3 p-3 bg-surface rounded-xl border border-border">
                             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${logS.dot}`} />
                             <div className="flex-1 min-w-0">
                               <span className={`text-xs font-semibold ${logS.text}`}>{logS.label}</span>
-                              <span className="text-xs text-ink-muted ml-1.5">
-                                by <span className="font-medium text-ink">@{log.profiles.username}</span>
-                              </span>
+                              <span className="text-xs text-ink-muted ml-1.5">by <span className="font-medium text-ink">@{log.profiles.username}</span></span>
                             </div>
                             <div className="flex items-center gap-1 text-[10px] text-ink-faint shrink-0">
-                              <Clock size={10} />
-                              {timeAgo(log.created_at)}
+                              <Clock size={10} />{timeAgo(log.created_at)}
                             </div>
                           </div>
                         );
@@ -528,28 +603,19 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                 )}
               </Tabs.Content>
 
-              {/* ── Tab 2: Reviews & Buddies ── */}
+              {/* ── Reviews & Buddies tab ── */}
               <Tabs.Content value="reviews" className="space-y-6 outline-none">
-
-                {/* Active Study Groups */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest">Active Study Groups</p>
-                    <Link
-                      href={`/finder?locationId=${locationId}`}
-                      className="flex items-center gap-1 text-xs font-medium text-brand-dark hover:text-ink transition-colors"
-                    >
-                      <Plus size={12} />
-                      Create group
+                    <Link href={`/finder?locationId=${locationId}`} className="flex items-center gap-1 text-xs font-medium text-brand-dark hover:text-ink transition-colors">
+                      <Plus size={12} />Create group
                     </Link>
                   </div>
-
                   {studyGroups.length === 0 ? (
                     <div className="text-center py-8 text-sm text-ink-muted bg-surface rounded-2xl border border-border">
                       No study groups here yet.{" "}
-                      <Link href={`/finder?locationId=${locationId}`} className="text-brand-dark font-medium">
-                        Start one!
-                      </Link>
+                      <Link href={`/finder?locationId=${locationId}`} className="text-brand-dark font-medium">Start one!</Link>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -563,23 +629,13 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-semibold text-ink truncate leading-tight">{group.subject}</p>
-                              <p className="text-xs text-ink-muted mt-0.5 flex items-center gap-1.5">
-                                <UserCircle size={11} />
-                                Host: @{group.profiles.username}
-                              </p>
+                              <p className="text-xs text-ink-muted mt-0.5 flex items-center gap-1.5"><UserCircle size={11} />Host: @{group.profiles.username}</p>
                             </div>
                             <div className="shrink-0 text-right">
-                              <div className="flex items-center gap-1 text-xs text-ink-muted mb-1.5">
-                                <Users size={11} />
-                                {group.current_members}/{group.max_members}
-                              </div>
+                              <div className="flex items-center gap-1 text-xs text-ink-muted mb-1.5"><Users size={11} />{group.current_members}/{group.max_members}</div>
                               <Link
                                 href={`/finder?locationId=${locationId}`}
-                                className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
-                                  full
-                                    ? "bg-canvas text-ink-faint border border-border pointer-events-none"
-                                    : "bg-brand hover:bg-brand-dark text-ink"
-                                }`}
+                                className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${full ? "bg-canvas text-ink-faint border border-border pointer-events-none" : "bg-brand hover:bg-brand-dark text-ink"}`}
                               >
                                 {full ? "Full" : `Join (${spotsLeft} left)`}
                               </Link>
@@ -591,7 +647,6 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                   )}
                 </div>
 
-                {/* Reviews */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest">Reviews</p>
@@ -603,11 +658,8 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                       </div>
                     )}
                   </div>
-
                   {reviews.length === 0 ? (
-                    <div className="text-center py-8 text-sm text-ink-muted bg-surface rounded-2xl border border-border">
-                      No reviews yet. Be the first!
-                    </div>
+                    <div className="text-center py-8 text-sm text-ink-muted bg-surface rounded-2xl border border-border">No reviews yet. Be the first!</div>
                   ) : (
                     <div className="space-y-3">
                       {reviews.map((review) => (
@@ -618,16 +670,11 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                                 {review.profiles.username[0].toUpperCase()}
                               </div>
                               <div>
-                                <p className="text-sm font-semibold text-ink leading-tight">
-                                  @{review.profiles.username}
-                                </p>
+                                <p className="text-sm font-semibold text-ink leading-tight">@{review.profiles.username}</p>
                                 <StarRating rating={review.rating} />
                               </div>
                             </div>
-                            <span className="text-[10px] text-ink-faint shrink-0 flex items-center gap-1 mt-0.5">
-                              <Clock size={10} />
-                              {timeAgo(review.created_at)}
-                            </span>
+                            <span className="text-[10px] text-ink-faint shrink-0 flex items-center gap-1 mt-0.5"><Clock size={10} />{timeAgo(review.created_at)}</span>
                           </div>
                           <p className="text-sm text-ink-muted leading-relaxed">{review.comment}</p>
                         </div>
@@ -635,7 +682,6 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                     </div>
                   )}
                 </div>
-
               </Tabs.Content>
             </Tabs.Root>
           </motion.div>

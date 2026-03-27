@@ -382,6 +382,32 @@ export default function ProfilePage() {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [profile?.id, supabase]);
 
+  // ── 10-second polling: catch points updates when realtime is unavailable ──
+  useEffect(() => {
+    if (!profile?.id) return;
+    const poll = async () => {
+      const dirty = (() => { try { return sessionStorage.getItem("simplify_points_dirty") === "1"; } catch { return false; } })();
+      if (!dirty) return;
+      try { sessionStorage.removeItem("simplify_points_dirty"); } catch { /* ignore */ }
+      const { data: fresh } = await supabase
+        .from("profiles")
+        .select("points")
+        .eq("id", profile.id)
+        .single();
+      if (!fresh) return;
+      const newPts = fresh.points ?? 0;
+      const prev   = prevPointsRef.current;
+      if (prev !== null && newPts > prev) {
+        setPointsDelta(newPts - prev);
+        setTimeout(() => setPointsDelta(null), 2500);
+      }
+      prevPointsRef.current = newPts;
+      setProfile((p) => p ? { ...p, points: newPts } : p);
+    };
+    const id = setInterval(poll, 10_000);
+    return () => clearInterval(id);
+  }, [profile?.id, supabase]);
+
   // ── Realtime: reflect point changes instantly ──
   useEffect(() => {
     if (!profile?.id) return;

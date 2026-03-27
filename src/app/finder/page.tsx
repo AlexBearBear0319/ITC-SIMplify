@@ -25,6 +25,7 @@ import {
   SlidersHorizontal,
   LogOut,
   QrCode,
+  AlertCircle,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -736,6 +737,34 @@ function FinderPageContent() {
             if (active) setActiveGroupId(active.id);
           });
 
+        // Check for an active solo check-in session (blocks group creation)
+        supabase
+          .from("active_sessions")
+          .select("id, check_in_time, duration_minutes")
+          .eq("user_id", data.id)
+          .eq("is_active", true)
+          .maybeSingle()
+          .then(({ data: session }) => {
+            if (!session) return;
+            const expiresAt = new Date(session.check_in_time ?? 0).getTime() + session.duration_minutes * 60_000;
+            if (Date.now() < expiresAt) {
+              setExistingSoloSession(true);
+            } else {
+              // Auto-expire stale session
+              supabase.from("active_sessions").update({ is_active: false }).eq("id", session.id);
+            }
+          });
+
+        // Daily cooldown: has user already earned study-group points today?
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        supabase
+          .from("study_group_members")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", data.id)
+          .gte("joined_at", todayStart.toISOString())
+          .then(({ count }) => { if ((count ?? 0) > 0) setAlreadyEarnedToday(true); });
+
         // Load subjects for this user's major
         if (data.major_id) {
           supabase
@@ -785,14 +814,18 @@ function FinderPageContent() {
     const locId = searchParams.get("locationId");
     if (locId) setLocationFilter(locId);
   }, [searchParams]);
-  const [slotsFilter,      setSlotsFilter]      = useState("all");
-  const [activeGroupId,    setActiveGroupId]    = useState<number | null>(null);
-  const [selectedGroupId,  setSelectedGroupId]  = useState<number | null>(null);
-  const [qrScanOpen,       setQrScanOpen]       = useState(false);
-  const [createOpen,       setCreateOpen]       = useState(false);
-  const [scannedLocationId, setScannedLocationId] = useState<number | undefined>(undefined);
-  const [pointsDelta,      setPointsDelta]      = useState<number | null>(null);
-  const [pointRules,       setPointRules]       = useState<Record<string, number>>({});
+  const [slotsFilter,        setSlotsFilter]        = useState("all");
+  const [activeGroupId,      setActiveGroupId]      = useState<number | null>(null);
+  const [selectedGroupId,    setSelectedGroupId]    = useState<number | null>(null);
+  const [qrScanOpen,         setQrScanOpen]         = useState(false);
+  const [createOpen,         setCreateOpen]         = useState(false);
+  const [scannedLocationId,  setScannedLocationId]  = useState<number | undefined>(undefined);
+  const [pointsDelta,        setPointsDelta]        = useState<number | null>(null);
+  const [pointRules,         setPointRules]         = useState<Record<string, number>>({});
+  // Session-guard state
+  const [existingSoloSession,  setExistingSoloSession]  = useState(false);   // user has an active solo check-in
+  const [alreadyEarnedToday,   setAlreadyEarnedToday]   = useState(false);   // daily cooldown for group points
+  const [blockToast,           setBlockToast]           = useState<string | null>(null); // inline message
 
   // Always derive live group data from current state so dialog re-renders on join/leave
   const selectedGroup = selectedGroupId !== null
@@ -838,14 +871,33 @@ function FinderPageContent() {
     }
   };
 
+  const showBlockToast = (msg: string) => {
+    setBlockToast(msg);
+    setTimeout(() => setBlockToast(null), 4000);
+  };
+
   const handleJoinGroup = async (id: number) => {
-    if (!currentUser || activeGroupId !== null) return;
+    if (!currentUser) return;
+    // Guard: one active session at a time
+    if (activeGroupId !== null) {
+      showBlockToast("Leave your current study session first before joining another.");
+      return;
+    }
+    if (existingSoloSession) {
+      showBlockToast("You have an active solo check-in. End it on the location page before joining a group.");
+      return;
+    }
     const group = groups.find((g) => g.id === id);
     if (!group || group.current_members >= group.max_members) return;
     const { error } = await joinStudyGroup(supabase, id, currentUser.id);
     if (error) { console.error("[handleJoinGroup]", error); return; }
-    await awardPoints(supabase, currentUser.id, POINT_ACTIONS.JOIN_STUDY_GROUP);
-    showPointsAnim(POINT_ACTIONS.JOIN_STUDY_GROUP);
+    // Daily cooldown: only award points once per day
+    if (!alreadyEarnedToday) {
+      await awardPoints(supabase, currentUser.id, POINT_ACTIONS.JOIN_STUDY_GROUP);
+      showPointsAnim(POINT_ACTIONS.JOIN_STUDY_GROUP);
+      setAlreadyEarnedToday(true);
+      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+    }
     setActiveGroupId(id);
     await fetchGroups();
   };
@@ -859,7 +911,16 @@ function FinderPageContent() {
   };
 
   const handleCreate = async (form: CreateForm) => {
-    if (!currentUser || activeGroupId !== null) return;
+    if (!currentUser) return;
+    // Guard: one active session at a time
+    if (activeGroupId !== null) {
+      showBlockToast("You're already in a study session. Leave it first before creating a new one.");
+      return;
+    }
+    if (existingSoloSession) {
+      showBlockToast("You have an active solo check-in. End it on the location page before creating a group.");
+      return;
+    }
     const { data, error } = await createStudyGroup(supabase, {
       host_id:     currentUser.id,
       location_id: form.location_id,
@@ -868,8 +929,13 @@ function FinderPageContent() {
       max_members: form.max_members,
     });
     if (error || !data) { console.error("[handleCreate]", error); return; }
-    await awardPoints(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);
-    showPointsAnim(POINT_ACTIONS.CREATE_STUDY_GROUP);
+    // Daily cooldown: only award points once per day
+    if (!alreadyEarnedToday) {
+      await awardPoints(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);
+      showPointsAnim(POINT_ACTIONS.CREATE_STUDY_GROUP);
+      setAlreadyEarnedToday(true);
+      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+    }
     setActiveGroupId(data.id);
     await fetchGroups();
   };
@@ -903,11 +969,38 @@ function FinderPageContent() {
         )}
       </AnimatePresence>
 
+      {/* Block toast */}
+      <AnimatePresence>
+        {blockToast && (
+          <motion.div
+            key="block-toast"
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0,  scale: 1    }}
+            exit={{    opacity: 0, y: 8,   scale: 0.97 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-start gap-2.5 bg-ink text-surface text-sm font-medium px-4 py-3 rounded-2xl shadow-xl max-w-xs w-[calc(100vw-2rem)]"
+          >
+            <AlertCircle size={16} className="text-gold shrink-0 mt-0.5" />
+            {blockToast}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* QR scanner — scans location QR, auto-detects location for the create form */}
       <QRScannerModal
         open={qrScanOpen}
         onOpenChange={(open) => { if (!open) setQrScanOpen(false); }}
         onSuccess={(locationId) => {
+          // Guard before opening create dialog
+          if (activeGroupId !== null) {
+            setQrScanOpen(false);
+            showBlockToast("You're already in a study session. Leave it first before creating a new one.");
+            return;
+          }
+          if (existingSoloSession) {
+            setQrScanOpen(false);
+            showBlockToast("You have an active solo check-in. End it before creating a group.");
+            return;
+          }
           setScannedLocationId(locationId);
           setCreateOpen(true);
         }}
@@ -976,6 +1069,21 @@ function FinderPageContent() {
             </motion.div>
           );
         })()}
+
+        {/* ── Solo session warning banner ── */}
+        {existingSoloSession && activeGroupId === null && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-5 flex items-center gap-3 px-4 py-3 bg-gold-light border border-gold/30 rounded-2xl"
+          >
+            <AlertCircle size={16} className="text-gold shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-ink">Active check-in session</p>
+              <p className="text-xs text-ink-muted">End your solo session on the location page to start a group.</p>
+            </div>
+          </motion.div>
+        )}
 
         {/* ── Filter & Search Bar ── */}
         <motion.div
