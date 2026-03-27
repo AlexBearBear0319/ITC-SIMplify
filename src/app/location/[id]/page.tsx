@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/utils/supabase/client";
 import { awardPoints, POINT_ACTIONS } from "@/lib/db/points";
 import QRScannerModal from "@/components/features/QRScannerModal";
+import ActionChoiceModal from "@/components/features/ActionChoiceModal";
+import StudyBuddyModal, { type StudyBuddyData } from "@/components/features/StudyBuddyModal";
 import {
   ChevronLeft,
   QrCode,
@@ -165,7 +167,9 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [studyGroups,    setStudyGroups]    = useState<StudyGroup[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [activeStatus,   setActiveStatus]   = useState<LocationStatus>("empty");
-  const [qrOpen,         setQrOpen]         = useState(false);
+  const [qrOpen,             setQrOpen]             = useState(false);
+  const [actionChoiceOpen,   setActionChoiceOpen]   = useState(false);
+  const [studyBuddyOpen,     setStudyBuddyOpen]     = useState(false);
   const [submitState,    setSubmitState]    = useState<"idle" | "submitting" | "done">("idle");
   const [pointsDelta,    setPointsDelta]    = useState<number | null>(null);
   const [currentUserId,  setCurrentUserId]  = useState<string | null>(null);
@@ -258,6 +262,64 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
     setEndingSession(false);
   }, [existingSession, supabase]);
 
+  // ── Study Buddy creation ──────────────────────────────────
+  const handleStudyBuddyCreate = useCallback(async (data: StudyBuddyData) => {
+    if (!currentUserId || existingSession || existingGroupId) return;
+
+    // Create the study group
+    const { data: group, error: groupError } = await supabase
+      .from("study_groups")
+      .insert({
+        location_id:     locationId,
+        created_by:      currentUserId,
+        subject:         data.topic || "Study Session",
+        max_members:     data.max_members,
+        current_members: 1,
+        is_active:       true,
+      })
+      .select("id")
+      .single();
+
+    if (groupError || !group) return;
+
+    // Add creator as first member
+    await supabase.from("study_group_members").insert({
+      group_id: group.id,
+      user_id:  currentUserId,
+    });
+
+    // Create active_sessions row so seat count is reflected
+    await supabase.from("active_sessions").insert({
+      user_id:          currentUserId,
+      location_id:      locationId,
+      activity:         "study_group",
+      module:           data.topic || null,
+      duration_minutes: 120,
+      seats_taken:      data.max_members,
+      is_active:        true,
+    });
+
+    setCheckInDone(true);
+    setExistingGroupId(group.id);
+
+    // Award points (daily cooldown applies)
+    if (!alreadyEarnedToday) {
+      const { data: rule } = await supabase
+        .from("point_rules")
+        .select("points_awarded")
+        .eq("action_name", POINT_ACTIONS.CREATE_STUDY_GROUP)
+        .eq("is_active", true)
+        .maybeSingle();
+      const pts = (rule as { points_awarded: number } | null)?.points_awarded ?? 20;
+
+      await awardPoints(supabase, currentUserId, POINT_ACTIONS.CREATE_STUDY_GROUP);
+      setPointsDelta(pts);
+      setTimeout(() => setPointsDelta(null), 2500);
+      setAlreadyEarnedToday(true);
+      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+    }
+  }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday]);
+
   // ── Status update ─────────────────────────────────────────
   const handleStatusUpdate = async (newStatus: LocationStatus) => {
     if (!location || newStatus === activeStatus) return;
@@ -347,8 +409,23 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         open={qrOpen}
         locationName={location.name}
         onOpenChange={(open) => { if (!open) setQrOpen(false); }}
-        onSuccess={handleCheckIn}
+        onSuccess={() => { setQrOpen(false); setActionChoiceOpen(true); }}
         requiredLocationId={locationId}
+      />
+
+      <ActionChoiceModal
+        open={actionChoiceOpen}
+        locationName={location.name}
+        onClose={() => setActionChoiceOpen(false)}
+        onCheckIn={() => { setActionChoiceOpen(false); handleCheckIn(locationId); }}
+        onStudyBuddy={() => { setActionChoiceOpen(false); setStudyBuddyOpen(true); }}
+      />
+
+      <StudyBuddyModal
+        open={studyBuddyOpen}
+        locationName={location.name}
+        onOpenChange={(open) => { if (!open) setStudyBuddyOpen(false); }}
+        onSubmit={handleStudyBuddyCreate}
       />
 
       {/* Floating +pts animation */}
@@ -405,10 +482,10 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         {/* ── Sticky Action Bar ── */}
         <div className="sticky top-16 z-10 bg-surface/80 backdrop-blur-md border-b border-border">
           <div className="max-w-3xl mx-auto px-4 md:px-6 py-3 flex items-center gap-2">
-            {/* Solo Check-in — disabled when blocked */}
+            {/* Scan QR — disabled when user already has an active session */}
             <button
               onClick={() => {
-                if (isBlocked) return; // shouldn't happen; button is disabled
+                if (isBlocked) return;
                 setQrOpen(true);
               }}
               disabled={isBlocked || checkInDone}
@@ -418,18 +495,9 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               {checkInDone ? (
                 <><CheckCircle2 size={16} /> Checked In</>
               ) : (
-                <><QrCode size={16} /> Solo Check-in</>
+                <><QrCode size={16} /> Scan QR to Enter</>
               )}
             </button>
-
-            {/* Study Buddy */}
-            <Link
-              href={`/finder?locationId=${locationId}`}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-canvas border border-border hover:bg-brand-faint text-ink-muted hover:text-ink font-semibold text-sm rounded-full transition-all duration-200"
-            >
-              <Users size={16} />
-              Study Buddy
-            </Link>
 
             <button aria-label="Share location" className="p-2.5 bg-canvas border border-border rounded-full text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-200">
               <Share2 size={16} />

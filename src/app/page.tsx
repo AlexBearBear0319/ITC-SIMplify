@@ -7,6 +7,8 @@ import InteractiveMap from "@/components/features/InteractiveMap";
 import CheckInModal, { type CheckInData } from "@/components/features/CheckInModal";
 import FeedbackModal, { type FeedbackData } from "@/components/features/FeedbackModal";
 import QRScannerModal from "@/components/features/QRScannerModal";
+import ActionChoiceModal from "@/components/features/ActionChoiceModal";
+import StudyBuddyModal, { type StudyBuddyData } from "@/components/features/StudyBuddyModal";
 import { createClient } from "@/utils/supabase/client";
 import { getLevelNumber } from "@/lib/levels";
 import {
@@ -337,11 +339,11 @@ function LocationDrawer({
           )}
 
           {/* ── Action buttons ── */}
-          <div className="px-5 mt-4 flex gap-2">
+          <div className="px-5 mt-4">
             {isMyActiveLocation ? (
               <button
                 onClick={onLeaveSpot}
-                className="flex-1 flex items-center justify-center gap-2 py-3 bg-alert-light hover:bg-alert/20 text-alert border border-alert/40 font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-alert-light hover:bg-alert/20 text-alert border border-alert/40 font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
               >
                 <LogOut size={15} />
                 Leave Spot
@@ -349,19 +351,12 @@ function LocationDrawer({
             ) : (
               <button
                 onClick={onCheckIn}
-                className="flex-1 flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
               >
                 <LogIn size={15} />
-                Check In · +10 pts
+                Scan QR to Enter
               </button>
             )}
-            <Link
-              href={`/finder?locationId=${location.id}`}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-canvas border border-border text-ink-muted hover:text-ink hover:border-brand hover:bg-brand-faint font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
-            >
-              <Users size={15} />
-              Study Buddy
-            </Link>
           </div>
 
           {/* ── Reviews ── */}
@@ -414,6 +409,10 @@ export default function DashboardPage() {
 
   // `id` from active_sessions — held so we can mark the row inactive on check-out
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
+
+  // Post-QR-scan action choice
+  const [actionChoiceOpen, setActionChoiceOpen] = useState(false);
+  const [studyBuddyOpen,   setStudyBuddyOpen]   = useState(false);
 
   const [userRank, setUserRank] = useState<number | null>(null);
 
@@ -770,6 +769,101 @@ export default function DashboardPage() {
     setCheckInOpen(false);
   };
 
+  // Creates a study group at the selected location, reserves seats, and awards points.
+  const handleStudyBuddySubmit = async (data: StudyBuddyData) => {
+    if (!selectedLocation || !userId) return;
+
+    const supabase = createClient();
+
+    // 1. Create the study group
+    const { data: group, error: groupError } = await supabase
+      .from("study_groups")
+      .insert({
+        location_id:     selectedLocation.id,
+        created_by:      userId,
+        subject:         data.topic || "Study Session",
+        max_members:     data.max_members,
+        current_members: 1,
+        is_active:       true,
+      })
+      .select("id")
+      .single();
+
+    if (groupError || !group) {
+      console.error("[study-buddy] Failed to create group:", groupError?.message);
+      return;
+    }
+
+    // 2. Add the creator as the first member
+    await supabase.from("study_group_members").insert({
+      group_id: group.id,
+      user_id:  userId,
+    });
+
+    // 3. Create an active_sessions row so the seat count is reflected on the map
+    const { data: session } = await supabase
+      .from("active_sessions")
+      .insert({
+        user_id:          userId,
+        location_id:      selectedLocation.id,
+        activity:         "study_group",
+        module:           data.topic || null,
+        duration_minutes: 120,
+        seats_taken:      data.max_members,
+        is_active:        true,
+      })
+      .select("id")
+      .single();
+
+    if (session) setActiveSessionId(session.id);
+
+    // 4. Award points for creating a study group
+    const { data: rule } = await supabase
+      .from("point_rules")
+      .select("points_awarded")
+      .eq("action_name", "study_group_create")
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (rule?.points_awarded) {
+      await supabase.rpc("increment_points", { user_id: userId, amount: rule.points_awarded });
+      setProfile((prev) =>
+        prev ? { ...prev, points: prev.points + rule.points_awarded } : prev
+      );
+    }
+
+    // 5. Recalculate location status
+    const { data: activeSessions } = await supabase
+      .from("active_sessions")
+      .select("seats_taken")
+      .eq("location_id", selectedLocation.id)
+      .eq("is_active", true);
+
+    const totalOccupied = (activeSessions ?? []).reduce((sum, s) => sum + (s.seats_taken ?? 1), 0);
+    const totalSeats    = selectedLocation.total_seats ?? 0;
+    const fillPct       = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
+    const newStatus: LocationStatus =
+      fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+
+    await supabase
+      .from("locations")
+      .update({ current_status: newStatus })
+      .eq("id", selectedLocation.id);
+
+    // 6. Update local state so the drawer shows "Leave Spot"
+    setActiveSession({
+      locationId:       selectedLocation.id,
+      locationName:     selectedLocation.name,
+      seats_needed:     data.max_members,
+      activity:         "study",
+      module:           data.topic,
+      duration_minutes: 120,
+      endsAt:           new Date(Date.now() + 120 * 60_000),
+    });
+
+    setStudyBuddyOpen(false);
+  };
+
   // Ends the session, awards feedback points, optionally saves a review, and
   // recalculates the location status based on remaining active sessions.
   const handleFeedbackSubmit = async (data: FeedbackData) => {
@@ -864,8 +958,30 @@ export default function DashboardPage() {
         <QRScannerModal
           open={qrScanOpen}
           locationName={selectedLocation.name}
+          requiredLocationId={selectedLocation.id}
           onOpenChange={(open) => { if (!open) setQrScanOpen(false); }}
-          onSuccess={() => setCheckInOpen(true)}
+          onSuccess={() => { setQrScanOpen(false); setActionChoiceOpen(true); }}
+        />
+      )}
+
+      {/* ── Action choice (after QR verified) ── */}
+      {selectedLocation && (
+        <ActionChoiceModal
+          open={actionChoiceOpen}
+          locationName={selectedLocation.name}
+          onClose={() => setActionChoiceOpen(false)}
+          onCheckIn={() => { setActionChoiceOpen(false); setCheckInOpen(true); }}
+          onStudyBuddy={() => { setActionChoiceOpen(false); setStudyBuddyOpen(true); }}
+        />
+      )}
+
+      {/* ── Study buddy modal ── */}
+      {selectedLocation && (
+        <StudyBuddyModal
+          open={studyBuddyOpen}
+          locationName={selectedLocation.name}
+          onOpenChange={(open) => { if (!open) setStudyBuddyOpen(false); }}
+          onSubmit={handleStudyBuddySubmit}
         />
       )}
 
