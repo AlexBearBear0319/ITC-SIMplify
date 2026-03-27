@@ -1,143 +1,127 @@
-# 🚀 SIMplify: Developer Guide & Documentation
+# SIMplify
 
-Welcome to the **SIMplify** codebase! If you are new to Next.js, Tailwind CSS, or GitHub, do not panic. This guide is written specifically for our team. Please read this before you start coding!
+**SIMplify** is a web app built by the IT Club that helps students find available study spots on campus, check in using QR codes, and earn points for contributing crowd status updates. Students can also browse upcoming campus events, join study groups, and redeem points for rewards.
 
-Our app is built with **Next.js 15 (App Router)**, **Tailwind CSS v4**, and **Supabase**.
-
----
-
-## 👑 Team Roles
-
-* **Alex (Tech & Project Lead):** The architect. Set up the repo, database, and handles the tricky API connections. Ask Alex if your code won't compile or if you get a merge conflict!
-* **Ameer (Backend Lead):** The data master. Writes the logic to fetch, update, and save data (Points, Locations, Users) from our Supabase database.
-* **Kimbery (UI/UX Lead):** The visionary. Designs the Figma wireframes and sets the rules for our "Relax View" color palette and typography.
-* **Helen & Chris (Frontend Developers):** The builders. You turn Kimbery's designs into actual, clickable React code using Tailwind CSS. 
+Built with **Next.js 15 (App Router)**, **Tailwind CSS v4**, and **Supabase**.
 
 ---
 
-## 📂 Where Does Everything Go? (Folder Guide)
+## Setup Instructions
 
-We use a strict **MVC (Model-View-Controller)** pattern. Do not put files in random places!
+### 1. Clone the repository
 
-
-
-```text
-/src
-  ├── /app                 <-- PAGES: This is where the website URLs live.
-  │    ├── globals.css     <-- TAILWIND COLORS: Our "Relax View" palette lives here.
-  │    ├── layout.tsx      <-- THE WRAPPER: The Sidebar and background live here.
-  │    └── page.tsx        <-- HOMEPAGE: The main dashboard.
-  │
-  ├── /components          <-- LEGO BLOCKS: Reusable UI pieces.
-  │    ├── /features       <-- Smart components (e.g., InteractiveMap.tsx).
-  │    └── /layout         <-- Structure components (e.g., Sidebar.tsx).
-  │
-  ├── /lib/api             <-- BACKEND LOGIC: Ameer works here (e.g., locations.ts).
-  ├── /types               <-- TYPESCRIPT RULES: Defines what our database looks like.
-  └── /utils/supabase      <-- SUPABASE ENGINES: Do not touch these!
-
+```bash
+git clone https://github.com/AlexBearBear0319/ITC-SIMplify.git
+cd ITC-SIMplify
 ```
 
----
+### 2. Install dependencies
 
-## 🎨 1. Frontend Guide (For Helen & Kimbery & Chris)
-
-### A. Styling with Tailwind CSS v4
-
-We do **not** write separate `.css` files for our components. We use Tailwind utility classes directly in the `className`.
-
-* ❌ **Rule 1: Avoid Inline Styles!** Do not use `style={{ ... }}` for regular positioning or colors.
-* *Wrong:* `<div style={{ display: "flex", marginTop: "20px", backgroundColor: "#F5D2D2" }}>`
-* *Right:* `<div className="flex mt-5 bg-rose-200">`
-* *Exception:* Only use inline styles for dynamic math, like placing a pin on the map: `style={{ left: \`{y}%` }}`.
-
-
-* 🙋 **"Kimbery gave us a new color! How do I add it?"**
-If we need a new custom color, add it to the `@theme inline` section in `src/app/globals.css`.
-```css
-@theme inline {
-  --color-purple-200: #E9D5FF; /* <-- Add new color here */
-}
-
+```bash
+npm install
 ```
 
+### 3. Configure environment variables
 
-Now you can use `<div className="bg-purple-200">` anywhere!
+Create a `.env.local` file in the project root:
 
-### B. Creating New Pages
+```env
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
-Next.js uses **Folder-Based Routing**.
+Get these values from the Supabase Dashboard under **Project Settings > API**.
 
-* ❌ **Wrong:** Creating `rewards.tsx` in the `app` folder.
-* ✅ **Right:** Create a new folder called `rewards`, and put a `page.tsx` file inside it: `src/app/rewards/page.tsx`. This automatically creates the URL `localhost:3000/rewards`.
+### 4. Run the development server
 
-### C. Importing Files
+```bash
+npm run dev
+```
 
-Always use our `@/` shortcut to import things! It tells the app to start looking from the `src` folder.
+The app will be available at `http://localhost:3000`.
 
-* ❌ **Wrong:** `import Sidebar from '../../components/layout/Sidebar';`
-* ✅ **Right:** `import Sidebar from '@/components/layout/Sidebar';`
+### Other scripts
 
----
-
-## ⚙️ 2. Backend Guide (For Ameer)
-
-### A. Database to UI Flow
-
-When you need to get data from Supabase to the screen, follow this 3-step rule:
-
-1. **Test the SQL:** Make sure your query works in the Supabase Dashboard SQL Editor first.
-2. **Write the Function:** Create a fetch function in `src/lib/api/` (use `locations.ts` as an example). Use `await createClient()` from our utils folder to talk to the database safely.
-3. **Pass to Frontend:** Helen/Chris will call your function inside their `page.tsx` files to display the data.
-
-### B. TypeScript is your Friend
-
-Always ensure your database queries use the interfaces defined in `src/types/database.types.ts`. This prevents the frontend team from guessing what the data looks like and stops the app from crashing if a column name changes.
+| Command | Description |
+|---------|-------------|
+| `npm run build` | Builds the app for production |
+| `npm start` | Runs the production build |
+| `npm run lint` | Runs ESLint |
 
 ---
 
-## 🐙 3. GitHub Desktop Workflow (Crucial!)
+## Features
 
-We are using **GitHub Desktop** to manage our code visually.
+### Study Spot Finder
+The dashboard displays an interactive floor plan of the Tay Eng Soon Library. Each study zone shows its current crowd status (empty, busy, or full) as a colour-coded pin. Students can pan and zoom the map to find a spot, then tap a pin to view details.
 
-🚨 **THE GOLDEN RULE: NO ONE PUSHES DIRECTLY TO `main`!** Everyone works on their own personal branch (e.g., `branch-helen`, `branch-chris`).
+### QR Code Check-In
+On any location detail page, students scan a QR code to check in. A successful scan opens a form to record their activity type, module, number of seats needed, and how long they plan to stay.
 
-### 🔄 The Daily Step-by-Step UI Guide:
+### Crowd Status Updates
+Students can report the current crowd level at any location directly from the location detail page. Each submitted update earns 10 points and appears in the live status log.
 
-1. **Get the latest updates (Always do this first!)**
-* Open GitHub Desktop. Make sure your "Current Branch" says `main`.
-* Click **"Fetch origin"** at the top right. If it changes to **"Pull origin"**, click it to download your teammates' new code.
+### Events Calendar
+The Events page shows a monthly calendar with campus events marked on each date. Selecting a date displays that day's events along with a study spot recommendation based on expected foot traffic.
 
+### Leaderboard
+A live-updating leaderboard ranks students by total points. The top three positions are shown on a podium. Each student's rank, username, and point total are visible in the full list below.
 
-2. **Go to your branch**
-* Click "Current Branch" and select your personal branch (e.g., `branch-helen`).
-* If it asks to bring changes from `main` into your branch, **say YES**.
+### User Profile and Badges
+The profile page shows a student's total points, check-in count, and study streak. Earned IT Club badges are displayed with their rarity tier (common, rare, or epic). Badges that are locked show progress toward unlocking them.
 
+### Rewards Store
+Students spend accumulated points in the Rewards store. Items are grouped into physical rewards, virtual rewards, and room or equipment bookings. Each item shows its points cost and remaining stock.
 
-3. **Write your code & Save**
-* Go to VS Code, write your code, and hit Save.
+### Admin Panel
+Users with admin access can view campus analytics including check-in counts, peak hour traffic charts, and a breakdown of location categories. Access is restricted at the routing level by the `is_admin` flag in Supabase.
 
-
-4. **Commit your work**
-* Go back to GitHub Desktop. You will see your changed files on the left.
-* At the bottom left, write a short summary (e.g., *"Added the interactive map UI"*).
-* Click the blue button: **"Commit to branch-helen"**.
-
-
-5. **Send it to the internet**
-* Click the **"Push origin"** button at the top right.
-* Go to GitHub.com, find your branch, and click **"Compare & pull request"**.
-* **Alex (Tech Lead)** will review it and merge it into `main`.
-
-
-
-### ⚠️ WARNING: The `package-lock.json` Crash
-
-If two people run `npm install` to add a new package (like icons) at the same time, the `package.json` files get confused when merging. It causes the app to crash.
-
-* **How to fix it:** If GitHub Desktop yells about a "Merge Conflict" in `package.json` or `package-lock.json`, **do not panic**. Stop what you are doing and **tell Alex immediately.** Alex will manually fix the file conflict in VS Code.
-* **Rule of thumb:** Do not run `npm install <package>` without asking Alex first!
+### Automatic Dark Mode
+The app switches to dark mode between 7:00 PM and 5:59 AM Singapore Time (SGT) without any user input. The theme is managed through CSS variables, so no Tailwind `dark:` classes are needed.
 
 ---
 
-*Stuck on an error for more than 20 minutes? Stop, breathe, and ask the group chat. We are a team! 🚀*
+## Live Deployment
+
+The app is deployed on Vercel:
+
+**[https://itc-simplify.vercel.app](https://itc-simplify.vercel.app)**
+
+---
+
+## Known Limitations and Future Improvements
+
+### Current Limitations
+
+- The **Statistics** and **Admin** pages display mock data. The Supabase RPC calls for KPI metrics, peak hour density, and category breakdown are not yet connected.
+- The **Location Detail** page partially uses mock data. QR token validation against the database and point-awarding on check-in are not yet implemented.
+- The **Rewards** redemption flow does not call the Supabase RPC function yet. Items can be selected but the transaction is not recorded in the database.
+- The **Study Buddy Finder** page exists but displays mock study group slots instead of live data from Supabase.
+- **Notification preferences** in Settings are UI-only. The corresponding database table has not been created yet.
+- The `SearchBar` and `Footer` components use hardcoded Tailwind colour classes instead of the project's design tokens. These need to be migrated before they are production-ready.
+- There is no `.env.example` file in the repository. New contributors need to request the Supabase credentials directly.
+
+### Planned Improvements
+
+- Replace all mock data with live Supabase queries and RPC calls.
+- Complete the QR code validation flow (match scanned token against `locations.qr_token` and log to `status_logs`).
+- Implement the rewards redemption RPC and deduct points from the user's balance on confirmation.
+- Build out the Study Buddy Finder with real study group creation and discovery.
+- Add the notifications preferences table to Supabase and wire up the Settings toggles.
+- Migrate `SearchBar` and `Footer` to use design tokens from `globals.css`.
+- Add a `.env.example` file to the repository.
+
+---
+
+## Team Contributions
+
+| Member | Role | Contributions |
+|--------|------|---------------|
+| **Alex (Vun Kian Hiung)** | Tech and Project Lead | Set up the repository, designed the Supabase database schema, configured authentication middleware, handled Vercel deployment, and managed pull request reviews. |
+| **Ameer** | Backend Lead | Built the Supabase data layer including all fetch, insert, and update functions across locations, sessions, profiles, events, points, reviews, and study groups. |
+| **Kimbery** | UI/UX Lead | Produced the Figma wireframes, defined the design system (colour palette, typography, and spacing), and specified the "Relax View" theme used throughout the app. |
+| **Helen** | Frontend Developer | Implemented pages and React components from Kimbery's designs using Tailwind CSS. |
+| **Chris** | Frontend Developer | Implemented pages and React components from Kimbery's designs using Tailwind CSS. |
+
+For coding conventions, folder structure, and the Git workflow, see [CONTRIBUTING.md](./CONTRIBUTING.md).
+For the full component API, design token reference, and route architecture, see [TEAM_HANDOVER.md](./TEAM_HANDOVER.md).

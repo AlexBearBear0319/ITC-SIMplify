@@ -270,8 +270,8 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
     const { data: group, error: groupError } = await supabase
       .from("study_groups")
       .insert({
+        host_id:         currentUserId,
         location_id:     locationId,
-        created_by:      currentUserId,
         subject:         data.topic || "Study Session",
         max_members:     data.max_members,
         current_members: 1,

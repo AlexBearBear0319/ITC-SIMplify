@@ -414,6 +414,9 @@ export default function DashboardPage() {
   const [actionChoiceOpen, setActionChoiceOpen] = useState(false);
   const [studyBuddyOpen,   setStudyBuddyOpen]   = useState(false);
 
+  // Floating +pts animation
+  const [pointsDelta, setPointsDelta] = useState<number | null>(null);
+
   const [userRank, setUserRank] = useState<number | null>(null);
 
   // Computed from active_sessions seat tallies — drives the Peak Hour Alert banner
@@ -472,15 +475,21 @@ export default function DashboardPage() {
         .maybeSingle();
 
       if (existing) {
+        // Fetch the location name directly so the banner never shows "Loading…"
+        const { data: locRow } = await supabase
+          .from("locations")
+          .select("name")
+          .eq("id", existing.location_id)
+          .single();
+
         setActiveSessionId(existing.id);
         setActiveSession({
           locationId:       existing.location_id,
-          locationName:     "Loading…", // patched to the real name once locations load
+          locationName:     locRow?.name ?? "Unknown",
           seats_needed:     existing.seats_taken ?? 1,
           activity:         existing.activity as "study" | "eating",
           module:           existing.module ?? "",
           duration_minutes: existing.duration_minutes,
-          // Calculate when the session was supposed to end
           endsAt: new Date(
             new Date(existing.check_in_time).getTime() +
             existing.duration_minutes * 60_000
@@ -737,6 +746,9 @@ export default function DashboardPage() {
       setProfile((prev) =>
         prev ? { ...prev, points: prev.points + rule.points_awarded } : prev
       );
+      setPointsDelta(rule.points_awarded);
+      setTimeout(() => setPointsDelta(null), 2500);
+      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
 
     // Recalculate the location's live status based on total seats now occupied
@@ -779,8 +791,8 @@ export default function DashboardPage() {
     const { data: group, error: groupError } = await supabase
       .from("study_groups")
       .insert({
+        host_id:         userId,
         location_id:     selectedLocation.id,
-        created_by:      userId,
         subject:         data.topic || "Study Session",
         max_members:     data.max_members,
         current_members: 1,
@@ -830,6 +842,9 @@ export default function DashboardPage() {
       setProfile((prev) =>
         prev ? { ...prev, points: prev.points + rule.points_awarded } : prev
       );
+      setPointsDelta(rule.points_awarded);
+      setTimeout(() => setPointsDelta(null), 2500);
+      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
 
     // 5. Recalculate location status
@@ -939,6 +954,22 @@ export default function DashboardPage() {
 
   return (
     <>
+      {/* ── Floating +pts animation ── */}
+      <AnimatePresence>
+        {pointsDelta !== null && (
+          <motion.div
+            key="pts-delta"
+            initial={{ opacity: 1, y: 0, scale: 0.9 }}
+            animate={{ opacity: 0, y: -60, scale: 1.15 }}
+            transition={{ duration: 2.2, ease: "easeOut" }}
+            className="fixed top-24 right-4 z-80 flex items-center gap-1.5 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
+          >
+            <Coins size={16} />
+            +{pointsDelta} pts
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── Location drawer ── */}
       <AnimatePresence>
         {selectedLocation && (
