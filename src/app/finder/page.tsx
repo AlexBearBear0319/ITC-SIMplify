@@ -1,7 +1,7 @@
 "use client";
 
 
-import { useState, useMemo, useEffect, Suspense } from "react";
+import { useState, useMemo, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -66,6 +66,11 @@ const POPULAR_SUBJECTS = ["Python", "React", "Statistics", "Writing", "DSA", "Se
 
 type Subject = { id: number; name: string; course_code: string | null };
 
+type GroupMember = {
+  user_id: string;
+  profiles: { username: string; avatar_url: string | null };
+};
+
 // ─────────────────────────────────────────────
 // Animation variants
 // ─────────────────────────────────────────────
@@ -104,25 +109,74 @@ function getCapacityInfo(current: number, max: number) {
 // GroupDetailDialog
 // ─────────────────────────────────────────────
 
+function MemberAvatar({ username, isHost }: { username: string; isHost?: boolean }) {
+  const [showTip, setShowTip] = useState(false);
+  const tipRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initials = username.slice(0, 2).toUpperCase();
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => { tipRef.current = setTimeout(() => setShowTip(true), 300); }}
+      onMouseLeave={() => { if (tipRef.current) clearTimeout(tipRef.current); setShowTip(false); }}
+      onTouchStart={() => setShowTip((v) => !v)}
+    >
+      <div
+        className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border-2 border-surface shadow-sm ${isHost ? "bg-brand text-ink" : "bg-canvas text-ink-muted"}`}
+      >
+        {initials}
+      </div>
+      {showTip && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 bg-ink text-surface text-[11px] font-medium rounded-lg whitespace-nowrap shadow-md pointer-events-none z-10">
+          @{username}{isHost ? " · host" : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GroupDetailDialog({
   group,
   activeGroupId,
+  supabase,
   onJoin,
   onLeave,
   onClose,
 }: {
   group: StudyGroup;
   activeGroupId: number | null;
+  supabase: ReturnType<typeof createClient>;
   onJoin: (id: number) => void;
   onLeave: (id: number) => void;
   onClose: () => void;
 }) {
-  const cap = getCapacityInfo(group.current_members, group.max_members);
-  const isFull             = group.current_members >= group.max_members;
+  const [members, setMembers] = useState<GroupMember[]>([]);
+
+  // Fetch real members and subscribe to live updates for this group
+  useEffect(() => {
+    const fetchMembers = () =>
+      supabase
+        .from("study_group_members")
+        .select("user_id, profiles(username, avatar_url)")
+        .eq("group_id", group.id)
+        .then(({ data }) => { if (data) setMembers(data as unknown as GroupMember[]); });
+
+    fetchMembers();
+
+    const channel = supabase
+      .channel(`group-members-${group.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "study_group_members", filter: `group_id=eq.${group.id}` }, fetchMembers)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [group.id, supabase]);
+
+  const liveCount          = members.length || group.current_members;
+  const cap                = getCapacityInfo(liveCount, group.max_members);
+  const isFull             = liveCount >= group.max_members;
   const isThisGroupActive  = activeGroupId === group.id;
   const hasOtherActiveGroup = activeGroupId !== null && activeGroupId !== group.id;
+  const emptySlots         = Math.max(0, group.max_members - liveCount);
   const hostInitials       = group.profiles.username.slice(0, 2).toUpperCase();
-  const emptySlots         = Math.max(0, group.max_members - group.current_members);
 
   return (
     <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -139,7 +193,7 @@ function GroupDetailDialog({
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full ${cap.bg} ${cap.text}`}>
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cap.pipColor}`} />
-                    {cap.label} · {group.current_members}/{group.max_members}
+                    {cap.label} · {liveCount}/{group.max_members}
                   </span>
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-brand-faint text-brand-dark text-[10px] font-semibold rounded-full border border-brand/30">
                     <BookOpen size={9} />
@@ -189,29 +243,24 @@ function GroupDetailDialog({
               </div>
             </div>
 
-            {/* Participants — slots are visual only; members are tracked in study_group_members */}
+            {/* Participants — real data from study_group_members */}
             <div>
               <p className="text-xs font-semibold text-ink-muted mb-2.5">
-                Participants ({group.current_members}/{group.max_members})
+                Participants ({liveCount}/{group.max_members})
               </p>
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Host avatar */}
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border-2 border-surface shadow-sm bg-brand text-ink"
-                  title={`@${group.profiles.username} (host)`}
-                >
-                  {hostInitials}
-                </div>
-                {/* Other filled member slots (mock) */}
-                {Array.from({ length: Math.max(0, group.current_members - 1) }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border-2 border-surface shadow-sm bg-canvas text-ink-muted"
-                    title={`Member ${i + 2}`}
-                  >
-                    {String.fromCharCode(65 + i)}
-                  </div>
-                ))}
+                {/* Host */}
+                <MemberAvatar username={group.profiles.username} isHost />
+                {/* Other members (excluding host) */}
+                {members
+                  .filter((m) => m.user_id !== group.host_id)
+                  .map((m) => (
+                    <MemberAvatar
+                      key={m.user_id}
+                      username={(m.profiles as unknown as { username: string }).username}
+                    />
+                  ))
+                }
                 {/* Empty slots */}
                 {Array.from({ length: emptySlots }).map((_, i) => (
                   <div
@@ -222,6 +271,7 @@ function GroupDetailDialog({
                   </div>
                 ))}
               </div>
+              <p className="text-[11px] text-ink-faint mt-2">Hover a member to see their username</p>
             </div>
 
             {/* One-active-group warning */}
@@ -947,6 +997,7 @@ function FinderPageContent() {
         <GroupDetailDialog
           group={selectedGroup}
           activeGroupId={activeGroupId}
+          supabase={supabase}
           onJoin={handleJoinGroup}
           onLeave={handleLeaveGroup}
           onClose={() => setSelectedGroupId(null)}
