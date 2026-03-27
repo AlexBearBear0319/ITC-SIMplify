@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import * as Dialog from "@radix-ui/react-dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -64,6 +64,7 @@ type ALocation = {
   id: number; name: string; category: string | null; current_status: string | null;
   total_seats: number | null; power_outlets: number | null;
   location_text: string | null; description: string | null; opening_time: string | null;
+  qr_token: string | null; coordinates_x: number | null; coordinates_y: number | null;
 };
 
 type AReview = {
@@ -865,11 +866,62 @@ const LOC_STATUSES   = ["empty", "busy", "full"];
 type LocForm = {
   name: string; category: string; location_text: string; description: string;
   total_seats: string; power_outlets: string; opening_time: string;
+  coordinates_x: string; coordinates_y: string;
 };
 const EMPTY_LOC: LocForm = {
   name: "", category: "", location_text: "", description: "",
   total_seats: "", power_outlets: "", opening_time: "",
+  coordinates_x: "", coordinates_y: "",
 };
+
+// Clickable floor-plan mini-map for setting coordinates_x / coordinates_y
+function MapPinSelector({
+  x, y, onChange,
+}: {
+  x: number; y: number;
+  onChange: (x: number, y: number) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const px = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+    const py = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+    onChange(Math.max(0, Math.min(100, px)), Math.max(0, Math.min(100, py)));
+  };
+  const hasPin = x > 0 || y > 0;
+  return (
+    <div
+      ref={containerRef}
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      aria-label="Click map to set pin location"
+      className="relative w-full h-28 bg-brand-faint/30 rounded-xl overflow-hidden cursor-crosshair border border-dashed border-brand/40 select-none"
+    >
+      {/* Simplified floor-plan silhouette */}
+      <svg viewBox="0 0 600 400" className="absolute inset-0 w-full h-full opacity-20" aria-hidden="true">
+        <rect x="12"  y="12"  width="180" height="136" rx="4" fill="#B3D2D5" />
+        <rect x="204" y="12"  width="180" height="136" rx="4" fill="#B3D2D5" />
+        <rect x="396" y="12"  width="192" height="148" rx="4" fill="#B3D2D5" />
+        <rect x="12"  y="164" width="576" height="108" rx="4" fill="#B3D2D5" />
+        <rect x="12"  y="280" width="216" height="108" rx="4" fill="#B3D2D5" />
+        <rect x="234" y="280" width="108" height="108" rx="4" fill="#B3D2D5" />
+        <rect x="348" y="280" width="240" height="108" rx="4" fill="#B3D2D5" />
+      </svg>
+      {hasPin ? (
+        <div
+          className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-alert border-2 border-surface shadow-sm pointer-events-none"
+          style={{ left: `${x}%`, top: `${y}%` }}
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <p className="text-xs text-ink-faint">Click map to pin location</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function LocationsTab() {
   const supabase = createClient();
@@ -880,11 +932,12 @@ function LocationsTab() {
   const [form,      setForm]      = useState<LocForm>(EMPTY_LOC);
   const [saving,    setSaving]    = useState(false);
   const [confirmId, setConfirmId] = useState<number | string | null>(null);
+  const [currentQrToken, setCurrentQrToken] = useState<string | null>(null);
 
   const load = async () => {
     const { data } = await supabase
       .from("locations")
-      .select("id, name, category, current_status, total_seats, power_outlets, location_text, description, opening_time")
+      .select("id, name, category, current_status, total_seats, power_outlets, location_text, description, opening_time, qr_token, coordinates_x, coordinates_y")
       .order("name");
     if (data) setLocs(data as ALocation[]);
     setLoading(false);
@@ -892,9 +945,15 @@ function LocationsTab() {
 
   useEffect(() => { load(); }, []);
 
-  const openCreate = () => { setEditing(null); setForm(EMPTY_LOC); setOpen(true); };
+  const openCreate = () => {
+    setEditing(null);
+    setForm(EMPTY_LOC);
+    setCurrentQrToken(crypto.randomUUID());
+    setOpen(true);
+  };
   const openEdit   = (l: ALocation) => {
     setEditing(l);
+    setCurrentQrToken(l.qr_token ?? crypto.randomUUID());
     setForm({
       name:          l.name,
       category:      l.category      ?? "",
@@ -903,6 +962,8 @@ function LocationsTab() {
       total_seats:   l.total_seats   != null ? String(l.total_seats)   : "",
       power_outlets: l.power_outlets != null ? String(l.power_outlets) : "",
       opening_time:  l.opening_time  ?? "",
+      coordinates_x: l.coordinates_x != null ? String(l.coordinates_x) : "",
+      coordinates_y: l.coordinates_y != null ? String(l.coordinates_y) : "",
     });
     setOpen(true);
   };
@@ -910,7 +971,7 @@ function LocationsTab() {
   const handleSave = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
-    const payload = {
+    const payload: Record<string, unknown> = {
       name:          form.name.trim(),
       category:      form.category      || null,
       location_text: form.location_text.trim() || null,
@@ -918,10 +979,13 @@ function LocationsTab() {
       total_seats:   form.total_seats   ? Number(form.total_seats)   : null,
       power_outlets: form.power_outlets ? Number(form.power_outlets) : null,
       opening_time:  form.opening_time.trim()  || null,
+      coordinates_x: form.coordinates_x ? Number(form.coordinates_x) : null,
+      coordinates_y: form.coordinates_y ? Number(form.coordinates_y) : null,
     };
     if (editing) {
       await supabase.from("locations").update(payload).eq("id", editing.id);
     } else {
+      payload.qr_token = currentQrToken;
       await supabase.from("locations").insert(payload);
     }
     await load();
@@ -1006,6 +1070,44 @@ function LocationsTab() {
             <label className={LABEL}>Floor / Block</label>
             <input type="text" value={form.location_text} onChange={(e) => set("location_text", e.target.value)} className={INPUT} placeholder="e.g., Block A, Level 2" />
           </div>
+          <div>
+            <label className={LABEL}>Map Pin — click to place</label>
+            <MapPinSelector
+              x={form.coordinates_x ? Number(form.coordinates_x) : 0}
+              y={form.coordinates_y ? Number(form.coordinates_y) : 0}
+              onChange={(x, y) => { set("coordinates_x", String(x)); set("coordinates_y", String(y)); }}
+            />
+            {(form.coordinates_x || form.coordinates_y) && (
+              <p className="text-[10px] text-ink-faint mt-1">x: {form.coordinates_x}% · y: {form.coordinates_y}%</p>
+            )}
+          </div>
+          {currentQrToken && (
+            <div>
+              <label className={LABEL}>QR Code</label>
+              <div className="flex items-start gap-4 p-3 bg-canvas rounded-xl border border-border">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(currentQrToken)}&margin=2`}
+                  alt="Location QR Code"
+                  className="w-24 h-24 rounded-xl border border-border shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs text-ink-muted leading-relaxed">
+                    Print and place this QR at the location. Students scan it to check in.
+                  </p>
+                  <p className="text-[10px] font-mono text-ink-faint mt-2 break-all">{currentQrToken}</p>
+                  <a
+                    href={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(currentQrToken)}&margin=4`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-brand-dark hover:underline mt-1 inline-block"
+                  >
+                    Download full size ↗
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
           <div>
             <label className={LABEL}>Description</label>
             <textarea rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} className={INPUT} placeholder="About this space…" />

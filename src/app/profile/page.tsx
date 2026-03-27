@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { getLevel } from "@/lib/levels";
 import {
@@ -187,12 +187,14 @@ const cardVariants = {
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 export default function ProfilePage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [profile,      setProfile]      = useState<UserProfile | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [activity,     setActivity]     = useState<ActivityItem[]>([]);
   const [loading,      setLoading]      = useState(true);
+  const prevPointsRef  = useRef<number | null>(null);
+  const [pointsDelta,  setPointsDelta]  = useState<number | null>(null);
 
   // Edit form state
   const [editForm,        setEditForm]        = useState<EditForm>({
@@ -263,6 +265,7 @@ export default function ProfilePage() {
           semester_term:  prof.semester_term  ?? null,
         };
         setProfile(loaded);
+        prevPointsRef.current = pts;
 
         // Initialise the edit form from loaded profile data
         setEditForm({
@@ -341,6 +344,67 @@ export default function ProfilePage() {
       .then(({ data }) => { if (data) setMajors(data); });
   }, [editForm.school_id]);
 
+  // ── Re-fetch profile when the tab regains focus (handles cases where
+  //    Supabase realtime is not yet enabled for the profiles table) ──
+  useEffect(() => {
+    if (!profile?.id) return;
+    const handleVisibility = async () => {
+      if (document.visibilityState !== "visible") return;
+      const { data: fresh } = await supabase
+        .from("profiles")
+        .select("id, full_name, username, avatar_url, points, streak_days, age, school_id, major_id, education_level, semester_term")
+        .eq("id", profile.id)
+        .single();
+      if (!fresh) return;
+      const newPts = fresh.points ?? 0;
+      const prev   = prevPointsRef.current;
+      if (prev !== null && newPts > prev) {
+        setPointsDelta(newPts - prev);
+        setTimeout(() => setPointsDelta(null), 2500);
+      }
+      prevPointsRef.current = newPts;
+      setProfile((p) =>
+        p ? {
+          ...p,
+          points:          newPts,
+          full_name:       fresh.full_name       ?? p.full_name,
+          username:        fresh.username        ?? p.username,
+          streak_days:     fresh.streak_days     ?? p.streak_days,
+          age:             fresh.age             ?? null,
+          school_id:       fresh.school_id       ?? null,
+          major_id:        fresh.major_id        ?? null,
+          education_level: fresh.education_level ?? null,
+          semester_term:   fresh.semester_term   ?? null,
+        } : p
+      );
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [profile?.id, supabase]);
+
+  // ── Realtime: reflect point changes instantly ──
+  useEffect(() => {
+    if (!profile?.id) return;
+    const channel = supabase
+      .channel("profile-realtime")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${profile.id}` },
+        (payload) => {
+          const newPoints = (payload.new as { points: number }).points;
+          const prev = prevPointsRef.current;
+          if (prev !== null && newPoints > prev) {
+            setPointsDelta(newPoints - prev);
+            setTimeout(() => setPointsDelta(null), 2500);
+          }
+          prevPointsRef.current = newPoints;
+          setProfile((p) => (p ? { ...p, points: newPoints } : p));
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.id, supabase]);
+
   // ── Save profile edits ──
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -369,21 +433,38 @@ export default function ProfilePage() {
       return;
     }
 
-    // Reflect changes in the hero card immediately
-    setProfile((prev) =>
-      prev
-        ? {
-            ...prev,
-            full_name:       editForm.full_name.trim(),
-            username:        editForm.username.trim(),
-            age:             editForm.age ? Number(editForm.age) : null,
-            school_id:       editForm.school_id || null,
-            major_id:        editForm.major_id  || null,
-            education_level: editForm.education_level || null,
-            semester_term:   editForm.semester_term.trim() || null,
-          }
-        : prev
-    );
+    // Re-fetch from DB to ensure UI matches what was actually saved
+    const { data: refreshed } = await supabase
+      .from("profiles")
+      .select("id, full_name, username, avatar_url, points, streak_days, age, school_id, major_id, education_level, semester_term")
+      .eq("id", user.id)
+      .single();
+
+    if (refreshed) {
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              full_name:       refreshed.full_name       ?? prev.full_name,
+              username:        refreshed.username        ?? prev.username,
+              age:             refreshed.age             ?? null,
+              school_id:       refreshed.school_id       ?? null,
+              major_id:        refreshed.major_id        ?? null,
+              education_level: refreshed.education_level ?? null,
+              semester_term:   refreshed.semester_term   ?? null,
+            }
+          : prev
+      );
+      setEditForm({
+        full_name:       refreshed.full_name       ?? "",
+        username:        refreshed.username        ?? "",
+        age:             refreshed.age != null ? String(refreshed.age) : "",
+        school_id:       refreshed.school_id       ?? 0,
+        major_id:        refreshed.major_id        ?? 0,
+        education_level: refreshed.education_level ?? "",
+        semester_term:   refreshed.semester_term   ?? "",
+      });
+    }
 
     setSaveState("saved");
     setTimeout(() => setSaveState("idle"), 2500);
@@ -414,6 +495,21 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
+      {/* Floating points earned animation */}
+      <AnimatePresence>
+        {pointsDelta !== null && (
+          <motion.div
+            key="pts-delta"
+            initial={{ opacity: 1, y: 0, scale: 0.9 }}
+            animate={{ opacity: 0, y: -60, scale: 1.15 }}
+            transition={{ duration: 2.2, ease: "easeOut" }}
+            className="fixed top-24 right-4 z-50 flex items-center gap-1.5 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
+          >
+            <Coins size={16} />
+            +{pointsDelta} pts
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="max-w-2xl mx-auto space-y-6">
 
         {/* ── Hero card ── */}

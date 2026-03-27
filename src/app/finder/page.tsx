@@ -8,7 +8,7 @@ import { createClient } from "@/utils/supabase/client";
 import { joinStudyGroup, leaveStudyGroup, createStudyGroup } from "@/lib/db/study-groups";
 import { awardPoints, POINT_ACTIONS } from "@/lib/db/points";
 import QRScannerModal from "@/components/features/QRScannerModal";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   MapPin,
@@ -24,6 +24,7 @@ import {
   UserCircle,
   SlidersHorizontal,
   LogOut,
+  QrCode,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -421,23 +422,31 @@ function CreateGroupDialog({
   onSubmit,
   locationsList,
   subjects,
+  defaultLocationId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (form: CreateForm) => Promise<void>;
   locationsList: { id: number; name: string }[];
   subjects: Subject[];
+  defaultLocationId?: number;
 }) {
-  const EMPTY_FORM: CreateForm = { subject: "", description: "", location_id: 0, max_members: 4 };
-  const [form,        setForm]        = useState<CreateForm>(EMPTY_FORM);
+  const [form,        setForm]        = useState<CreateForm>({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
   const [submitting,  setSubmitting]  = useState(false);
   const [success,     setSuccess]     = useState(false);
+
+  // When dialog reopens (new QR scan may have changed defaultLocationId), reset form location
+  useEffect(() => {
+    if (open) {
+      setForm((f) => ({ ...f, location_id: defaultLocationId ?? f.location_id }));
+    }
+  }, [open, defaultLocationId]);
 
   const isValid = form.subject.trim().length > 0 && form.location_id > 0;
 
   const handleOpenChange = (next: boolean) => {
     if (!next && !submitting) {
-      setForm(EMPTY_FORM);
+      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
       setSuccess(false);
     }
     onOpenChange(next);
@@ -450,7 +459,7 @@ function CreateGroupDialog({
     setSuccess(true);
     setSubmitting(false);
     setTimeout(() => {
-      setForm(EMPTY_FORM);
+      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
       setSuccess(false);
       onOpenChange(false);
     }, 1400);
@@ -560,24 +569,35 @@ function CreateGroupDialog({
                     <label className={FORM_LABEL}>
                       Location <span className="text-alert">*</span>
                     </label>
-                    <div className="relative">
-                      <select
-                        value={form.location_id}
-                        onChange={(e) => set("location_id", Number(e.target.value))}
-                        className={`${FORM_INPUT} appearance-none pr-8 cursor-pointer`}
-                      >
-                        <option value={0} disabled>Choose…</option>
-                        {locationsList.map((loc) => (
-                          <option key={loc.id} value={loc.id}>
-                            {loc.name}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown
-                        size={13}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none"
-                      />
-                    </div>
+                    {defaultLocationId ? (
+                      /* Location locked to QR-scanned spot */
+                      <div className="flex items-center gap-2 px-3 py-2.5 bg-success-light border border-success/30 rounded-xl text-sm text-ink">
+                        <QrCode size={13} className="text-success shrink-0" />
+                        <span className="flex-1 font-medium truncate">
+                          {locationsList.find((l) => l.id === defaultLocationId)?.name ?? "Scanned location"}
+                        </span>
+                        <span className="shrink-0 text-[10px] font-semibold text-success">QR Verified ✓</span>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <select
+                          value={form.location_id}
+                          onChange={(e) => set("location_id", Number(e.target.value))}
+                          className={`${FORM_INPUT} appearance-none pr-8 cursor-pointer`}
+                        >
+                          <option value={0} disabled>Choose…</option>
+                          {locationsList.map((loc) => (
+                            <option key={loc.id} value={loc.id}>
+                              {loc.name}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown
+                          size={13}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -665,7 +685,7 @@ function FilterSelect({
 
 function FinderPageContent() {
   const searchParams = useSearchParams();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [currentUser,     setCurrentUser]     = useState<UserProfile | null>(null);
   const [groups,          setGroups]          = useState<StudyGroup[]>([]);
@@ -729,7 +749,7 @@ function FinderPageContent() {
     });
   }, []);
 
-  // Initial data load: groups + locations list
+  // Initial data load: groups + locations list + point rules
   useEffect(() => {
     fetchGroups();
     supabase
@@ -737,6 +757,17 @@ function FinderPageContent() {
       .select("id, name")
       .order("name")
       .then(({ data }) => { if (data) setLocationsList(data); });
+    supabase
+      .from("point_rules")
+      .select("action_name, points_awarded")
+      .eq("is_active", true)
+      .then(({ data }) => {
+        if (data) {
+          const map: Record<string, number> = {};
+          for (const r of data) map[r.action_name] = r.points_awarded ?? 0;
+          setPointRules(map);
+        }
+      });
   }, []);
 
   // Realtime: re-fetch groups whenever study_groups or study_group_members change
@@ -754,11 +785,14 @@ function FinderPageContent() {
     const locId = searchParams.get("locationId");
     if (locId) setLocationFilter(locId);
   }, [searchParams]);
-  const [slotsFilter,     setSlotsFilter]     = useState("all");
-  const [activeGroupId,   setActiveGroupId]   = useState<number | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
-  const [qrScanOpen,      setQrScanOpen]      = useState(false);
-  const [createOpen,      setCreateOpen]      = useState(false);
+  const [slotsFilter,      setSlotsFilter]      = useState("all");
+  const [activeGroupId,    setActiveGroupId]    = useState<number | null>(null);
+  const [selectedGroupId,  setSelectedGroupId]  = useState<number | null>(null);
+  const [qrScanOpen,       setQrScanOpen]       = useState(false);
+  const [createOpen,       setCreateOpen]       = useState(false);
+  const [scannedLocationId, setScannedLocationId] = useState<number | undefined>(undefined);
+  const [pointsDelta,      setPointsDelta]      = useState<number | null>(null);
+  const [pointRules,       setPointRules]       = useState<Record<string, number>>({});
 
   // Always derive live group data from current state so dialog re-renders on join/leave
   const selectedGroup = selectedGroupId !== null
@@ -768,16 +802,18 @@ function FinderPageContent() {
   // ── Derived filtered list ──────────────────
   const filteredGroups = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return groups.filter((g) => {
-      if (!g.is_active) return false;
-      const matchesSearch   = q === "" || g.subject.toLowerCase().includes(q);
-      const matchesLocation = locationFilter === "all" || g.location_id === Number(locationFilter);
-      const matchesSlots    =
-        slotsFilter === "all"       ? true :
-        slotsFilter === "available" ? g.current_members < g.max_members :
-                                      g.current_members >= g.max_members;
-      return matchesSearch && matchesLocation && matchesSlots;
-    });
+    return groups
+      .filter((g) => {
+        if (!g.is_active) return false;
+        const matchesSearch   = q === "" || g.subject.toLowerCase().includes(q);
+        const matchesLocation = locationFilter === "all" || g.location_id === Number(locationFilter);
+        const matchesSlots    =
+          slotsFilter === "all"       ? true :
+          slotsFilter === "available" ? g.current_members < g.max_members :
+                                        g.current_members >= g.max_members;
+        return matchesSearch && matchesLocation && matchesSlots;
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [groups, searchQuery, locationFilter, slotsFilter]);
 
   const activeFilterCount = [
@@ -794,6 +830,14 @@ function FinderPageContent() {
 
   // ── Handlers ──────────────────────────────
 
+  const showPointsAnim = (action: string) => {
+    const pts = pointRules[action] ?? 0;
+    if (pts > 0) {
+      setPointsDelta(pts);
+      setTimeout(() => setPointsDelta(null), 2500);
+    }
+  };
+
   const handleJoinGroup = async (id: number) => {
     if (!currentUser || activeGroupId !== null) return;
     const group = groups.find((g) => g.id === id);
@@ -801,6 +845,7 @@ function FinderPageContent() {
     const { error } = await joinStudyGroup(supabase, id, currentUser.id);
     if (error) { console.error("[handleJoinGroup]", error); return; }
     await awardPoints(supabase, currentUser.id, POINT_ACTIONS.JOIN_STUDY_GROUP);
+    showPointsAnim(POINT_ACTIONS.JOIN_STUDY_GROUP);
     setActiveGroupId(id);
     await fetchGroups();
   };
@@ -824,6 +869,7 @@ function FinderPageContent() {
     });
     if (error || !data) { console.error("[handleCreate]", error); return; }
     await awardPoints(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);
+    showPointsAnim(POINT_ACTIONS.CREATE_STUDY_GROUP);
     setActiveGroupId(data.id);
     await fetchGroups();
   };
@@ -841,19 +887,42 @@ function FinderPageContent() {
         />
       )}
 
-      {/* QR scanner — gates the create flow */}
+      {/* Floating points animation */}
+      <AnimatePresence>
+        {pointsDelta !== null && (
+          <motion.div
+            key="pts-delta"
+            initial={{ opacity: 1, y: 0, scale: 0.9 }}
+            animate={{ opacity: 0, y: -60, scale: 1.15 }}
+            transition={{ duration: 2.2, ease: "easeOut" }}
+            className="fixed top-24 right-4 z-50 flex items-center gap-1.5 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
+          >
+            <Coins size={16} />
+            +{pointsDelta} pts
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* QR scanner — scans location QR, auto-detects location for the create form */}
       <QRScannerModal
         open={qrScanOpen}
         onOpenChange={(open) => { if (!open) setQrScanOpen(false); }}
-        onSuccess={() => setCreateOpen(true)}
+        onSuccess={(locationId) => {
+          setScannedLocationId(locationId);
+          setCreateOpen(true);
+        }}
       />
 
       <CreateGroupDialog
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) setScannedLocationId(undefined);
+        }}
         onSubmit={handleCreate}
         locationsList={locationsList}
         subjects={subjects}
+        defaultLocationId={scannedLocationId}
       />
 
       <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
