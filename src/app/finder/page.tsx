@@ -937,10 +937,15 @@ function FinderPageContent() {
       showBlockToast("You have an active solo check-in. End it on the location page before joining a group.");
       return;
     }
-    const group = groups.find((g) => g.id === id);
-    if (!group || group.current_members >= group.max_members) return;
     const { error } = await joinStudyGroup(supabase, id, currentUser.id);
-    if (error) { console.error("[handleJoinGroup]", error); return; }
+    if (error) {
+      showBlockToast(error === "This study group is full." ? "This session is already full." : error);
+      return;
+    }
+    // Optimistic update: bump the card count immediately
+    setGroups((prev) =>
+      prev.map((g) => g.id === id ? { ...g, current_members: g.current_members + 1 } : g)
+    );
     // Daily cooldown: only award points once per day
     if (!alreadyEarnedToday) {
       await awardPoints(supabase, currentUser.id, POINT_ACTIONS.JOIN_STUDY_GROUP);
@@ -956,6 +961,12 @@ function FinderPageContent() {
     if (!currentUser || activeGroupId !== id) return;
     const { error } = await leaveStudyGroup(supabase, id, currentUser.id);
     if (error) { console.error("[handleLeaveGroup]", error); return; }
+    // Optimistic update: drop the card count immediately
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.id === id ? { ...g, current_members: Math.max(0, g.current_members - 1) } : g
+      )
+    );
     setActiveGroupId(null);
     await fetchGroups();
   };

@@ -139,7 +139,7 @@ export async function joinStudyGroup(
 ): Promise<DbResult<StudyGroupMember>> {
   const { data: group, error: fetchError } = await supabase
     .from('study_groups')
-    .select('current_members, max_members, is_active')
+    .select('max_members, is_active')
     .eq('id', groupId)
     .single()
 
@@ -149,7 +149,14 @@ export async function joinStudyGroup(
   if (!group.is_active) {
     return { data: null, error: 'This study group is no longer active.' }
   }
-  if (group.current_members >= group.max_members) {
+
+  // Count actual members to avoid race-condition over-fills
+  const { count: actualCount } = await supabase
+    .from('study_group_members')
+    .select('*', { count: 'exact', head: true })
+    .eq('group_id', groupId)
+
+  if ((actualCount ?? 0) >= group.max_members) {
     return { data: null, error: 'This study group is full.' }
   }
 
@@ -160,14 +167,14 @@ export async function joinStudyGroup(
     .single()
 
   if (joinError) {
-    // Unique constraint fires when the user is already a member
     console.error(`[joinStudyGroup] groupId=${groupId} userId=${userId}`, joinError.message)
     return { data: null, error: 'You are already in this group.' }
   }
 
+  // Sync counter to actual count (self-healing for any prior drift)
   await supabase
     .from('study_groups')
-    .update({ current_members: group.current_members + 1 })
+    .update({ current_members: (actualCount ?? 0) + 1 })
     .eq('id', groupId)
 
   return { data: member as StudyGroupMember, error: null }
@@ -206,12 +213,18 @@ export async function leaveStudyGroup(
     return { data: null, error: removeError.message }
   }
 
+  // Count remaining members to keep the counter accurate
+  const { count: remaining } = await supabase
+    .from('study_group_members')
+    .select('*', { count: 'exact', head: true })
+    .eq('group_id', groupId)
+
   if (group.host_id === userId) {
-    await supabase.from('study_groups').update({ is_active: false }).eq('id', groupId)
+    await supabase.from('study_groups').update({ is_active: false, current_members: 0 }).eq('id', groupId)
   } else {
     await supabase
       .from('study_groups')
-      .update({ current_members: Math.max(0, group.current_members - 1) })
+      .update({ current_members: remaining ?? 0 })
       .eq('id', groupId)
   }
 
