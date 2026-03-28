@@ -10,6 +10,7 @@ import {
   adminSaveReward, adminDeleteReward, adminToggleReward, adminAdjustStock,
   adminToggleAdmin, adminUpdatePoints,
   adminSaveLocation, adminDeleteLocation, adminUpdateLocationStatus,
+  adminUploadLocationImage,
   adminDeleteReview,
   adminUpdateRule, adminToggleRule,
   adminSaveSchool, adminDeleteSchool,
@@ -879,6 +880,96 @@ function UsersTab() {
   );
 }
 
+// ── Image Upload component ───────────────────────────────────────────────────
+
+function ImageUpload({
+  url,
+  onChange,
+  label,
+  hint,
+}: {
+  url: string;
+  onChange: (url: string) => void;
+  label: string;
+  hint?: string;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadErr(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await adminUploadLocationImage(fd);
+    setUploading(false);
+    if (res.error) { setUploadErr(res.error); return; }
+    if (res.url) onChange(res.url);
+    // Reset input so the same file can be re-selected if needed
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  return (
+    <div>
+      <label className={LABEL}>{label}</label>
+      {url ? (
+        <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt={label}
+            className="w-full h-36 object-cover rounded-xl border border-border"
+          />
+          <div className="absolute top-2 right-2 flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-surface/90 border border-border text-ink-muted hover:text-ink backdrop-blur-sm transition-colors"
+            >
+              <Pencil size={11} /> Replace
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="p-1.5 rounded-lg bg-surface/90 border border-border text-ink-faint hover:text-alert backdrop-blur-sm transition-colors"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="w-full h-24 rounded-xl border-2 border-dashed border-border hover:border-brand/60 hover:bg-brand-faint/10 flex flex-col items-center justify-center gap-1.5 text-ink-muted hover:text-ink transition-colors disabled:opacity-50"
+        >
+          {uploading ? (
+            <span className="inline-block w-5 h-5 border-2 border-ink/20 border-t-ink rounded-full animate-spin" />
+          ) : (
+            <>
+              <Plus size={18} />
+              <span className="text-xs font-medium">Upload image</span>
+            </>
+          )}
+        </button>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={handleFile}
+      />
+      {uploadErr && <p className="text-xs text-alert mt-1.5">{uploadErr}</p>}
+      {hint && <p className="text-[10px] text-ink-faint mt-1">{hint}</p>}
+    </div>
+  );
+}
+
 // ── Locations Tab ────────────────────────────────────────────────────────────
 
 const LOC_CATEGORIES = ["IT Lab", "Library", "Cafeteria", "Study Room", "Lecture Hall", "Outdoor", "Other"];
@@ -1142,65 +1233,44 @@ function LocationsTab() {
             </div>
           )}
           {/* Hero image */}
-          <div>
-            <label className={LABEL}>Hero Image URL</label>
-            <input
-              type="url"
-              value={form.image_url}
-              onChange={(e) => set("image_url", e.target.value)}
-              className={INPUT}
-              placeholder="https://…"
-            />
-            {form.image_url.trim() && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={form.image_url.trim()}
-                alt="Hero preview"
-                className="mt-2 w-full h-32 object-cover rounded-xl border border-border"
-                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-              />
-            )}
-            <p className="text-[10px] text-ink-faint mt-1">Shown as the large header image on the location detail page.</p>
-          </div>
+          <ImageUpload
+            url={form.image_url}
+            onChange={(u) => set("image_url", u)}
+            label="Hero Image"
+            hint="Shown as the large header photo on the location detail page."
+          />
 
           {/* Gallery images */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className={LABEL + " mb-0"}>Gallery Images</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className={LABEL + " mb-0"}>Gallery Photos</label>
               <button type="button" onClick={addImage} className={BTN_GHOST + " py-1 px-2 text-[11px]"}>
-                <Plus size={11} /> Add
+                <Plus size={11} /> Add photo
               </button>
             </div>
-            {form.images.length === 0 && (
-              <p className="text-xs text-ink-faint py-2">No gallery images. Click Add to include photos shown in the carousel.</p>
-            )}
-            <div className="space-y-2">
-              {form.images.map((url, i) => (
-                <div key={i} className="space-y-1">
-                  <div className="flex gap-2 items-center">
-                    <input
-                      type="url"
-                      value={url}
-                      onChange={(e) => setImage(i, e.target.value)}
-                      className={INPUT}
-                      placeholder={`Image ${i + 1} URL — https://…`}
+            {form.images.length === 0 ? (
+              <p className="text-xs text-ink-faint py-1">No gallery photos yet. These appear in the carousel on the map page.</p>
+            ) : (
+              <div className="space-y-3">
+                {form.images.map((url, i) => (
+                  <div key={i} className="relative">
+                    <ImageUpload
+                      url={url}
+                      onChange={(u) => setImage(i, u)}
+                      label={`Photo ${i + 1}`}
                     />
-                    <button type="button" onClick={() => removeImage(i)} className="shrink-0 p-1.5 rounded-lg text-ink-faint hover:text-alert hover:bg-alert-light transition-colors">
-                      <X size={13} />
+                    {/* Remove slot entirely (not just clear URL) */}
+                    <button
+                      type="button"
+                      onClick={() => removeImage(i)}
+                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-alert text-surface flex items-center justify-center shadow-sm hover:bg-alert/80 transition-colors z-10"
+                    >
+                      <X size={10} />
                     </button>
                   </div>
-                  {url.trim() && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={url.trim()}
-                      alt={`Gallery ${i + 1} preview`}
-                      className="w-full h-24 object-cover rounded-xl border border-border"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>

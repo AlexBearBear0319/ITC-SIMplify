@@ -22,6 +22,60 @@ async function requireAdmin(): Promise<string | null> {
 
 type R = { error: string | null };
 
+// ── Storage ───────────────────────────────────────────────────────────────────
+
+const BUCKET = "location-images";
+
+export async function adminUploadLocationImage(
+  formData: FormData,
+): Promise<{ url: string | null; error: string | null }> {
+  const authErr = await requireAdmin();
+  if (authErr) return { url: null, error: authErr };
+
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return { url: null, error: "No file provided" };
+
+  const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  if (!allowed.includes(file.type)) return { url: null, error: "Only JPG, PNG, WEBP or GIF allowed" };
+  if (file.size > 5 * 1024 * 1024) return { url: null, error: "File must be under 5 MB" };
+
+  try {
+    const db = createAdminClient();
+
+    // Create bucket if it doesn't exist yet
+    const { data: buckets } = await db.storage.listBuckets();
+    if (!buckets?.find((b) => b.name === BUCKET)) {
+      await db.storage.createBucket(BUCKET, { public: true });
+    }
+
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+    const bytes = await file.arrayBuffer();
+    const { error } = await db.storage
+      .from(BUCKET)
+      .upload(path, bytes, { contentType: file.type, upsert: false });
+
+    if (error) return { url: null, error: error.message };
+
+    const { data: { publicUrl } } = db.storage.from(BUCKET).getPublicUrl(path);
+    return { url: publicUrl, error: null };
+  } catch (e) {
+    return { url: null, error: e instanceof Error ? e.message : "Upload failed" };
+  }
+}
+
+export async function adminDeleteLocationImage(path: string): Promise<{ error: string | null }> {
+  const authErr = await requireAdmin();
+  if (authErr) return { error: authErr };
+  try {
+    const { error } = await createAdminClient().storage.from(BUCKET).remove([path]);
+    return { error: error?.message ?? null };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Delete failed" };
+  }
+}
+
 // ── Events ────────────────────────────────────────────────────────────────────
 
 export async function adminSaveEvent(
