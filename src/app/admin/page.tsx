@@ -26,6 +26,7 @@ import {
   Activity, MapPin, Users, Lightbulb, CalendarDays, Gift, Star,
   Plus, Pencil, Trash2, X, Coins, Shield, BarChart2, MessageSquare,
   Minus, AlertTriangle, ChevronRight, GraduationCap, BookOpen,
+  Upload, ImageIcon, Copy, CheckCircle2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -882,90 +883,199 @@ function UsersTab() {
 
 // ── Image Upload component ───────────────────────────────────────────────────
 
+const IMG_MAX_MB    = 5;
+const IMG_MAX_BYTES = IMG_MAX_MB * 1024 * 1024;
+const IMG_TYPES     = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+const IMG_ACCEPT    = IMG_TYPES.join(",");
+const IMG_LABELS    = "JPG · PNG · WEBP · GIF";
+
+function clientValidate(file: File): string | null {
+  if (!(IMG_TYPES as readonly string[]).includes(file.type))
+    return `"${file.name}" is a ${file.type || "unknown"} file. Only ${IMG_LABELS} are supported.`;
+  if (file.size > IMG_MAX_BYTES)
+    return `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — maximum allowed size is ${IMG_MAX_MB} MB.`;
+  return null;
+}
+
 function ImageUpload({
   url,
   onChange,
   label,
   hint,
+  recommendedSize,
 }: {
   url: string;
   onChange: (url: string) => void;
   label: string;
   hint?: string;
+  recommendedSize?: string;
 }) {
-  const [uploading, setUploading] = useState(false);
-  const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [uploading, setUploading]   = useState(false);
+  const [fileName,  setFileName]    = useState<string | null>(null);
+  const [uploadErr, setUploadErr]   = useState<string | null>(null);
+  const [dragOver,  setDragOver]    = useState(false);
+  const [copied,    setCopied]      = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const doUpload = async (file: File) => {
+    const clientErr = clientValidate(file);
+    if (clientErr) { setUploadErr(clientErr); return; }
+
     setUploading(true);
     setUploadErr(null);
+    setFileName(file.name);
+
     const fd = new FormData();
     fd.append("file", file);
     const res = await adminUploadLocationImage(fd);
+
     setUploading(false);
-    if (res.error) { setUploadErr(res.error); return; }
-    if (res.url) onChange(res.url);
-    // Reset input so the same file can be re-selected if needed
+    setFileName(null);
     if (inputRef.current) inputRef.current.value = "";
+
+    if (res.error) { setUploadErr(res.error); return; }
+    if (res.url)   onChange(res.url);
   };
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) doUpload(f);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) doUpload(f);
+  };
+
+  const copyError = () => {
+    if (!uploadErr) return;
+    navigator.clipboard.writeText(`[Image Upload Error — ${label}]\n${uploadErr}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const openPicker = () => { setUploadErr(null); inputRef.current?.click(); };
+
   return (
-    <div>
+    <div className="space-y-2">
       <label className={LABEL}>{label}</label>
+
+      {/* ── Has image: preview with hover overlay ── */}
       {url ? (
-        <div className="relative">
+        <div className="group relative rounded-xl overflow-hidden border border-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={url}
-            alt={label}
-            className="w-full h-36 object-cover rounded-xl border border-border"
-          />
-          <div className="absolute top-2 right-2 flex gap-1.5">
+          <img src={url} alt={label} className="w-full h-36 object-cover" />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200" />
+          <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             <button
               type="button"
-              onClick={() => inputRef.current?.click()}
-              className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-surface/90 border border-border text-ink-muted hover:text-ink backdrop-blur-sm transition-colors"
+              onClick={openPicker}
+              className="flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-white/95 text-ink hover:bg-white shadow-sm transition-colors"
             >
-              <Pencil size={11} /> Replace
+              <Upload size={11} /> Replace
             </button>
             <button
               type="button"
-              onClick={() => onChange("")}
-              className="p-1.5 rounded-lg bg-surface/90 border border-border text-ink-faint hover:text-alert backdrop-blur-sm transition-colors"
+              onClick={() => { onChange(""); setUploadErr(null); }}
+              className="p-1.5 rounded-lg bg-white/95 text-alert hover:bg-white shadow-sm transition-colors"
+              title="Remove image"
             >
-              <X size={12} />
+              <Trash2 size={12} />
+            </button>
+          </div>
+          {uploading && (
+            <div className="absolute inset-0 bg-canvas/80 flex flex-col items-center justify-center gap-2">
+              <span className="w-6 h-6 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
+              <p className="text-xs text-ink-muted">Uploading {fileName}…</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ── No image: drop zone ── */
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={openPicker}
+          onKeyDown={(e) => e.key === "Enter" && openPicker()}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          className={[
+            "w-full rounded-xl border-2 border-dashed transition-all duration-150 cursor-pointer select-none",
+            "flex flex-col items-center justify-center gap-3 py-7 px-4 text-center",
+            uploading
+              ? "border-brand/40 bg-brand-faint/10 cursor-wait pointer-events-none"
+              : dragOver
+                ? "border-brand bg-brand-faint/20 scale-[1.01]"
+                : "border-border hover:border-brand/60 hover:bg-brand-faint/10",
+          ].join(" ")}
+        >
+          {uploading ? (
+            <>
+              <span className="w-7 h-7 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
+              <div>
+                <p className="text-sm font-medium text-ink">Uploading…</p>
+                <p className="text-xs text-ink-muted mt-0.5 max-w-[180px] truncate">{fileName}</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-11 h-11 rounded-xl bg-brand-faint/30 flex items-center justify-center">
+                {dragOver ? <ImageIcon size={22} className="text-brand-dark" /> : <Upload size={20} className="text-ink-muted" />}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-ink">
+                  {dragOver ? "Drop to upload" : "Click or drag & drop"}
+                </p>
+                <p className="text-xs text-ink-faint mt-1">{IMG_LABELS}</p>
+                <p className="text-xs text-ink-faint">Max {IMG_MAX_MB} MB per image</p>
+                {recommendedSize && (
+                  <p className="text-[11px] font-semibold text-brand-dark mt-1.5">
+                    Recommended: {recommendedSize}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <input ref={inputRef} type="file" accept={IMG_ACCEPT} className="hidden" onChange={handleChange} />
+
+      {/* ── Error panel ── */}
+      {uploadErr && (
+        <div className="rounded-xl border border-alert/30 bg-alert-light overflow-hidden">
+          <div className="flex items-start gap-2.5 px-3.5 py-3">
+            <AlertTriangle size={14} className="shrink-0 text-alert mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-alert">Upload failed</p>
+              <p className="text-xs text-alert/80 mt-0.5 leading-relaxed">{uploadErr}</p>
+              <p className="text-[10px] text-ink-faint mt-2 leading-relaxed">
+                If this keeps happening, copy the error below and send it to the IT team.
+              </p>
+            </div>
+            <button onClick={() => setUploadErr(null)} className="shrink-0 text-alert/40 hover:text-alert transition-colors mt-0.5">
+              <X size={13} />
+            </button>
+          </div>
+          <div className="border-t border-alert/20 px-3.5 py-2 flex items-center justify-between bg-alert/5">
+            <p className="text-[10px] font-mono text-alert/60 truncate max-w-[70%]">{uploadErr}</p>
+            <button
+              onClick={copyError}
+              className="flex items-center gap-1 text-[10px] font-semibold text-alert/70 hover:text-alert transition-colors shrink-0"
+            >
+              {copied ? <><CheckCircle2 size={11} /> Copied</> : <><Copy size={11} /> Copy error</>}
             </button>
           </div>
         </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          className="w-full h-24 rounded-xl border-2 border-dashed border-border hover:border-brand/60 hover:bg-brand-faint/10 flex flex-col items-center justify-center gap-1.5 text-ink-muted hover:text-ink transition-colors disabled:opacity-50"
-        >
-          {uploading ? (
-            <span className="inline-block w-5 h-5 border-2 border-ink/20 border-t-ink rounded-full animate-spin" />
-          ) : (
-            <>
-              <Plus size={18} />
-              <span className="text-xs font-medium">Upload image</span>
-            </>
-          )}
-        </button>
       )}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
-        className="hidden"
-        onChange={handleFile}
-      />
-      {uploadErr && <p className="text-xs text-alert mt-1.5">{uploadErr}</p>}
-      {hint && <p className="text-[10px] text-ink-faint mt-1">{hint}</p>}
+
+      {/* ── Contextual hint (only when no error) ── */}
+      {hint && !uploadErr && (
+        <p className="text-[10px] text-ink-faint leading-relaxed">{hint}</p>
+      )}
     </div>
   );
 }
@@ -1237,7 +1347,8 @@ function LocationsTab() {
             url={form.image_url}
             onChange={(u) => set("image_url", u)}
             label="Hero Image"
-            hint="Shown as the large header photo on the location detail page."
+            recommendedSize="1280 × 720 px (16:9)"
+            hint="Displayed as the large banner photo at the top of the location detail page."
           />
 
           {/* Gallery images */}
@@ -1257,7 +1368,8 @@ function LocationsTab() {
                     <ImageUpload
                       url={url}
                       onChange={(u) => setImage(i, u)}
-                      label={`Photo ${i + 1}`}
+                      label={`Gallery Photo ${i + 1}`}
+                      recommendedSize="800 × 600 px (4:3)"
                     />
                     {/* Remove slot entirely (not just clear URL) */}
                     <button
