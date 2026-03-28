@@ -1,6 +1,44 @@
 "use client";
 
-import { useEffect } from "react";
+import {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+/*
+  Theme mode = user's preference
+  - auto  -> follow Singapore time rule
+  - light -> force light mode
+  - dark  -> force dark mode
+*/
+type ThemeMode = "auto" | "light" | "dark";
+
+/*
+  Resolved theme = final theme applied to the page right now
+*/
+type ResolvedTheme = "light" | "dark";
+
+type ThemeContextValue = {
+  mode: ThemeMode;
+  resolvedTheme: ResolvedTheme;
+  setMode: (mode: ThemeMode) => void;
+  toggleLightDark: () => void;
+};
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+export function useThemeMode() {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) {
+    throw new Error("useThemeMode must be used inside ThemeProvider");
+  }
+  return ctx;
+}
 
 /**
  * Returns the current hour (0-23) in Singapore Time (SGT / Asia/Singapore).
@@ -17,14 +55,27 @@ function getSGTHour(): number {
   return parseInt(hourStr, 10) % 24;
 }
 
-/**
- * Dark mode: 7 PM – 5:59 AM SGT  (hour >= 19 || hour < 6)
- * Light mode: 6 AM – 6:59 PM SGT (hour >= 6  && hour < 19)
- */
-function applyTheme() {
+/*
+  Convert mode to final theme:
+  - dark/light: direct override
+  - auto: SG rule (dark from 7pm to 5:59am)
+*/
+
+
+function resolveTheme(mode: ThemeMode): ResolvedTheme {
+  if (mode === "dark") return "dark";
+  if (mode === "light") return "light";
+
   const hour = getSGTHour();
-  const isDark = hour >= 19 || hour < 6;
-  document.documentElement.classList.toggle("dark", isDark);
+  return hour >= 19 || hour < 6 ? "dark" : "light";
+}
+
+/*
+  Actually apply theme by toggling "dark" class on <html>.
+  Your CSS tokens in globals.css already react to this class.
+*/
+function applyResolvedTheme(theme: ResolvedTheme) {
+  document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
 export default function ThemeProvider({
@@ -32,14 +83,67 @@ export default function ThemeProvider({
 }: {
   children: React.ReactNode;
 }) {
-  useEffect(() => {
-    // Apply immediately on mount
-    applyTheme();
+// User's selected mode (auto/light/dark)
+  const [mode, setModeState] = useState<ThemeMode>("auto");
 
-    // Re-check every minute so a student studying at 7 PM sees the switch live
-    const interval = setInterval(applyTheme, 60_000);
-    return () => clearInterval(interval);
+  // Current active theme after resolving mode (light/dark)
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
+
+  // Exposed setter for manual mode selection.
+  const setMode = useCallback((nextMode: ThemeMode) => {
+    setModeState(nextMode);
   }, []);
 
-  return <>{children}</>;
+  /*
+    Keep interval id in ref so we can start/stop timer cleanly.
+    Timer is needed only in auto mode.
+  */
+  const intervalRef = useRef<number | null>(null);
+
+  /*
+    Recompute final theme and apply to HTML.
+    We call this on initial load, mode changes, and every minute in auto mode.
+  */
+  const recomputeAndApply = useCallback((currentMode: ThemeMode) => {
+    const resolved = resolveTheme(currentMode);
+    setResolvedTheme(resolved);
+    applyResolvedTheme(resolved);
+  }, []);
+
+  /*
+    Stop timer if it is running.
+    Important to avoid duplicate intervals / memory leaks.
+  */
+  const clearAutoInterval = useCallback(() => {
+    if (intervalRef.current !== null) {
+      window.clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+ // Re-apply whenever mode changes
+  useEffect(() => {
+    clearAutoInterval();
+    recomputeAndApply(mode);
+
+    // Only auto mode needs time-based recheck
+    if (mode === "auto") {
+      intervalRef.current = window.setInterval(() => {
+        recomputeAndApply("auto");
+      }, 60_000);
+    }
+
+    return clearAutoInterval;
+  }, [mode, recomputeAndApply, clearAutoInterval]);
+
+  const toggleLightDark = useCallback(() => {
+    setMode(resolveTheme(mode) === "dark" ? "light" : "dark");
+  }, [mode, setMode]);
+
+  const value = useMemo(
+    () => ({ mode, resolvedTheme, setMode, toggleLightDark }),
+    [mode, resolvedTheme, setMode, toggleLightDark]
+  );
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
