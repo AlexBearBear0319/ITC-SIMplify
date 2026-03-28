@@ -7,8 +7,10 @@ import InteractiveMap from "@/components/features/InteractiveMap";
 import CheckInModal, { type CheckInData } from "@/components/features/CheckInModal";
 import FeedbackModal, { type FeedbackData } from "@/components/features/FeedbackModal";
 import QRScannerModal from "@/components/features/QRScannerModal";
+import ActionChoiceModal from "@/components/features/ActionChoiceModal";
+import StudyBuddyModal, { type StudyBuddyData } from "@/components/features/StudyBuddyModal";
 import { createClient } from "@/utils/supabase/client";
-import { leaveStudyGroup } from "@/lib/db/study-groups";
+import { getLevelNumber } from "@/lib/levels";
 import {
   MapPin,
   Flame,
@@ -25,7 +27,7 @@ import {
   Clock,
   Users,
   Zap,
-  Pencil,
+  AlertCircle,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -185,14 +187,6 @@ function getInitials(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-function getLevelNumber(pts: number): number {
-  if (pts >= 5000) return 5;
-  if (pts >= 3000) return 4;
-  if (pts >= 1500) return 3;
-  if (pts >= 500)  return 2;
-  return 1;
-}
-
 // ─────────────────────────────────────────────
 // LocationDrawer — Google Maps-style bottom sheet
 // ─────────────────────────────────────────────
@@ -346,11 +340,11 @@ function LocationDrawer({
           )}
 
           {/* ── Action buttons ── */}
-          <div className="px-5 mt-4 flex gap-2">
+          <div className="px-5 mt-4">
             {isMyActiveLocation ? (
               <button
                 onClick={onLeaveSpot}
-                className="flex-1 flex items-center justify-center gap-2 py-3 bg-alert-light hover:bg-alert/20 text-alert border border-alert/40 font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-alert-light hover:bg-alert/20 text-alert border border-alert/40 font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
               >
                 <LogOut size={15} />
                 Leave Spot
@@ -358,19 +352,12 @@ function LocationDrawer({
             ) : (
               <button
                 onClick={onCheckIn}
-                className="flex-1 flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
               >
                 <LogIn size={15} />
-                Check In · +10 pts
+                Scan QR to Enter
               </button>
             )}
-            <Link
-              href={`/finder?locationId=${location.id}`}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-canvas border border-border text-ink-muted hover:text-ink hover:border-brand hover:bg-brand-faint font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
-            >
-              <Users size={15} />
-              Study Buddy
-            </Link>
           </div>
 
           {/* ── Reviews ── */}
@@ -417,22 +404,30 @@ export default function DashboardPage() {
   const [qrScanOpen, setQrScanOpen]           = useState(false);
   const [checkInOpen, setCheckInOpen]         = useState(false);
   const [feedbackOpen, setFeedbackOpen]       = useState(false);
-  const [editSessionOpen, setEditSessionOpen] = useState(false);
 
-  // ── User profile data (fetched from 'profiles' table) ──────────────────────
-  // Replaces the hardcoded "Alex", "5-day streak", "1,240 pts", "Level 4"
   const [userId,  setUserId]  = useState<string | null>(null);
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
 
-  // ── DB session ID — needed to call checkOut() when user leaves a spot ───────
-  // This is the `id` column from the `active_sessions` table row
+  // `id` from active_sessions — held so we can mark the row inactive on check-out
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
 
-  // ── User's rank on the leaderboard (calculated from point totals) ────────────
+  // Post-QR-scan action choice
+  const [actionChoiceOpen, setActionChoiceOpen] = useState(false);
+  const [studyBuddyOpen,   setStudyBuddyOpen]   = useState(false);
+
+  // Floating +pts animation
+  const [pointsDelta, setPointsDelta] = useState<number | null>(null);
+
+  // Error toast for optimistic rollbacks
+  const [errorToast, setErrorToast] = useState<string | null>(null);
+  const showErrorToast = (msg: string) => {
+    setErrorToast(msg);
+    setTimeout(() => setErrorToast(null), 4000);
+  };
+
   const [userRank, setUserRank] = useState<number | null>(null);
 
-  // ── Busiest location (powers the Peak Hour Alert banner) ────────────────────
-  // Computed by summing seats_taken across all active_sessions, grouped by location
+  // Computed from active_sessions seat tallies — drives the Peak Hour Alert banner
   const [busiestLocation, setBusiestLocation] = useState<{ name: string; seats: number } | null>(null);
 
   // Locations
@@ -450,23 +445,18 @@ export default function DashboardPage() {
   // Reviews for selected location
   const [reviews, setReviews] = useState<Review[]>([]);
 
-  // ── Set time-based greeting (Good Morning / Afternoon / Evening) ─────────────
   useEffect(() => { setGreeting(getGreeting()); }, []);
 
-  // ── Fetch the logged-in user's profile ──────────────────────────────────────
-  // Runs once on mount. Gets auth user → fetches matching row in 'profiles' table.
-  // Also restores any active session the user had before a page refresh.
+  // Fetches profile and restores any active session that survived a page refresh.
   useEffect(() => {
     const supabase = createClient();
 
     async function loadProfile() {
-      // Step 1: Ask Supabase Auth who is currently logged in
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return; // Not logged in — middleware should redirect, but guard anyway
+      if (!user) return;
 
       setUserId(user.id);
 
-      // Step 2: Fetch their profile row (points, level, streak, name)
       const { data } = await supabase
         .from("profiles")
         .select("full_name, username, points, level, streak_days")
@@ -476,8 +466,7 @@ export default function DashboardPage() {
       if (data) {
         setProfile(data as DashboardProfile);
 
-        // Step 3: Calculate this user's rank — count how many students have MORE points
-        // rank = number of students above you + 1
+        // Rank = count of users with more points + 1
         const { count } = await supabase
           .from("profiles")
           .select("*", { count: "exact", head: true })
@@ -485,8 +474,7 @@ export default function DashboardPage() {
         setUserRank((count ?? 0) + 1);
       }
 
-      // Step 4: Restore any active session from before the page was refreshed.
-      // If the user had checked in somewhere and then refreshed, we re-load their session.
+      // Restore any session the user had before a page refresh
       const { data: existing } = await supabase
         .from("active_sessions")
         .select("id, location_id, activity, module, duration_minutes, seats_taken, check_in_time")
@@ -496,7 +484,7 @@ export default function DashboardPage() {
 
       if (existing) {
         // Fetch the location name directly so the banner never shows "Loading…"
-        const { data: locData } = await supabase
+        const { data: locRow } = await supabase
           .from("locations")
           .select("name")
           .eq("id", existing.location_id)
@@ -505,7 +493,7 @@ export default function DashboardPage() {
         setActiveSessionId(existing.id);
         setActiveSession({
           locationId:       existing.location_id,
-          locationName:     locData?.name ?? "Unknown",
+          locationName:     locRow?.name ?? "Unknown",
           seats_needed:     existing.seats_taken ?? 1,
           activity:         existing.activity as "study" | "eating",
           module:           existing.module ?? "",
@@ -521,13 +509,11 @@ export default function DashboardPage() {
     loadProfile();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fetch all study spot locations ──────────────────────────────────────────
-  // Also computes which location is currently the busiest (most seats taken).
+  // Fetches all locations and computes which is currently busiest (for the alert banner).
   useEffect(() => {
     const supabase = createClient();
 
     async function loadLocations() {
-      // Fetch all locations from the database
       const { data, error } = await supabase
         .from("locations")
         .select(
@@ -548,27 +534,28 @@ export default function DashboardPage() {
 
       setLocations(mapped);
 
-      // ── Compute busiest location from live active_sessions ──
-      // This powers the Peak Hour Alert banner — it shows the most crowded spot right now.
+      // Patch in the real location name for any session restored on mount
+      setActiveSession((prev) =>
+        prev && prev.locationName === "Loading…"
+          ? { ...prev, locationName: mapped.find((l) => l.id === prev.locationId)?.name ?? "Unknown" }
+          : prev
+      );
+
+      // Tally seats per location to find the busiest spot for the alert banner
       const { data: sessions } = await supabase
         .from("active_sessions")
         .select("location_id, seats_taken")
         .eq("is_active", true);
 
       if (sessions && sessions.length > 0) {
-        // Tally up total seats occupied per location
         const tally: Record<number, number> = {};
         sessions.forEach((s) => {
           tally[s.location_id] = (tally[s.location_id] ?? 0) + (s.seats_taken ?? 1);
         });
-
-        // Find the location with the most seats taken
-        const sorted = Object.entries(tally).sort((a, b) => b[1] - a[1]);
-        const busiestId = Number(sorted[0][0]);
+        const sorted     = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+        const busiestId  = Number(sorted[0][0]);
         const busiestLoc = mapped.find((l) => l.id === busiestId);
-        if (busiestLoc) {
-          setBusiestLocation({ name: busiestLoc.name, seats: tally[busiestId] });
-        }
+        if (busiestLoc) setBusiestLocation({ name: busiestLoc.name, seats: tally[busiestId] });
       }
 
       setLocLoading(false);
@@ -577,35 +564,30 @@ export default function DashboardPage() {
     loadLocations();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fetch today's daily mission + top-3 leaderboard ────────────────────────
-  // Depends on userId because we need it to look up the user's mission progress.
+  // Loads today's mission and top-3 leaderboard. Waits for userId from the profile effect.
   useEffect(() => {
-    if (!userId) return; // Wait until profile has loaded
+    if (!userId) return;
     const supabase = createClient();
 
     async function loadMissionAndLeaderboard() {
-      // ── Daily Mission ──
-      // Fetch all missions, then pick today's using the day-of-year as an index.
-      // This means everyone sees the same mission each day, and it rotates at midnight.
+      // Pick today's mission by rotating through all missions using day-of-year.
+      // Everyone sees the same mission on the same day, and it resets at midnight.
       const { data: allMissions } = await supabase
         .from("missions")
         .select("id, title, description, reward_points, target_count, target_action, period")
         .order("id");
 
       if (allMissions && allMissions.length > 0) {
-        // Calculate which day of the year it is (1–365) to pick a consistent mission
-        const startOfYear = new Date(new Date().getFullYear(), 0, 0);
-        const dayOfYear   = Math.floor((Date.now() - startOfYear.getTime()) / 86_400_000);
+        const startOfYear   = new Date(new Date().getFullYear(), 0, 0);
+        const dayOfYear     = Math.floor((Date.now() - startOfYear.getTime()) / 86_400_000);
         const todaysMission = allMissions[dayOfYear % allMissions.length];
 
-        // Fetch how much progress the current user has made on this mission
-        // Progress lives in the 'user_mission' table, not the 'missions' table
         const { data: userMission } = await supabase
           .from("user_mission")
           .select("progress")
           .eq("user_id", userId)
           .eq("mission_id", todaysMission.id)
-          .maybeSingle(); // Returns null (not an error) if no progress row yet
+          .maybeSingle();
 
         setMission({
           id:            todaysMission.id,
@@ -614,19 +596,16 @@ export default function DashboardPage() {
           reward_points: todaysMission.reward_points ?? 10,
           target_count:  todaysMission.target_count ?? 1,
           progress:      userMission?.progress ?? 0,
-          // Repurpose 'period' as the location hint subtitle (e.g. "daily", "weekly")
           location_hint: todaysMission.period ?? "Daily",
         });
       }
 
       setMissionLoading(false);
 
-      // ── Top 3 Leaderboard ──
-      // Fixed: was querying non-existent column 'points_balance' — correct column is 'points'
       supabase
         .from("profiles")
         .select("full_name, username, points, level")
-        .order("points", { ascending: false }) // highest points first
+        .order("points", { ascending: false })
         .limit(3)
         .then(({ data }) => {
           if (!data) return;
@@ -645,7 +624,7 @@ export default function DashboardPage() {
     loadMissionAndLeaderboard();
   }, [userId]); // Re-run if userId changes (e.g. after login)
 
-  // ── Fetch reviews whenever a location is selected ───────────────────────────
+  // Fetch reviews for the currently selected location
   useEffect(() => {
     if (!selectedLocation) { setReviews([]); return; }
     const supabase = createClient();
@@ -670,18 +649,13 @@ export default function DashboardPage() {
       });
   }, [selectedLocation]);
 
-  // ── Supabase Realtime — live updates for map and busiest spot ───────────────
-  // This subscription keeps the dashboard in sync without the user needing to refresh.
-  // Listens for changes to 'locations' (status dots on map) and 'active_sessions'
-  // (seat counts used to compute the busiest area).
+  // Realtime subscription — keeps status dots and the busiest-location banner in sync
+  // without requiring a manual refresh.
   useEffect(() => {
     const supabase = createClient();
 
     const channel = supabase
       .channel("dashboard-realtime")
-
-      // When a location's status is updated in the DB, update it in our local state.
-      // This makes the coloured dots on the map update in real-time for all users.
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "locations" },
@@ -695,9 +669,6 @@ export default function DashboardPage() {
           );
         }
       )
-
-      // When anyone checks in or out, re-compute which location is the busiest.
-      // This keeps the Peak Hour Alert banner up to date in real-time.
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "active_sessions" },
@@ -708,7 +679,7 @@ export default function DashboardPage() {
             .eq("is_active", true)
             .then(({ data: sessions }) => {
               if (!sessions || sessions.length === 0) {
-                setBusiestLocation(null); // No one checked in — hide the alert
+                setBusiestLocation(null);
                 return;
               }
               const tally: Record<number, number> = {};
@@ -717,19 +688,17 @@ export default function DashboardPage() {
               });
               const sorted    = Object.entries(tally).sort((a, b) => b[1] - a[1]);
               const busiestId = Number(sorted[0][0]);
-              // Use the functional form of setLocations to access latest locations state
+              // Read latest locations state functionally to avoid stale closure
               setLocations((prev) => {
                 const loc = prev.find((l) => l.id === busiestId);
                 if (loc) setBusiestLocation({ name: loc.name, seats: tally[busiestId] });
-                return prev; // Return unchanged (we only needed to read the state)
+                return prev;
               });
             });
         }
       )
-
       .subscribe();
 
-    // Clean up the subscription when the component unmounts (e.g. user navigates away)
     return () => { supabase.removeChannel(channel); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -744,16 +713,23 @@ export default function DashboardPage() {
   const scrollToMap = () =>
     document.getElementById("library-map")?.scrollIntoView({ behavior: "smooth" });
 
-  // ── Check-in handler ────────────────────────────────────────────────────────
-  // Called when the student fills in the Check-In modal and taps "Confirm".
-  // Writes to the database, awards points, and updates the location status badge.
+  // Creates an active_sessions row, awards check-in points, and recalculates location status.
   const handleCheckInSubmit = async (data: CheckInData) => {
     if (!selectedLocation || !userId) return;
 
     const supabase = createClient();
 
-    // Step 1: Insert a new session row into active_sessions
-    // 'seats_needed' is what the modal calls it; the DB column is 'seats_taken'
+    // Optimistic: show the active-session banner and close the modal immediately.
+    // The session ID is filled in once the DB responds (two-phase).
+    setActiveSession({
+      locationId:   selectedLocation.id,
+      locationName: selectedLocation.name,
+      ...data,
+      endsAt: new Date(Date.now() + data.duration_minutes * 60_000),
+    });
+    setCheckInOpen(false);
+
+    // 'seats_needed' in the modal maps to 'seats_taken' in the DB
     const { data: session, error } = await supabase
       .from("active_sessions")
       .insert({
@@ -770,15 +746,14 @@ export default function DashboardPage() {
 
     if (error) {
       console.error("[check-in] Failed to create session:", error.message);
+      setActiveSession(null); // rollback
+      showErrorToast("Check-in failed. Please try again.");
       return;
     }
 
-    // Step 2: Remember the session ID so we can end it later when the user checks out
     setActiveSessionId(session.id);
 
-    // Step 3: Award check-in points.
-    // We look up the points_awarded from the point_rules table (admins can adjust this).
-    // Calls an RPC (Postgres function) to safely add points — see points.ts for the SQL.
+    // Look up points from point_rules so admins can tune the value without a deploy
     const { data: rule } = await supabase
       .from("point_rules")
       .select("points_awarded")
@@ -787,139 +762,259 @@ export default function DashboardPage() {
       .single();
 
     if (rule?.points_awarded) {
-      await supabase.rpc("increment_points", {
-        user_id: userId,
-        amount:  rule.points_awarded,
-      });
-      // Update the points badge in the greeting hero immediately (no re-fetch needed)
+      await supabase.rpc("increment_points", { user_id: userId, amount: rule.points_awarded });
       setProfile((prev) =>
         prev ? { ...prev, points: prev.points + rule.points_awarded } : prev
       );
+      setPointsDelta(rule.points_awarded);
+      setTimeout(() => setPointsDelta(null), 2500);
+      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
 
-    // Step 4: Update local state so the UI responds immediately
-    // (DB trigger handles recalculating current_status on the locations table)
-    setActiveSession({
-      locationId:   selectedLocation.id,
-      locationName: selectedLocation.name,
-      ...data,
-      endsAt: new Date(Date.now() + data.duration_minutes * 60_000),
-    });
-    setCheckInOpen(false);
-  };
-
-  // ── Edit session handler ─────────────────────────────────────────────────────
-  // Called when the student updates their session details from the Edit modal.
-  const handleUpdateSession = async (data: CheckInData) => {
-    if (!activeSessionId || !activeSession) return;
-
-    const supabase = createClient();
-    const { error } = await supabase
+    // Recalculate the location's live status based on total seats now occupied
+    const { data: activeSessions } = await supabase
       .from("active_sessions")
-      .update({
-        activity:         data.activity,
-        module:           data.module || null,
-        duration_minutes: data.duration_minutes,
-        seats_taken:      data.seats_needed,
-      })
-      .eq("id", activeSessionId)
+      .select("seats_taken")
+      .eq("location_id", selectedLocation.id)
       .eq("is_active", true);
 
-    if (error) {
-      console.error("[edit-session] Failed to update session:", error.message);
+    const totalOccupied = (activeSessions ?? []).reduce(
+      (sum, s) => sum + (s.seats_taken ?? 1), 0
+    );
+    const totalSeats = selectedLocation.total_seats ?? 0;
+    const fillPct    = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
+    // 0% = empty, up to 60% = still empty, 61–90% = busy, 91%+ = full
+    const newStatus: LocationStatus =
+      fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+
+    await supabase
+      .from("locations")
+      .update({ current_status: newStatus })
+      .eq("id", selectedLocation.id);
+  };
+
+  // Creates a study group at the selected location, reserves seats, and awards points.
+  const handleStudyBuddySubmit = async (data: StudyBuddyData) => {
+    if (!selectedLocation || !userId) return;
+
+    const supabase = createClient();
+
+    // Optimistic: show the active-session banner and close the modal immediately.
+    setActiveSession({
+      locationId:       selectedLocation.id,
+      locationName:     selectedLocation.name,
+      seats_needed:     data.max_members,
+      activity:         "study",
+      module:           data.topic,
+      duration_minutes: 120,
+      endsAt:           new Date(Date.now() + 120 * 60_000),
+    });
+    setStudyBuddyOpen(false);
+
+    // 1. Create the study group
+    const { data: group, error: groupError } = await supabase
+      .from("study_groups")
+      .insert({
+        host_id:         userId,
+        location_id:     selectedLocation.id,
+        subject:         data.topic || "Study Session",
+        max_members:     data.max_members,
+        current_members: 1,
+        is_active:       true,
+      })
+      .select("id")
+      .single();
+
+    if (groupError || !group) {
+      console.error("[study-buddy] Failed to create group:", groupError?.message);
+      setActiveSession(null); // rollback
+      showErrorToast("Failed to create study group. Please try again.");
       return;
     }
 
-    // Sync local state so the UI reflects the change immediately
-    setActiveSession({
-      ...activeSession,
-      activity:         data.activity,
-      module:           data.module,
-      duration_minutes: data.duration_minutes,
-      seats_needed:     data.seats_needed,
+    // 2. Add the creator as the first member
+    await supabase.from("study_group_members").insert({
+      group_id: group.id,
+      user_id:  userId,
     });
-    setEditSessionOpen(false);
+
+    // 3. Create an active_sessions row so the seat count is reflected on the map
+    const { data: session } = await supabase
+      .from("active_sessions")
+      .insert({
+        user_id:          userId,
+        location_id:      selectedLocation.id,
+        activity:         "study_group",
+        module:           data.topic || null,
+        duration_minutes: 120,
+        seats_taken:      1,
+        is_active:        true,
+      })
+      .select("id")
+      .single();
+
+    if (session) setActiveSessionId(session.id);
+
+    // 4. Award points for creating a study group
+    const { data: rule } = await supabase
+      .from("point_rules")
+      .select("points_awarded")
+      .eq("action_name", "study_group_create")
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (rule?.points_awarded) {
+      await supabase.rpc("increment_points", { user_id: userId, amount: rule.points_awarded });
+      setProfile((prev) =>
+        prev ? { ...prev, points: prev.points + rule.points_awarded } : prev
+      );
+      setPointsDelta(rule.points_awarded);
+      setTimeout(() => setPointsDelta(null), 2500);
+      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+    }
+
+    // 5. Recalculate location status
+    const { data: activeSessions } = await supabase
+      .from("active_sessions")
+      .select("seats_taken")
+      .eq("location_id", selectedLocation.id)
+      .eq("is_active", true);
+
+    const totalOccupied = (activeSessions ?? []).reduce((sum, s) => sum + (s.seats_taken ?? 1), 0);
+    const totalSeats    = selectedLocation.total_seats ?? 0;
+    const fillPct       = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
+    const newStatus: LocationStatus =
+      fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+
+    await supabase
+      .from("locations")
+      .update({ current_status: newStatus })
+      .eq("id", selectedLocation.id);
   };
 
-  // ── Feedback / check-out handler ────────────────────────────────────────────
-  // Called when the student fills in the Feedback modal and taps "Leave Spot".
-  // Ends the session in the DB, saves their review, and updates location status.
+  // Ends the session, awards feedback points, optionally saves a review, and
+  // recalculates the location status based on remaining active sessions.
   const handleFeedbackSubmit = async (data: FeedbackData) => {
     if (!selectedLocation || !userId || !activeSessionId) return;
 
     const supabase = createClient();
 
-    // Step 1: End the session — mark it as inactive (soft delete, keeps history)
-    await supabase
+    // Snapshot for rollback
+    const snapshotSession   = activeSession;
+    const snapshotSessionId = activeSessionId;
+    const snapshotLocation  = selectedLocation;
+
+    // Optimistic: dismiss the session banner and close the drawer immediately.
+    setActiveSession(null);
+    setActiveSessionId(null);
+    setFeedbackOpen(false);
+    setSelectedLocation(null);
+
+    // Soft-delete the session row (keeps the history intact for analytics)
+    const { error: endError } = await supabase
       .from("active_sessions")
       .update({ is_active: false })
-      .eq("id", activeSessionId);
+      .eq("id", snapshotSessionId);
 
-    // Step 1b: Leave any active study groups the user belongs to
-    const { data: memberships } = await supabase
-      .from("study_group_members")
-      .select("group_id")
-      .eq("user_id", userId);
-
-    for (const m of memberships ?? []) {
-      await leaveStudyGroup(supabase, m.group_id, userId);
+    if (endError) {
+      // Rollback so the user can try again
+      setActiveSession(snapshotSession);
+      setActiveSessionId(snapshotSessionId);
+      setFeedbackOpen(true);
+      setSelectedLocation(snapshotLocation);
+      showErrorToast("Failed to end session. Please try again.");
+      return;
     }
 
-    // Step 2: If the student left a comment, save it as a review
+    // Award feedback points. Uses point_rules so admins can tune without a deploy.
+    const { data: feedbackRule } = await supabase
+      .from("point_rules")
+      .select("points_awarded")
+      .eq("action_name", "leave_review")
+      .eq("is_active", true)
+      .maybeSingle();
+
+    const feedbackPts = feedbackRule?.points_awarded ?? 15;
+    await supabase.rpc("increment_points", { user_id: userId, amount: feedbackPts });
+    setProfile((prev) =>
+      prev ? { ...prev, points: prev.points + feedbackPts } : prev
+    );
+
+    // crowd_status → star rating: empty = 5★, busy = 3★, full = 1★
     if (data.comment.trim()) {
-      // Map the crowd_status they reported to a numeric 1–5 star rating
       const rating =
         data.crowd_status === "empty" ? 5 :
         data.crowd_status === "busy"  ? 3 : 1;
 
       await supabase.from("reviews").insert({
-        location_id: selectedLocation.id,
+        location_id: snapshotLocation.id,
         user_id:     userId,
         comment:     data.comment,
         rating,
       });
-
-      // Award points for leaving a review
-      const { data: rule } = await supabase
-        .from("point_rules")
-        .select("points_awarded")
-        .eq("action_name", "leave_review")
-        .eq("is_active", true)
-        .single();
-
-      if (rule?.points_awarded) {
-        await supabase.rpc("increment_points", {
-          user_id: userId,
-          amount:  rule.points_awarded,
-        });
-        setProfile((prev) =>
-          prev ? { ...prev, points: prev.points + rule.points_awarded } : prev
-        );
-      }
     }
 
-    // Step 3: Re-fetch the trigger-updated status and sync local map state
-    const { data: updatedLoc } = await supabase
+    // Recalculate location status now that this session has ended
+    const { data: remaining } = await supabase
+      .from("active_sessions")
+      .select("seats_taken")
+      .eq("location_id", snapshotLocation.id)
+      .eq("is_active", true);
+
+    const totalOccupied = (remaining ?? []).reduce(
+      (sum, s) => sum + (s.seats_taken ?? 1), 0
+    );
+    const totalSeats = snapshotLocation.total_seats ?? 0;
+    const fillPct    = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
+    const newStatus: LocationStatus =
+      fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+
+    await supabase
       .from("locations")
-      .select("current_status")
-      .eq("id", selectedLocation.id)
-      .single();
+      .update({ current_status: newStatus })
+      .eq("id", snapshotLocation.id);
 
     setLocations((prev) =>
       prev.map((l) =>
-        l.id === selectedLocation.id
-          ? { ...l, current_status: (updatedLoc?.current_status ?? l.current_status) as LocationStatus }
-          : l
+        l.id === snapshotLocation.id ? { ...l, current_status: newStatus } : l
       )
     );
-    setActiveSession(null);
-    setActiveSessionId(null);
-    setFeedbackOpen(false);
-    setSelectedLocation(null);
   };
 
   return (
     <>
+      {/* ── Floating +pts animation ── */}
+      <AnimatePresence>
+        {pointsDelta !== null && (
+          <motion.div
+            key="pts-delta"
+            initial={{ opacity: 1, y: 0, scale: 0.9 }}
+            animate={{ opacity: 0, y: -60, scale: 1.15 }}
+            transition={{ duration: 2.2, ease: "easeOut" }}
+            className="fixed top-24 right-4 z-80 flex items-center gap-1.5 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
+          >
+            <Coins size={16} />
+            +{pointsDelta} pts
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Error toast (optimistic rollback feedback) ── */}
+      <AnimatePresence>
+        {errorToast && (
+          <motion.div
+            key="error-toast"
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0,  scale: 1    }}
+            exit={{    opacity: 0, y: 8,   scale: 0.97 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-start gap-2.5 bg-ink text-surface text-sm font-medium px-4 py-3 rounded-2xl shadow-xl max-w-xs w-[calc(100vw-2rem)]"
+          >
+            <AlertCircle size={16} className="text-alert shrink-0 mt-0.5" />
+            {errorToast}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── Location drawer ── */}
       <AnimatePresence>
         {selectedLocation && (
@@ -939,8 +1034,30 @@ export default function DashboardPage() {
         <QRScannerModal
           open={qrScanOpen}
           locationName={selectedLocation.name}
+          requiredLocationId={selectedLocation.id}
           onOpenChange={(open) => { if (!open) setQrScanOpen(false); }}
-          onSuccess={() => setCheckInOpen(true)}
+          onSuccess={() => { setQrScanOpen(false); setActionChoiceOpen(true); }}
+        />
+      )}
+
+      {/* ── Action choice (after QR verified) ── */}
+      {selectedLocation && (
+        <ActionChoiceModal
+          open={actionChoiceOpen}
+          locationName={selectedLocation.name}
+          onClose={() => setActionChoiceOpen(false)}
+          onCheckIn={() => { setActionChoiceOpen(false); setCheckInOpen(true); }}
+          onStudyBuddy={() => { setActionChoiceOpen(false); setStudyBuddyOpen(true); }}
+        />
+      )}
+
+      {/* ── Study buddy modal ── */}
+      {selectedLocation && (
+        <StudyBuddyModal
+          open={studyBuddyOpen}
+          locationName={selectedLocation.name}
+          onOpenChange={(open) => { if (!open) setStudyBuddyOpen(false); }}
+          onSubmit={handleStudyBuddySubmit}
         />
       )}
 
@@ -964,23 +1081,6 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* ── Edit session modal ── */}
-      {activeSession && (
-        <CheckInModal
-          open={editSessionOpen}
-          locationName={activeSession.locationName}
-          onOpenChange={(open) => { if (!open) setEditSessionOpen(false); }}
-          onSubmit={handleUpdateSession}
-          editMode
-          defaultValues={{
-            seats_needed:     activeSession.seats_needed,
-            activity:         activeSession.activity,
-            module:           activeSession.module,
-            duration_minutes: activeSession.duration_minutes,
-          }}
-        />
-      )}
-
       <motion.div
         variants={containerVariants}
         initial="hidden"
@@ -1001,10 +1101,8 @@ export default function DashboardPage() {
                   {greeting.text}
                 </p>
 
-                {/* ── User name — shows skeleton pulse while loading ── */}
                 <h2 className="text-2xl md:text-3xl font-bold text-ink mt-1 leading-tight">
                   {profile === null ? (
-                    // Loading skeleton — same height as the text so layout doesn't shift
                     <span className="inline-block h-8 w-48 bg-canvas rounded-lg animate-pulse" />
                   ) : (
                     <>
@@ -1016,7 +1114,6 @@ export default function DashboardPage() {
                   )}
                 </h2>
 
-                {/* ── Streak — shows skeleton while loading ── */}
                 <p className="text-sm text-ink-muted mt-2 flex items-center gap-1.5">
                   <Flame size={14} className="text-alert shrink-0" />
                   {profile === null ? (
@@ -1082,12 +1179,6 @@ export default function DashboardPage() {
                   {activeSession.seats_needed} seat{activeSession.seats_needed !== 1 ? "s" : ""} reserved
                 </p>
               </div>
-              <button
-                onClick={() => setEditSessionOpen(true)}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full bg-canvas text-ink-muted border border-border hover:text-ink hover:bg-brand-faint transition-colors"
-              >
-                <Pencil size={12} /> Edit
-              </button>
               <button
                 onClick={() => {
                   const loc = locations.find((l) => l.id === activeSession.locationId);
@@ -1278,7 +1369,6 @@ export default function DashboardPage() {
               <div className="mt-4 pt-3 border-t border-border">
                 <div className="flex items-center justify-between text-xs text-ink-muted">
                   <span>Your rank this week</span>
-                  {/* Shows the user's actual rank, calculated from point totals */}
                   <span className="font-semibold text-ink">
                     {userRank !== null ? `#${userRank}` : "#—"}
                   </span>

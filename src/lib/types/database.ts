@@ -1,27 +1,16 @@
-// ============================================================
-// DATABASE TYPES — Mirrors our Supabase (PostgreSQL) tables
-// ============================================================
-// These TypeScript types define the shape of data coming from the database.
-// Every row you fetch from Supabase will match one of these types.
+// TypeScript types mirroring the Supabase (PostgreSQL) schema.
+// Import from here rather than defining inline types in pages.
 //
-// HOW TO USE:
 //   import type { Location, Profile, ActiveSession } from '@/lib/types/database'
-//
-// WHY THIS MATTERS:
-//   TypeScript will catch bugs at compile time — e.g., if you try to access
-//   a field that doesn't exist, the editor will show an error immediately.
-// ============================================================
 
 // ─── ENUMS ──────────────────────────────────────────────────────────────────
 
 /**
- * The possible occupancy statuses of a study spot.
- * - 'empty'    → No one is there, feel free to go!
- * - 'moderate' → Some people, but seats are still available
- * - 'busy'     → Almost full — might be noisy or cramped
- * - 'closed'   → Unavailable (e.g., an event is happening nearby)
+ * Maps to the `location_status` Postgres enum.
+ * Written and read throughout the app — do not add values here without
+ * also adding them to the DB enum definition.
  */
-export type LocationStatus = 'empty' | 'moderate' | 'busy' | 'closed'
+export type LocationStatus = 'empty' | 'busy' | 'full'
 
 // ─── TABLES ─────────────────────────────────────────────────────────────────
 
@@ -31,162 +20,137 @@ export type LocationStatus = 'empty' | 'moderate' | 'busy' | 'closed'
  */
 export type Location = {
   id: number
-  name: string                       // e.g., "Library Level 2", "Canteen Corner"
-  category: string | null            // e.g., "Library", "Cafe", "Outdoor"
+  name: string
+  category: string | null
   current_status: LocationStatus | null
-  coordinates_x: number | null       // X coordinate for placing pin on campus map
-  coordinates_y: number | null       // Y coordinate for placing pin on campus map
-  image_url: string | null           // Main photo of the spot
+  coordinates_x: number | null
+  coordinates_y: number | null
+  image_url: string | null
   created_at: string | null
-  qr_token: string | null            // Unique UUID used for QR code check-in
-  images: string[] | null            // Array of photo URLs (gallery)
-  location_text: string | null       // Human-readable description of where it is
-  opening_time: string | null        // e.g., "8:00 AM – 10:00 PM"
-  total_seats: number | null         // Maximum number of people that can be seated
-  power_outlets: number | null       // Number of available charging ports
-  description: string | null         // Extra details about the spot
+  qr_token: string | null            // UUID encoded in the physical QR code
+  images: string[] | null
+  location_text: string | null
+  opening_time: string | null
+  total_seats: number | null
+  power_outlets: number | null
+  description: string | null
 }
 
 /**
  * A student's profile / account in the app.
  * Matches the `profiles` table in Supabase.
- * Each profile is linked to a Supabase Auth user (same UUID).
+ * `id` is the same UUID as the auth.users row — no separate join needed.
  */
 export type Profile = {
-  id: string                         // UUID — same as the user's auth.users id
+  id: string
   username: string | null
   avatar_url: string | null
-  points: number | null              // Total points the student has earned
-  level: number | null               // Calculated tier based on points
+  points: number | null
+  level: number | null               // 1–5, mirrors the LEVELS tiers in src/lib/levels.ts
   updated_at: string | null
   full_name: string | null
-  streak_days: number | null         // How many days in a row they've checked in
-  last_checkin_at: string | null     // Timestamp of their most recent check-in
-  is_admin: boolean | null           // Admin users can manage locations and events
+  streak_days: number | null
+  last_checkin_at: string | null
+  is_admin: boolean | null
 }
 
 /**
  * A record of a student currently occupying a study spot.
  * Matches the `active_sessions` table in Supabase.
- * Created on check-in, marked inactive on check-out.
+ * Created on check-in, soft-deleted (is_active = false) on check-out.
  */
 export type ActiveSession = {
   id: number
-  user_id: string | null             // Which student is at the spot
-  location_id: number | null         // Which spot they're at
-  seats_taken: number | null         // How many seats their group occupies (default: 1)
-  activity: string                   // What they're doing, e.g., "Studying", "Group Work"
-  module: string | null              // Subject/module code, e.g., "CS101", "MAT201"
-  duration_minutes: number           // How long they plan to stay
-  check_in_time: string | null       // When they checked in (ISO datetime)
-  is_active: boolean | null          // true = still there, false = checked out
+  user_id: string | null
+  location_id: number | null
+  seats_taken: number | null
+  activity: string
+  module: string | null
+  duration_minutes: number
+  check_in_time: string | null
+  is_active: boolean | null
 }
 
-/**
- * A school event that can block a nearby study spot.
- * Matches the `events` table in Supabase.
- * When an event is active at a location, students cannot check in there.
- */
+/** Matches the `events` table. */
 export type Event = {
   id: number
-  title: string                      // e.g., "Orientation Day", "Career Fair"
+  title: string
   description: string | null
-  event_date: string                 // ISO datetime — when the event happens
-  location_id: number | null         // Which location is affected
-  is_peak_alert: boolean | null      // If true, warns nearby areas will be extra crowded
+  event_date: string
+  location_id: number | null
+  is_peak_alert: boolean | null      // When true, nearby spots show a crowd warning
   created_at: string | null
 }
 
-/**
- * A mission / challenge students can complete to earn bonus points.
- * Matches the `missions` table in Supabase.
- */
+/** Matches the `missions` table. */
 export type Mission = {
   id: number
-  title: string                      // e.g., "Check in 5 times this week"
+  title: string
   description: string | null
-  target_action: string | null       // The action type that counts, e.g., "check_in"
-  target_count: number | null        // How many times they need to do the action
-  reward_points: number | null       // Bonus points awarded on completion
-  period: string | null              // e.g., "daily", "weekly", "one-time"
-  icon: string | null                // Emoji or icon name for display in the UI
+  target_action: string | null       // e.g., "check_in" — the action type that counts
+  target_count: number | null
+  reward_points: number | null
+  period: string | null              // e.g., "daily", "weekly"
+  icon: string | null
 }
 
 /**
- * Rules defining how many points are awarded for each user action.
- * Matches the `point_rules` table in Supabase.
- * The admin can adjust these to tune the rewards system.
+ * Matches the `point_rules` table.
+ * Admins can tune `points_awarded` and `cooldown_minutes` per action via the admin panel.
  */
 export type PointRule = {
   id: number
-  action_name: string                // e.g., "check_in", "leave_review", "study_group_join"
-  points_awarded: number | null      // Points given when this action is performed
-  cooldown_minutes: number | null    // How long before the same action earns points again
-  is_active: boolean | null          // If false, this action no longer earns points
+  action_name: string                // e.g., "check_in", "leave_review"
+  points_awarded: number | null
+  cooldown_minutes: number | null
+  is_active: boolean | null
 }
 
-/**
- * A reward item that students can redeem using their points.
- * Matches the `redemption_items` table in Supabase.
- */
+/** Matches the `redemption_items` table. Note: no `category` column in DB yet. */
 export type RedemptionItem = {
   id: number
-  name: string                       // e.g., "Free Coffee Voucher", "IT Club Sticker Pack"
+  name: string
   description: string | null
-  cost: number                       // How many points needed to redeem
-  stock: number | null               // How many are left (0 = out of stock)
-  is_active: boolean | null          // If false, hidden from the redemption store
+  cost: number
+  stock: number | null
+  is_active: boolean | null
   image_url: string | null
 }
 
-/**
- * A student's review of a study spot.
- * Matches the `reviews` table in Supabase.
- */
+/** Matches the `reviews` table. */
 export type Review = {
   id: number
   location_id: number | null
   user_id: string | null
   rating: number | null              // 1–5 stars
-  comment: string | null             // Optional written feedback
+  comment: string | null
   created_at: string | null
 }
 
-/**
- * A log entry recording when a location's status changed.
- * Matches the `status_logs` table in Supabase.
- * Useful for analytics — e.g., tracking peak hours.
- */
+/** Matches the `status_logs` table. Used for analytics (peak hours, etc.). */
 export type StatusLog = {
   id: number
-  user_id: string | null             // Who triggered the change (or null if automatic)
+  user_id: string | null
   location_id: number | null
-  status: string | null              // The new status that was set
+  status: string | null
   created_at: string | null
 }
 
-/**
- * A study group created by a student at a location.
- * Matches the `study_groups` table in Supabase.
- * Students can join groups to study the same subject together.
- */
+/** Matches the `study_groups` table. */
 export type StudyGroup = {
   id: number
-  host_id: string | null             // The student who created and hosts the group
-  location_id: number | null         // Where the group is meeting
-  subject: string                    // What they're studying, e.g., "Linear Algebra", "CS101"
-  max_members: number | null         // Maximum group size (default: 5)
-  current_members: number | null     // Current number of people in the group
-  is_active: boolean | null          // false = group has ended or been disbanded
+  host_id: string | null
+  location_id: number | null
+  subject: string
+  max_members: number | null
+  current_members: number | null
+  is_active: boolean | null          // Set to false when the host leaves (group disbanded)
   created_at: string | null
-  description: string | null         // Extra details about the session (e.g., topics covered)
-  expires_at: string | null          // When the group session is expected to end
+  description: string | null
+  expires_at: string | null
 }
 
-/**
- * A record linking a student to a study group they've joined.
- * Matches the `study_group_members` table in Supabase.
- */
+/** Matches the `study_group_members` junction table. */
 export type StudyGroupMember = {
   id: number
   group_id: number
@@ -194,23 +158,17 @@ export type StudyGroupMember = {
   joined_at: string | null
 }
 
-/**
- * Tracks a student's progress on a specific mission.
- * Matches the `user_mission` table in Supabase.
- */
+/** Matches the `user_mission` table. Tracks per-user mission progress. */
 export type UserMission = {
   id: number
   user_id: string | null
   mission_id: number | null
-  progress: number | null            // e.g., 3 out of 5 check-ins completed
+  progress: number | null
   is_completed: boolean | null
   last_updated: string | null
 }
 
-/**
- * A record of a student redeeming a reward item.
- * Matches the `user_redemptions` table in Supabase.
- */
+/** Matches the `user_redemptions` table. */
 export type UserRedemption = {
   id: number
   user_id: string | null
@@ -222,15 +180,10 @@ export type UserRedemption = {
 // ─── HELPER TYPE ─────────────────────────────────────────────────────────────
 
 /**
- * A standard return type for all database query functions.
- * Every DB function returns either { data: T, error: null }
- * or { data: null, error: "error message string" }.
+ * Standard return wrapper for all DB query functions.
+ * Callers always get either data or an error string — never both.
  *
- * This makes error handling consistent and predictable across the app.
- *
- * HOW TO USE:
  *   const { data, error } = await getAllLocations(supabase)
- *   if (error) { show error message }
- *   else { use data }
+ *   if (error) { ... } else { use data }
  */
 export type DbResult<T> = { data: T; error: null } | { data: null; error: string }

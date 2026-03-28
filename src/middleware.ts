@@ -31,9 +31,14 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isAuthPage = pathname.startsWith("/auth/");
+  // These routes must never be intercepted — they complete auth flows mid-flight.
+  const isPassThrough =
+    pathname === "/auth/reset-password" ||
+    pathname === "/auth/confirm" ||
+    pathname === "/auth/reset-callback";
 
   // ── 1. Logged-in user visiting an auth page → send to dashboard ───────────
-  if (isAuthPage && user) {
+  if (isAuthPage && user && !isPassThrough) {
     return redirect("/", request, response);
   }
 

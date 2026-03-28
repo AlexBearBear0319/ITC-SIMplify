@@ -1,44 +1,20 @@
-// ============================================================
-// DATABASE QUERIES: LOCATIONS (Study Spots)
-// ============================================================
-// All functions for reading and updating study spot data.
-//
-// HOW TO USE in a Server Component (no 'use client'):
-//   import { createClient } from '@/lib/supabase/server'
-//   import { getAllLocations } from '@/lib/db/locations'
-//
-//   const supabase = await createClient()
-//   const { data, error } = await getAllLocations(supabase)
-//
-// HOW TO USE in a Client Component ('use client' at top):
-//   import { createClient } from '@/lib/supabase/client'
-//   import { getAllLocations } from '@/lib/db/locations'
-//
-//   const supabase = createClient()
-//   const { data, error } = await getAllLocations(supabase)
-// ============================================================
+// Database queries for study spot locations.
+// Pass a Supabase client (server or browser) as the first argument to each function.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { DbResult, Location, LocationStatus } from '@/lib/types/database'
 
 // ─── FILTER OPTIONS ──────────────────────────────────────────────────────────
 
-/**
- * Options you can pass to getLocationsWithFilters() to narrow down results.
- * All fields are optional — only the ones you provide will be applied.
- */
 export type LocationFilters = {
   category?: string          // e.g., "Library", "Cafe", "Outdoor"
-  hasPowerOutlets?: boolean  // true = only show spots with at least 1 charging port
-  status?: LocationStatus    // e.g., only show 'empty' spots
+  hasPowerOutlets?: boolean  // true = only spots with ≥ 1 outlet
+  status?: LocationStatus
 }
 
 // ─── GET ALL LOCATIONS ────────────────────────────────────────────────────────
 
-/**
- * Fetches every study spot from the database, sorted alphabetically by name.
- * Use this to populate the map or a full list of spots.
- */
+/** Fetches all study spots, sorted alphabetically. */
 export async function getAllLocations(
   supabase: SupabaseClient,
 ): Promise<DbResult<Location[]>> {
@@ -57,12 +33,7 @@ export async function getAllLocations(
 
 // ─── GET ONE LOCATION BY ID ───────────────────────────────────────────────────
 
-/**
- * Fetches a single study spot by its numeric ID.
- * Use this on the location detail / info page.
- *
- * @param id - The location's ID number (from the database)
- */
+/** Fetches a single study spot by ID. Used on the location detail page. */
 export async function getLocationById(
   supabase: SupabaseClient,
   id: number,
@@ -70,8 +41,8 @@ export async function getLocationById(
   const { data, error } = await supabase
     .from('locations')
     .select('*')
-    .eq('id', id)   // .eq = "where id equals ..."
-    .single()       // .single() returns one object instead of an array
+    .eq('id', id)
+    .single()
 
   if (error) {
     console.error(`[getLocationById] id=${id}`, error.message)
@@ -84,10 +55,8 @@ export async function getLocationById(
 // ─── GET LOCATION BY QR TOKEN ─────────────────────────────────────────────────
 
 /**
- * Finds a study spot using the UUID stored in its QR code.
- * Called when a student scans the QR code posted at a location.
- *
- * @param token - The UUID string encoded in the QR code
+ * Finds a study spot by the UUID encoded in its physical QR code.
+ * Called immediately after a successful QR scan.
  */
 export async function getLocationByQRToken(
   supabase: SupabaseClient,
@@ -110,35 +79,18 @@ export async function getLocationByQRToken(
 // ─── GET LOCATIONS WITH FILTERS ───────────────────────────────────────────────
 
 /**
- * Fetches study spots that match the given search filters.
- * Used for the "Search & Filter" feature — students can narrow down spots
- * by category, availability of power outlets, or current occupancy.
- *
- * Example usage:
- *   getLocationsWithFilters(supabase, { hasPowerOutlets: true, status: 'empty' })
- *
- * @param filters - An object with optional filter criteria (see LocationFilters type)
+ * Fetches study spots matching optional filters.
+ * All filter fields are optional — only the ones provided are applied.
  */
 export async function getLocationsWithFilters(
   supabase: SupabaseClient,
   filters: LocationFilters,
 ): Promise<DbResult<Location[]>> {
-  // Start building the query — we'll chain filter conditions onto it
   let query = supabase.from('locations').select('*')
 
-  // Only apply each filter if the caller actually provided a value for it
-  if (filters.category) {
-    query = query.eq('category', filters.category)
-  }
-
-  if (filters.hasPowerOutlets === true) {
-    // .gt means "greater than" — this finds spots with at least 1 power outlet
-    query = query.gt('power_outlets', 0)
-  }
-
-  if (filters.status) {
-    query = query.eq('current_status', filters.status)
-  }
+  if (filters.category)            query = query.eq('category', filters.category)
+  if (filters.hasPowerOutlets)     query = query.gt('power_outlets', 0)
+  if (filters.status)              query = query.eq('current_status', filters.status)
 
   const { data, error } = await query.order('name', { ascending: true })
 
@@ -153,18 +105,9 @@ export async function getLocationsWithFilters(
 // ─── UPDATE LOCATION STATUS ───────────────────────────────────────────────────
 
 /**
- * Updates the occupancy status of a study spot.
- * This is called automatically when students check in or out,
- * and can also be used by admins to manually mark a spot as 'closed'.
- *
- * The status is recalculated based on how full the spot is:
- *   0% full      → 'empty'
- *   1–60% full   → 'moderate'
- *   61–100% full → 'busy'
- *   Manually set → 'closed'
- *
- * @param id     - The location to update
- * @param status - The new status: 'empty' | 'moderate' | 'busy' | 'closed'
+ * Directly sets a location's occupancy status.
+ * Prefer `recalculateLocationStatus` for check-in/out flows;
+ * use this for manual admin overrides.
  */
 export async function updateLocationStatus(
   supabase: SupabaseClient,
@@ -173,7 +116,7 @@ export async function updateLocationStatus(
 ): Promise<DbResult<Location>> {
   const { data, error } = await supabase
     .from('locations')
-    .update({ current_status: status })  // Only update the status field
+    .update({ current_status: status })
     .eq('id', id)
     .select()
     .single()
@@ -189,15 +132,10 @@ export async function updateLocationStatus(
 // ─── RECALCULATE AND UPDATE STATUS BASED ON OCCUPANCY ────────────────────────
 
 /**
- * Automatically determines and updates a location's status based on how many
- * seats are currently taken vs. the total available seats.
+ * Derives and saves the correct status for a location based on current seat occupancy.
+ * Call this after every check-in or check-out so the live status badge stays accurate.
  *
- * Call this whenever someone checks in or checks out of a location so the
- * status badge stays accurate in real-time.
- *
- * @param id          - The location to recalculate
- * @param seatsTaken  - How many seats are currently occupied (from active_sessions)
- * @param totalSeats  - The location's total capacity
+ * Thresholds: 0% → empty · 1–60% → empty · 61–90% → busy · 91%+ → full
  */
 export async function recalculateLocationStatus(
   supabase: SupabaseClient,
@@ -205,18 +143,9 @@ export async function recalculateLocationStatus(
   seatsTaken: number,
   totalSeats: number,
 ): Promise<DbResult<Location>> {
-  // Calculate what percentage of seats are filled
-  const fillPercent = totalSeats > 0 ? (seatsTaken / totalSeats) * 100 : 0
-
-  // Map percentage to a status label
-  let status: LocationStatus
-  if (fillPercent === 0) {
-    status = 'empty'
-  } else if (fillPercent <= 60) {
-    status = 'moderate'
-  } else {
-    status = 'busy'
-  }
+  const fillPct = totalSeats > 0 ? (seatsTaken / totalSeats) * 100 : 0
+  const status: LocationStatus =
+    fillPct === 0 ? 'empty' : fillPct <= 60 ? 'empty' : fillPct <= 90 ? 'busy' : 'full'
 
   return updateLocationStatus(supabase, id, status)
 }

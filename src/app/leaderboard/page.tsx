@@ -11,10 +11,9 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Coins, Crown } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { getLevelEmoji } from "@/lib/levels";
 
-// ─────────────────────────────────────────────
-// Types  (matches profiles table shape)
-// ─────────────────────────────────────────────
+// ── Types ───────────────────────────────────────
 
 type LeaderboardEntry = {
   id: string;
@@ -25,27 +24,7 @@ type LeaderboardEntry = {
   is_current_user?: boolean;
 };
 
-// ─────────────────────────────────────────────
-// Level emoji helper  (mirrors profile + rewards pages)
-// ─────────────────────────────────────────────
-
-const LEVEL_TIERS = [
-  { emoji: "🌱", minPts: 0    },
-  { emoji: "🔍", minPts: 500  },
-  { emoji: "📚", minPts: 1500 },
-  { emoji: "🏆", minPts: 3000 },
-  { emoji: "⭐", minPts: 5000 },
-];
-
-function getLevelEmoji(pts: number): string {
-  return (
-    [...LEVEL_TIERS].reverse().find((l) => pts >= l.minPts)?.emoji ?? "🌱"
-  );
-}
-
-// ─────────────────────────────────────────────
-// Podium config  (visual treatment per rank)
-// ─────────────────────────────────────────────
+// ── Podium config (visual treatment per rank) ──
 
 type PodiumCfg = {
   mt: string;
@@ -87,9 +66,7 @@ const PODIUM_CFG: Record<1 | 2 | 3, PodiumCfg> = {
   },
 };
 
-// ─────────────────────────────────────────────
-// Animation variants
-// ─────────────────────────────────────────────
+// ── Animation variants ─────────────────────────
 
 const podiumVariants = {
   hidden:  { opacity: 0, y: 28 },
@@ -121,9 +98,7 @@ const rowVariants = {
   },
 };
 
-// ─────────────────────────────────────────────
-// Avatar helper
-// ─────────────────────────────────────────────
+// ── Avatar helper ──────────────────────────────
 
 function Avatar({
   entry,
@@ -152,9 +127,7 @@ function Avatar({
   );
 }
 
-// ─────────────────────────────────────────────
-// Page
-// ─────────────────────────────────────────────
+// ── Page ───────────────────────────────────────
 
 export default function LeaderboardPage() {
   const supabase = createClient();
@@ -176,10 +149,9 @@ export default function LeaderboardPage() {
     setLoading(false);
   };
 
-  // Initial fetch on mount
   useEffect(() => { fetchLeaderboard(); }, []);
 
-  // Realtime: re-fetch when any profile's points change
+  // Re-fetch whenever any profile's points change
   useEffect(() => {
     const channel = supabase
       .channel("leaderboard-realtime")
@@ -194,7 +166,7 @@ export default function LeaderboardPage() {
   const myRank = meIdx >= 0 ? meIdx + 1 : null;
   const me     = meIdx >= 0 ? entries[meIdx] : null;
 
-  // Podium display order: 2nd | 1st | 3rd
+  // Podium is displayed as: 2nd | 1st | 3rd (classic podium layout)
   const podiumOrder: [LeaderboardEntry, 1 | 2 | 3, number][] = [
     [top3[1], 2, 0.1],
     [top3[0], 1, 0.0],

@@ -1,31 +1,14 @@
 "use client";
 
-/**
- * Study Buddy Finder — /finder
- *
- * Supabase wiring:
- *   Replace INITIAL_GROUPS with:
- *     const { data } = await supabase
- *       .from("study_groups")
- *       .select("*, profiles(username, avatar_url), locations(name, category)")
- *       .eq("is_active", true)
- *       .order("created_at", { ascending: false });
- *
- *   study_group_members junction table:
- *     Join:  supabase.from("study_group_members").insert({ group_id, user_id })
- *     Leave: supabase.from("study_group_members").delete().match({ group_id, user_id })
- *     List:  supabase.from("study_group_members").select("*, profiles(username, avatar_url)").eq("group_id", id)
- */
 
-import { useState, useMemo, useEffect, Suspense } from "react";
+import { useState, useMemo, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { createClient } from "@/utils/supabase/client";
 import { joinStudyGroup, leaveStudyGroup, createStudyGroup } from "@/lib/db/study-groups";
-import { POINT_ACTIONS } from "@/lib/db/points";
+import { awardPoints, POINT_ACTIONS } from "@/lib/db/points";
 import QRScannerModal from "@/components/features/QRScannerModal";
-import FeedbackModal, { type FeedbackData } from "@/components/features/FeedbackModal";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   MapPin,
@@ -41,6 +24,8 @@ import {
   UserCircle,
   SlidersHorizontal,
   LogOut,
+  QrCode,
+  AlertCircle,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -65,6 +50,8 @@ type UserProfile = {
   id: string;
   username: string;
   avatar_url: string | null;
+  school_id: number | null;
+  major_id: number | null;
 };
 
 type CreateForm = {
@@ -76,6 +63,13 @@ type CreateForm = {
 
 
 const POPULAR_SUBJECTS = ["Python", "React", "Statistics", "Writing", "DSA", "Security", "Design"];
+
+type Subject = { id: number; name: string; course_code: string | null };
+
+type GroupMember = {
+  user_id: string;
+  profiles: { username: string; avatar_url: string | null };
+};
 
 // ─────────────────────────────────────────────
 // Animation variants
@@ -115,28 +109,74 @@ function getCapacityInfo(current: number, max: number) {
 // GroupDetailDialog
 // ─────────────────────────────────────────────
 
+function MemberAvatar({ username, isHost }: { username: string; isHost?: boolean }) {
+  const [showTip, setShowTip] = useState(false);
+  const tipRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initials = username.slice(0, 2).toUpperCase();
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => { tipRef.current = setTimeout(() => setShowTip(true), 300); }}
+      onMouseLeave={() => { if (tipRef.current) clearTimeout(tipRef.current); setShowTip(false); }}
+      onTouchStart={() => setShowTip((v) => !v)}
+    >
+      <div
+        className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border-2 border-surface shadow-sm ${isHost ? "bg-brand text-ink" : "bg-canvas text-ink-muted"}`}
+      >
+        {initials}
+      </div>
+      {showTip && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 bg-ink text-surface text-[11px] font-medium rounded-lg whitespace-nowrap shadow-md pointer-events-none z-10">
+          @{username}{isHost ? " · host" : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GroupDetailDialog({
   group,
   activeGroupId,
-  currentUserId,
+  supabase,
   onJoin,
   onLeave,
   onClose,
 }: {
   group: StudyGroup;
   activeGroupId: number | null;
-  currentUserId: string | null;
+  supabase: ReturnType<typeof createClient>;
   onJoin: (id: number) => void;
   onLeave: (id: number) => void;
   onClose: () => void;
 }) {
-  const cap = getCapacityInfo(group.current_members, group.max_members);
-  const isFull             = group.current_members >= group.max_members;
+  const [members, setMembers] = useState<GroupMember[]>([]);
+
+  // Fetch real members and subscribe to live updates for this group
+  useEffect(() => {
+    const fetchMembers = () =>
+      supabase
+        .from("study_group_members")
+        .select("user_id, profiles(username, avatar_url)")
+        .eq("group_id", group.id)
+        .then(({ data }) => { if (data) setMembers(data as unknown as GroupMember[]); });
+
+    fetchMembers();
+
+    const channel = supabase
+      .channel(`group-members-${group.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "study_group_members", filter: `group_id=eq.${group.id}` }, fetchMembers)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [group.id, supabase]);
+
+  const liveCount          = members.length || group.current_members;
+  const cap                = getCapacityInfo(liveCount, group.max_members);
+  const isFull             = liveCount >= group.max_members;
   const isThisGroupActive  = activeGroupId === group.id;
   const hasOtherActiveGroup = activeGroupId !== null && activeGroupId !== group.id;
-  const isOwnGroup         = currentUserId === group.host_id;
+  const emptySlots         = Math.max(0, group.max_members - liveCount);
   const hostInitials       = group.profiles.username.slice(0, 2).toUpperCase();
-  const emptySlots         = Math.max(0, group.max_members - group.current_members);
 
   return (
     <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -153,7 +193,7 @@ function GroupDetailDialog({
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full ${cap.bg} ${cap.text}`}>
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cap.pipColor}`} />
-                    {cap.label} · {group.current_members}/{group.max_members}
+                    {cap.label} · {liveCount}/{group.max_members}
                   </span>
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-brand-faint text-brand-dark text-[10px] font-semibold rounded-full border border-brand/30">
                     <BookOpen size={9} />
@@ -203,35 +243,24 @@ function GroupDetailDialog({
               </div>
             </div>
 
-            {/* Participants
-                TODO: Replace mock slots with:
-                  const { data: members } = await supabase
-                    .from("study_group_members")
-                    .select("*, profiles(username, avatar_url)")
-                    .eq("group_id", group.id);
-            */}
+            {/* Participants — real data from study_group_members */}
             <div>
               <p className="text-xs font-semibold text-ink-muted mb-2.5">
-                Participants ({group.current_members}/{group.max_members})
+                Participants ({liveCount}/{group.max_members})
               </p>
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Host avatar */}
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border-2 border-surface shadow-sm bg-brand text-ink"
-                  title={`@${group.profiles.username} (host)`}
-                >
-                  {hostInitials}
-                </div>
-                {/* Other filled member slots (mock) */}
-                {Array.from({ length: Math.max(0, group.current_members - 1) }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border-2 border-surface shadow-sm bg-canvas text-ink-muted"
-                    title={`Member ${i + 2}`}
-                  >
-                    {String.fromCharCode(65 + i)}
-                  </div>
-                ))}
+                {/* Host */}
+                <MemberAvatar username={group.profiles.username} isHost />
+                {/* Other members (excluding host) */}
+                {members
+                  .filter((m) => m.user_id !== group.host_id)
+                  .map((m) => (
+                    <MemberAvatar
+                      key={m.user_id}
+                      username={(m.profiles as unknown as { username: string }).username}
+                    />
+                  ))
+                }
                 {/* Empty slots */}
                 {Array.from({ length: emptySlots }).map((_, i) => (
                   <div
@@ -242,6 +271,7 @@ function GroupDetailDialog({
                   </div>
                 ))}
               </div>
+              <p className="text-[11px] text-ink-faint mt-2">Hover a member to see their username</p>
             </div>
 
             {/* One-active-group warning */}
@@ -260,15 +290,7 @@ function GroupDetailDialog({
 
           {/* Footer action */}
           <div className="px-6 pb-6">
-            {isOwnGroup ? (
-              <button
-                onClick={() => onLeave(group.id)}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-alert-light hover:bg-alert/20 text-alert border border-alert/40 font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
-              >
-                <LogOut size={15} />
-                End Session
-              </button>
-            ) : isThisGroupActive ? (
+            {isThisGroupActive ? (
               <button
                 onClick={() => onLeave(group.id)}
                 className="w-full flex items-center justify-center gap-2 py-3 bg-alert-light hover:bg-alert/20 text-alert border border-alert/40 font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
@@ -312,14 +334,12 @@ function GroupDetailDialog({
 function StudyGroupCard({
   group,
   activeGroupId,
-  currentUserId,
   onSelect,
   onJoin,
   onLeave,
 }: {
   group: StudyGroup;
   activeGroupId: number | null;
-  currentUserId: string | null;
   onSelect: () => void;
   onJoin: (id: number) => void;
   onLeave: (id: number) => void;
@@ -330,7 +350,6 @@ function StudyGroupCard({
   const initials         = group.profiles.username.slice(0, 2).toUpperCase();
   const isThisGroupActive  = activeGroupId === group.id;
   const hasOtherActiveGroup = activeGroupId !== null && activeGroupId !== group.id;
-  const isOwnGroup         = currentUserId === group.host_id;
   const pipCount  = Math.min(group.max_members, 8);
   const pipFilled = Math.min(group.current_members, pipCount);
 
@@ -408,29 +427,24 @@ function StudyGroupCard({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            if (isOwnGroup) { onLeave(group.id); return; }
             if (isThisGroupActive) onLeave(group.id);
             else if (!hasOtherActiveGroup && !isFull) onJoin(group.id);
           }}
-          disabled={hasOtherActiveGroup || (!isThisGroupActive && !isOwnGroup && isFull)}
+          disabled={hasOtherActiveGroup || (!isThisGroupActive && isFull)}
           className={`
             shrink-0 flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-full
             transition-all duration-200 active:scale-[0.97]
-            ${isOwnGroup
+            ${isThisGroupActive
               ? "bg-alert-light text-alert border border-alert/40 hover:bg-alert/20"
-              : isThisGroupActive
-                ? "bg-alert-light text-alert border border-alert/40 hover:bg-alert/20"
-                : hasOtherActiveGroup
+              : hasOtherActiveGroup
+                ? "bg-canvas text-ink-faint border border-border cursor-not-allowed"
+                : isFull
                   ? "bg-canvas text-ink-faint border border-border cursor-not-allowed"
-                  : isFull
-                    ? "bg-canvas text-ink-faint border border-border cursor-not-allowed"
-                    : "bg-brand hover:bg-brand-dark text-ink border border-brand hover:border-brand-dark hover:shadow-sm"
+                  : "bg-brand hover:bg-brand-dark text-ink border border-brand hover:border-brand-dark hover:shadow-sm"
             }
           `}
         >
-          {isOwnGroup ? (
-            <><LogOut size={12} /> End</>
-          ) : isThisGroupActive ? (
+          {isThisGroupActive ? (
             <><LogOut size={12} /> Leave</>
           ) : isFull ? (
             <><Users size={12} /> Full</>
@@ -458,22 +472,32 @@ function CreateGroupDialog({
   onOpenChange,
   onSubmit,
   locationsList,
+  subjects,
+  defaultLocationId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (form: CreateForm) => Promise<void>;
   locationsList: { id: number; name: string }[];
+  subjects: Subject[];
+  defaultLocationId?: number;
 }) {
-  const EMPTY_FORM: CreateForm = { subject: "", description: "", location_id: 0, max_members: 4 };
-  const [form,        setForm]        = useState<CreateForm>(EMPTY_FORM);
+  const [form,        setForm]        = useState<CreateForm>({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
   const [submitting,  setSubmitting]  = useState(false);
   const [success,     setSuccess]     = useState(false);
+
+  // When dialog reopens (new QR scan may have changed defaultLocationId), reset form location
+  useEffect(() => {
+    if (open) {
+      setForm((f) => ({ ...f, location_id: defaultLocationId ?? f.location_id }));
+    }
+  }, [open, defaultLocationId]);
 
   const isValid = form.subject.trim().length > 0 && form.location_id > 0;
 
   const handleOpenChange = (next: boolean) => {
     if (!next && !submitting) {
-      setForm(EMPTY_FORM);
+      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
       setSuccess(false);
     }
     onOpenChange(next);
@@ -486,7 +510,7 @@ function CreateGroupDialog({
     setSuccess(true);
     setSubmitting(false);
     setTimeout(() => {
-      setForm(EMPTY_FORM);
+      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
       setSuccess(false);
       onOpenChange(false);
     }, 1400);
@@ -539,14 +563,41 @@ function CreateGroupDialog({
                   <label className={FORM_LABEL}>
                     Subject <span className="text-alert">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={form.subject}
-                    onChange={(e) => set("subject", e.target.value)}
-                    placeholder="e.g., Python for Data Science"
-                    maxLength={80}
-                    className={FORM_INPUT}
-                  />
+                  {subjects.length > 0 ? (
+                    <div className="relative">
+                      <select
+                        value={form.subject}
+                        onChange={(e) => set("subject", e.target.value)}
+                        className={`${FORM_INPUT} appearance-none pr-8 cursor-pointer`}
+                      >
+                        <option value="">Choose a subject…</option>
+                        {subjects.map((s) => {
+                          const label = s.course_code ? `${s.course_code} — ${s.name}` : s.name;
+                          return (
+                            <option key={s.id} value={label}>{label}</option>
+                          );
+                        })}
+                      </select>
+                      <ChevronDown
+                        size={13}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        value={form.subject}
+                        onChange={(e) => set("subject", e.target.value)}
+                        placeholder="e.g., Python for Data Science"
+                        maxLength={80}
+                        className={FORM_INPUT}
+                      />
+                      <p className="text-xs text-ink-faint mt-1">
+                        Set your school &amp; major in your profile to see subject options.
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 <div>
@@ -569,24 +620,35 @@ function CreateGroupDialog({
                     <label className={FORM_LABEL}>
                       Location <span className="text-alert">*</span>
                     </label>
-                    <div className="relative">
-                      <select
-                        value={form.location_id}
-                        onChange={(e) => set("location_id", Number(e.target.value))}
-                        className={`${FORM_INPUT} appearance-none pr-8 cursor-pointer`}
-                      >
-                        <option value={0} disabled>Choose…</option>
-                        {locationsList.map((loc) => (
-                          <option key={loc.id} value={loc.id}>
-                            {loc.name}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown
-                        size={13}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none"
-                      />
-                    </div>
+                    {defaultLocationId ? (
+                      /* Location locked to QR-scanned spot */
+                      <div className="flex items-center gap-2 px-3 py-2.5 bg-success-light border border-success/30 rounded-xl text-sm text-ink">
+                        <QrCode size={13} className="text-success shrink-0" />
+                        <span className="flex-1 font-medium truncate">
+                          {locationsList.find((l) => l.id === defaultLocationId)?.name ?? "Scanned location"}
+                        </span>
+                        <span className="shrink-0 text-[10px] font-semibold text-success">QR Verified ✓</span>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <select
+                          value={form.location_id}
+                          onChange={(e) => set("location_id", Number(e.target.value))}
+                          className={`${FORM_INPUT} appearance-none pr-8 cursor-pointer`}
+                        >
+                          <option value={0} disabled>Choose…</option>
+                          {locationsList.map((loc) => (
+                            <option key={loc.id} value={loc.id}>
+                              {loc.name}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown
+                          size={13}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -674,54 +736,130 @@ function FilterSelect({
 
 function FinderPageContent() {
   const searchParams = useSearchParams();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [currentUser,     setCurrentUser]     = useState<UserProfile | null>(null);
   const [groups,          setGroups]          = useState<StudyGroup[]>([]);
   const [locationsList,   setLocationsList]   = useState<{ id: number; name: string }[]>([]);
+  const [subjects,        setSubjects]        = useState<Subject[]>([]);
   const [loading,         setLoading]         = useState(true);
   const [searchQuery,     setSearchQuery]     = useState("");
   const [locationFilter,  setLocationFilter]  = useState("all");
 
   // ── Fetch all active study groups (with joined profile + location data) ──
+  // Always computes current_members from actual study_group_members rows so
+  // the card count can never be stale or inflated by a counter drift.
   const fetchGroups = async () => {
     const { data } = await supabase
       .from("study_groups")
       .select("*, profiles(username, avatar_url), locations(name, category)")
       .eq("is_active", true)
       .order("created_at", { ascending: false });
-    if (data) setGroups(data as StudyGroup[]);
+
+    if (!data) { setLoading(false); return; }
+
+    // One extra query: pull every member row for these groups to get real counts.
+    const ids = data.map((g) => g.id as number);
+    const { data: memberRows } = ids.length
+      ? await supabase.from("study_group_members").select("group_id").in("group_id", ids)
+      : { data: [] };
+
+    // Build a map: groupId → real member count
+    const countMap: Record<number, number> = {};
+    (memberRows ?? []).forEach((m: { group_id: number }) => {
+      countMap[m.group_id] = (countMap[m.group_id] ?? 0) + 1;
+    });
+
+    // Override current_members with the real count and self-heal stale DB counters
+    const mapped = data.map((g) => {
+      const real = countMap[g.id] ?? 0;
+      if (g.current_members !== real) {
+        // Fire-and-forget: sync the counter in the background
+        supabase
+          .from("study_groups")
+          .update({ current_members: real })
+          .eq("id", g.id)
+          .then(() => {});
+      }
+      return { ...g, current_members: real };
+    });
+
+    setGroups(mapped as StudyGroup[]);
     setLoading(false);
   };
 
-  // Fetch the real logged-in user's profile
+  // Fetch the logged-in user's profile (including school/major for subject filtering)
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
       const { data } = await supabase
         .from("profiles")
-        .select("id, username, avatar_url")
+        .select("id, username, avatar_url, school_id, major_id")
         .eq("id", user.id)
         .single();
-      if (data) setCurrentUser(data as UserProfile);
+      if (data) {
+        setCurrentUser(data as UserProfile);
+
+        // Restore the user's active group across page refreshes.
+        // Two-step: find their group memberships, then pick the one that's still active.
+        supabase
+          .from("study_group_members")
+          .select("group_id")
+          .eq("user_id", data.id)
+          .then(async ({ data: memberships }) => {
+            if (!memberships?.length) return;
+            const { data: active } = await supabase
+              .from("study_groups")
+              .select("id")
+              .eq("is_active", true)
+              .in("id", memberships.map((m) => m.group_id))
+              .limit(1)
+              .maybeSingle();
+            if (active) setActiveGroupId(active.id);
+          });
+
+        // Check for an active solo check-in session (blocks group creation)
+        supabase
+          .from("active_sessions")
+          .select("id, check_in_time, duration_minutes")
+          .eq("user_id", data.id)
+          .eq("is_active", true)
+          .maybeSingle()
+          .then(({ data: session }) => {
+            if (!session) return;
+            const expiresAt = new Date(session.check_in_time ?? 0).getTime() + session.duration_minutes * 60_000;
+            if (Date.now() < expiresAt) {
+              setExistingSoloSession(true);
+            } else {
+              // Auto-expire stale session
+              supabase.from("active_sessions").update({ is_active: false }).eq("id", session.id);
+            }
+          });
+
+        // Daily cooldown: has user already earned study-group points today?
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        supabase
+          .from("study_group_members")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", data.id)
+          .gte("joined_at", todayStart.toISOString())
+          .then(({ count }) => { if ((count ?? 0) > 0) setAlreadyEarnedToday(true); });
+
+        // Load subjects for this user's major
+        if (data.major_id) {
+          supabase
+            .from("subjects")
+            .select("id, name, course_code")
+            .eq("major_id", data.major_id)
+            .order("name")
+            .then(({ data: subs }) => { if (subs) setSubjects(subs); });
+        }
+      }
     });
   }, []);
 
-  // Restore active group membership from DB (survives page refresh / navigation)
-  useEffect(() => {
-    if (!currentUser) return;
-    supabase
-      .from("study_group_members")
-      .select("group_id, study_groups!inner(is_active)")
-      .eq("user_id", currentUser.id)
-      .eq("study_groups.is_active", true)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setActiveGroupId(data.group_id);
-      });
-  }, [currentUser]);
-
-  // Initial data load: groups + locations list
+  // Initial data load: groups + locations list + point rules
   useEffect(() => {
     fetchGroups();
     supabase
@@ -729,6 +867,17 @@ function FinderPageContent() {
       .select("id, name")
       .order("name")
       .then(({ data }) => { if (data) setLocationsList(data); });
+    supabase
+      .from("point_rules")
+      .select("action_name, points_awarded")
+      .eq("is_active", true)
+      .then(({ data }) => {
+        if (data) {
+          const map: Record<string, number> = {};
+          for (const r of data) map[r.action_name] = r.points_awarded ?? 0;
+          setPointRules(map);
+        }
+      });
   }, []);
 
   // Realtime: re-fetch groups whenever study_groups or study_group_members change
@@ -746,14 +895,36 @@ function FinderPageContent() {
     const locId = searchParams.get("locationId");
     if (locId) setLocationFilter(locId);
   }, [searchParams]);
-  const [slotsFilter,     setSlotsFilter]     = useState("all");
-  const [activeGroupId,   setActiveGroupId]   = useState<number | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
-  const [qrScanOpen,               setQrScanOpen]               = useState(false);
-  const [createOpen,               setCreateOpen]               = useState(false);
-  const [feedbackOpen,             setFeedbackOpen]             = useState(false);
-  const [endedGroupLocationId,     setEndedGroupLocationId]     = useState<number | null>(null);
-  const [endedGroupLocationName,   setEndedGroupLocationName]   = useState<string>("");
+  const [slotsFilter,        setSlotsFilter]        = useState("all");
+  const [activeGroupId,      setActiveGroupId]      = useState<number | null>(null);
+  const [selectedGroupId,    setSelectedGroupId]    = useState<number | null>(null);
+  const [qrScanOpen,         setQrScanOpen]         = useState(false);
+  const [createOpen,         setCreateOpen]         = useState(false);
+  const [scannedLocationId,  setScannedLocationId]  = useState<number | undefined>(undefined);
+  const [pointsDelta,        setPointsDelta]        = useState<number | null>(null);
+  const [pointRules,         setPointRules]         = useState<Record<string, number>>({});
+  // Session-guard state
+  const [existingSoloSession,  setExistingSoloSession]  = useState(false);   // user has an active solo check-in
+  const [alreadyEarnedToday,   setAlreadyEarnedToday]   = useState(false);   // daily cooldown for group points
+  const [blockToast,           setBlockToast]           = useState<string | null>(null); // inline message
+
+  // If the host disbanded the group the user was in, the group disappears from the
+  // active list but activeGroupId stays set — blocking the user from joining again.
+  // This effect detects that and clears the stale state + orphaned membership row.
+  useEffect(() => {
+    if (activeGroupId === null || activeGroupId === -1 || !currentUser) return;
+    const stillActive = groups.some((g) => g.id === activeGroupId);
+    if (!stillActive) {
+      // Remove the stale membership row so join counts stay accurate
+      supabase
+        .from("study_group_members")
+        .delete()
+        .eq("group_id", activeGroupId)
+        .eq("user_id", currentUser.id)
+        .then(() => {});
+      setActiveGroupId(null);
+    }
+  }, [groups, activeGroupId, currentUser, supabase]);
 
   // Always derive live group data from current state so dialog re-renders on join/leave
   const selectedGroup = selectedGroupId !== null
@@ -763,16 +934,18 @@ function FinderPageContent() {
   // ── Derived filtered list ──────────────────
   const filteredGroups = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return groups.filter((g) => {
-      if (!g.is_active) return false;
-      const matchesSearch   = q === "" || g.subject.toLowerCase().includes(q);
-      const matchesLocation = locationFilter === "all" || g.location_id === Number(locationFilter);
-      const matchesSlots    =
-        slotsFilter === "all"       ? true :
-        slotsFilter === "available" ? g.current_members < g.max_members :
-                                      g.current_members >= g.max_members;
-      return matchesSearch && matchesLocation && matchesSlots;
-    });
+    return groups
+      .filter((g) => {
+        if (!g.is_active) return false;
+        const matchesSearch   = q === "" || g.subject.toLowerCase().includes(q);
+        const matchesLocation = locationFilter === "all" || g.location_id === Number(locationFilter);
+        const matchesSlots    =
+          slotsFilter === "all"       ? true :
+          slotsFilter === "available" ? g.current_members < g.max_members :
+                                        g.current_members >= g.max_members;
+        return matchesSearch && matchesLocation && matchesSlots;
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [groups, searchQuery, locationFilter, slotsFilter]);
 
   const activeFilterCount = [
@@ -789,76 +962,82 @@ function FinderPageContent() {
 
   // ── Handlers ──────────────────────────────
 
-  const handleJoinGroup = async (id: number) => {
-    if (!currentUser || activeGroupId !== null) return;
-    const group = groups.find((g) => g.id === id);
-    if (!group || group.current_members >= group.max_members) return;
-    const { error } = await joinStudyGroup(supabase, id, currentUser.id);
-    if (error) { console.error("[handleJoinGroup]", error); return; }
-
-    // Award points for joining a study group
-    const { data: rule } = await supabase
-      .from("point_rules")
-      .select("points_awarded")
-      .eq("action_name", POINT_ACTIONS.JOIN_STUDY_GROUP)
-      .eq("is_active", true)
-      .single();
-    if (rule?.points_awarded) {
-      await supabase.rpc("increment_points", {
-        user_id: currentUser.id,
-        amount:  rule.points_awarded,
-      });
+  const showPointsAnim = (action: string) => {
+    const pts = pointRules[action] ?? 0;
+    if (pts > 0) {
+      setPointsDelta(pts);
+      setTimeout(() => setPointsDelta(null), 2500);
     }
+  };
 
+  const showBlockToast = (msg: string) => {
+    setBlockToast(msg);
+    setTimeout(() => setBlockToast(null), 4000);
+  };
+
+  const handleJoinGroup = async (id: number) => {
+    if (!currentUser) return;
+    // Guard: one active session at a time
+    if (activeGroupId !== null) {
+      showBlockToast("Leave your current study session first before joining another.");
+      return;
+    }
+    if (existingSoloSession) {
+      showBlockToast("You have an active solo check-in. End it on the location page before joining a group.");
+      return;
+    }
+    const { error } = await joinStudyGroup(supabase, id, currentUser.id);
+    if (error) {
+      showBlockToast(error === "This study group is full." ? "This session is already full." : error);
+      return;
+    }
+    // Optimistic update: bump the card count immediately
+    setGroups((prev) =>
+      prev.map((g) => g.id === id ? { ...g, current_members: g.current_members + 1 } : g)
+    );
+    // Daily cooldown: only award points once per day
+    if (!alreadyEarnedToday) {
+      await awardPoints(supabase, currentUser.id, POINT_ACTIONS.JOIN_STUDY_GROUP);
+      showPointsAnim(POINT_ACTIONS.JOIN_STUDY_GROUP);
+      setAlreadyEarnedToday(true);
+      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+    }
     setActiveGroupId(id);
     await fetchGroups();
   };
 
   const handleLeaveGroup = async (id: number) => {
-    if (!currentUser) return;
-    const group = groups.find((g) => g.id === id);
+    if (!currentUser || activeGroupId !== id) return;
     const { error } = await leaveStudyGroup(supabase, id, currentUser.id);
     if (error) { console.error("[handleLeaveGroup]", error); return; }
+    // Optimistic update: drop the card count immediately
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.id === id ? { ...g, current_members: Math.max(0, g.current_members - 1) } : g
+      )
+    );
     setActiveGroupId(null);
-    setSelectedGroupId(null);
     await fetchGroups();
-    if (group) {
-      setEndedGroupLocationId(group.location_id);
-      setEndedGroupLocationName(group.locations.name);
-      setFeedbackOpen(true);
-    }
-  };
-
-  const handleGroupFeedbackSubmit = async (data: FeedbackData) => {
-    setFeedbackOpen(false);
-    if (!currentUser || !endedGroupLocationId) return;
-    if (data.comment.trim()) {
-      const rating =
-        data.crowd_status === "empty" ? 5 :
-        data.crowd_status === "busy"  ? 3 : 1;
-      await supabase.from("reviews").insert({
-        location_id: endedGroupLocationId,
-        user_id:     currentUser.id,
-        comment:     data.comment,
-        rating,
-      });
-      const { data: rule } = await supabase
-        .from("point_rules")
-        .select("points_awarded")
-        .eq("action_name", "leave_review")
-        .eq("is_active", true)
-        .single();
-      if (rule?.points_awarded) {
-        await supabase.rpc("increment_points", {
-          user_id: currentUser.id,
-          amount:  rule.points_awarded,
-        });
-      }
-    }
   };
 
   const handleCreate = async (form: CreateForm) => {
     if (!currentUser) return;
+    // Guard: one active session at a time
+    if (activeGroupId !== null) {
+      showBlockToast("You're already in a study session. Leave it first before creating a new one.");
+      return;
+    }
+    if (existingSoloSession) {
+      showBlockToast("You have an active solo check-in. End it on the location page before creating a group.");
+      return;
+    }
+
+    // Optimistic: close the dialog and mark a pending group immediately (-1 signals
+    // "in flight") so the session guards block double-creates during the DB round-trip.
+    setCreateOpen(false);
+    setScannedLocationId(undefined);
+    setActiveGroupId(-1);
+
     const { data, error } = await createStudyGroup(supabase, {
       host_id:     currentUser.id,
       location_id: form.location_id,
@@ -866,22 +1045,19 @@ function FinderPageContent() {
       description: form.description,
       max_members: form.max_members,
     });
-    if (error || !data) { console.error("[handleCreate]", error); return; }
-
-    // Award points for creating a study group
-    const { data: rule } = await supabase
-      .from("point_rules")
-      .select("points_awarded")
-      .eq("action_name", POINT_ACTIONS.CREATE_STUDY_GROUP)
-      .eq("is_active", true)
-      .single();
-    if (rule?.points_awarded) {
-      await supabase.rpc("increment_points", {
-        user_id: currentUser.id,
-        amount:  rule.points_awarded,
-      });
+    if (error || !data) {
+      console.error("[handleCreate]", error);
+      setActiveGroupId(null); // rollback
+      showBlockToast("Failed to create group. Please try again.");
+      return;
     }
-
+    // Daily cooldown: only award points once per day
+    if (!alreadyEarnedToday) {
+      await awardPoints(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);
+      showPointsAnim(POINT_ACTIONS.CREATE_STUDY_GROUP);
+      setAlreadyEarnedToday(true);
+      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+    }
     setActiveGroupId(data.id);
     await fetchGroups();
   };
@@ -893,33 +1069,76 @@ function FinderPageContent() {
         <GroupDetailDialog
           group={selectedGroup}
           activeGroupId={activeGroupId}
-          currentUserId={currentUser?.id ?? null}
+          supabase={supabase}
           onJoin={handleJoinGroup}
           onLeave={handleLeaveGroup}
           onClose={() => setSelectedGroupId(null)}
         />
       )}
 
-      {/* Review modal — shown after ending/leaving a study group */}
-      <FeedbackModal
-        open={feedbackOpen}
-        locationName={endedGroupLocationName}
-        onOpenChange={(open) => { if (!open) setFeedbackOpen(false); }}
-        onSubmit={handleGroupFeedbackSubmit}
-      />
+      {/* Floating points animation */}
+      <AnimatePresence>
+        {pointsDelta !== null && (
+          <motion.div
+            key="pts-delta"
+            initial={{ opacity: 1, y: 0, scale: 0.9 }}
+            animate={{ opacity: 0, y: -60, scale: 1.15 }}
+            transition={{ duration: 2.2, ease: "easeOut" }}
+            className="fixed top-24 right-4 z-50 flex items-center gap-1.5 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
+          >
+            <Coins size={16} />
+            +{pointsDelta} pts
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* QR scanner — gates the create flow */}
+      {/* Block toast */}
+      <AnimatePresence>
+        {blockToast && (
+          <motion.div
+            key="block-toast"
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0,  scale: 1    }}
+            exit={{    opacity: 0, y: 8,   scale: 0.97 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-start gap-2.5 bg-ink text-surface text-sm font-medium px-4 py-3 rounded-2xl shadow-xl max-w-xs w-[calc(100vw-2rem)]"
+          >
+            <AlertCircle size={16} className="text-gold shrink-0 mt-0.5" />
+            {blockToast}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* QR scanner — scans location QR, auto-detects location for the create form */}
       <QRScannerModal
         open={qrScanOpen}
         onOpenChange={(open) => { if (!open) setQrScanOpen(false); }}
-        onSuccess={() => setCreateOpen(true)}
+        onSuccess={(locationId) => {
+          // Guard before opening create dialog
+          if (activeGroupId !== null) {
+            setQrScanOpen(false);
+            showBlockToast("You're already in a study session. Leave it first before creating a new one.");
+            return;
+          }
+          if (existingSoloSession) {
+            setQrScanOpen(false);
+            showBlockToast("You have an active solo check-in. End it before creating a group.");
+            return;
+          }
+          setScannedLocationId(locationId);
+          setCreateOpen(true);
+        }}
       />
 
       <CreateGroupDialog
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) setScannedLocationId(undefined);
+        }}
         onSubmit={handleCreate}
         locationsList={locationsList}
+        subjects={subjects}
+        defaultLocationId={scannedLocationId}
       />
 
       <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
@@ -973,6 +1192,21 @@ function FinderPageContent() {
             </motion.div>
           );
         })()}
+
+        {/* ── Solo session warning banner ── */}
+        {existingSoloSession && activeGroupId === null && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-5 flex items-center gap-3 px-4 py-3 bg-gold-light border border-gold/30 rounded-2xl"
+          >
+            <AlertCircle size={16} className="text-gold shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-ink">Active check-in session</p>
+              <p className="text-xs text-ink-muted">End your solo session on the location page to start a group.</p>
+            </div>
+          </motion.div>
+        )}
 
         {/* ── Filter & Search Bar ── */}
         <motion.div
@@ -1093,7 +1327,6 @@ function FinderPageContent() {
                 <StudyGroupCard
                   group={group}
                   activeGroupId={activeGroupId}
-                  currentUserId={currentUser?.id ?? null}
                   onSelect={() => setSelectedGroupId(group.id)}
                   onJoin={handleJoinGroup}
                   onLeave={handleLeaveGroup}

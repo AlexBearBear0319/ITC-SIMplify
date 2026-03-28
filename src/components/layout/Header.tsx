@@ -79,7 +79,7 @@ export default function Header() {
   const handleLogOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/auth/login");
+    window.location.href = "/auth/login";
   };
 
   const displayName = profile?.full_name || profile?.username || null;
