@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Eye, EyeOff, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
@@ -229,6 +229,8 @@ function SignUpForm({ onSuccess }: { onSuccess: (msg: string) => void }) {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const linkError = searchParams.get("error");
   const [mode, setMode] = useState<FormMode>("login");
   const [signupSuccess, setSignupSuccess] = useState<string | null>(null);
 
@@ -272,6 +274,19 @@ export default function LoginPage() {
             </motion.div>
           </AnimatePresence>
         </div>
+
+        {/* Invalid/expired reset link banner */}
+        <AnimatePresence>
+          {linkError === "invalid_or_expired_link" && (
+            <motion.p
+              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="flex items-center gap-2 text-xs text-alert bg-alert-light rounded-xl px-4 py-2.5 mb-4"
+            >
+              <AlertCircle size={14} className="shrink-0" />
+              That reset link has expired or is invalid. Please request a new one.
+            </motion.p>
+          )}
+        </AnimatePresence>
 
         {/* Card */}
         <div className="bg-surface rounded-2xl border border-border shadow-sm p-6">

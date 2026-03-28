@@ -157,7 +157,7 @@ export async function forgotPasswordAction(
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${siteUrl}/auth/reset-password`,
+    redirectTo: `${siteUrl}/auth/confirm?next=/auth/reset-password`,
   });
 
   if (error) return { error: error.message };

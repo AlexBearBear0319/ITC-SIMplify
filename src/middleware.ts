@@ -31,9 +31,11 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isAuthPage = pathname.startsWith("/auth/");
+  // Reset-password requires an active recovery session, so never redirect away.
+  const isResetPage = pathname === "/auth/reset-password";
 
   // ── 1. Logged-in user visiting an auth page → send to dashboard ───────────
-  if (isAuthPage && user) {
+  if (isAuthPage && user && !isResetPage) {
     return redirect("/", request, response);
   }
 
