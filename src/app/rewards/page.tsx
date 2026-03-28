@@ -405,6 +405,7 @@ function CheckoutDialog({
 
 export default function RewardsPage() {
   const [user, setUser]               = useState<UserRewards | null>(null);
+  const [userId, setUserId]           = useState<string | null>(null);
   const [items, setItems]             = useState<RedemptionItem[]>([]);
   const [loading, setLoading]         = useState(true);
   const [points, setPoints]           = useState(0);
@@ -416,6 +417,7 @@ export default function RewardsPage() {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user: authUser } }) => {
       if (!authUser) { setLoading(false); return; }
+      setUserId(authUser.id);
       Promise.all([
         supabase
           .from("profiles")
@@ -448,11 +450,46 @@ export default function RewardsPage() {
     setDialogOpen(true);
   }
 
-  function handleConfirm() {
-    if (!selectedItem) return;
-    // Optimistic deduction — triggers the gold flash on the balance card
-    setPoints((prev) => prev - selectedItem.cost);
-    // TODO: await supabase.rpc("redeem_item", { p_user_id: userId, p_item_id: selectedItem.id })
+  async function handleConfirm() {
+    if (!selectedItem || !userId) return;
+
+    const supabase = createClient();
+    const cost = selectedItem.cost;
+
+    // Optimistic: deduct points and decrement stock in the UI immediately
+    setPoints((prev) => prev - cost);
+    setItems((prev) =>
+      prev.map((i) => i.id === selectedItem.id ? { ...i, stock: Math.max(0, i.stock - 1) } : i)
+    );
+
+    // 1. Deduct points from the DB
+    const { error: pointsError } = await supabase.rpc("increment_points", {
+      user_id: userId,
+      amount:  -cost,
+    });
+
+    if (pointsError) {
+      // Rollback both optimistic updates
+      setPoints((prev) => prev + cost);
+      setItems((prev) =>
+        prev.map((i) => i.id === selectedItem.id ? { ...i, stock: i.stock + 1 } : i)
+      );
+      console.error("[redeem] Failed to deduct points:", pointsError.message);
+      return;
+    }
+
+    // 2. Decrement stock on the item
+    await supabase
+      .from("redemption_items")
+      .update({ stock: selectedItem.stock - 1 })
+      .eq("id", selectedItem.id);
+
+    // 3. Record the redemption for admin tracking
+    await supabase.from("user_redemptions").insert({
+      user_id: userId,
+      item_id: selectedItem.id,
+      status:  "pending",
+    });
   }
 
   function handleClose() {

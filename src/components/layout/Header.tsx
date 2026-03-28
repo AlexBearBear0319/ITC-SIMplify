@@ -8,6 +8,7 @@ import { createClient } from "@/utils/supabase/client";
 
 type UserProfile = {
   username: string;
+  full_name: string | null;
   avatar_url: string | null;
   points: number;
   is_admin: boolean;
@@ -38,20 +39,27 @@ export default function Header() {
     Object.entries(PAGE_TITLES).find(([key]) => key !== "/" && pathname.startsWith(key))?.[1] ??
     "SIMplify";
 
-  // Fetch real profile on mount
-  useEffect(() => {
+  // Fetch real profile — re-runs on navigation and when Settings dispatches 'profile-updated'
+  const fetchProfile = () => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
       supabase
         .from("profiles")
-        .select("username, avatar_url, points, is_admin")
+        .select("username, full_name, avatar_url, points, is_admin")
         .eq("id", user.id)
         .single()
         .then(({ data }) => {
           if (data) setProfile(data as UserProfile);
         });
     });
+  };
+
+  useEffect(() => { fetchProfile(); }, [pathname]);
+
+  useEffect(() => {
+    window.addEventListener("profile-updated", fetchProfile);
+    return () => window.removeEventListener("profile-updated", fetchProfile);
   }, []);
 
   // Close on outside click
@@ -74,8 +82,9 @@ export default function Header() {
     window.location.href = "/auth/login";
   };
 
-  const initials = profile?.username
-    ? profile.username.slice(0, 2).toUpperCase()
+  const displayName = profile?.full_name || profile?.username || null;
+  const initials = displayName
+    ? displayName.slice(0, 2).toUpperCase()
     : "…";
 
   return (
@@ -102,7 +111,7 @@ export default function Header() {
           </div>
           <div className="hidden sm:flex flex-col items-start leading-none">
             <span className="text-xs font-semibold text-ink">
-              {profile?.username ?? "…"}
+              {displayName ?? "…"}
             </span>
             <span className="text-[10px] text-gold font-medium mt-0.5">
               ✦ {profile ? profile.points.toLocaleString() : "—"} pts
@@ -119,7 +128,7 @@ export default function Header() {
           <div className="absolute top-full right-0 mt-2 w-52 bg-surface border border-border rounded-2xl shadow-md py-1.5 overflow-hidden">
             <div className="px-4 py-2 border-b border-border mb-1">
               <p className="text-sm font-semibold text-ink">
-                {profile?.username ?? "Loading…"}
+                {displayName ?? "Loading…"}
               </p>
               <div className="flex items-center gap-1 mt-0.5">
                 <Coins size={12} className="text-gold" />

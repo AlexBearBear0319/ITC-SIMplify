@@ -120,7 +120,7 @@ export async function signUpAction(
   }
 
   // ── Create Supabase Auth user ─────────────────────────────────────────────
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email:    parsed.data.email,
     password: parsed.data.password,
     options:  {
@@ -133,6 +133,15 @@ export async function signUpAction(
       return { error: "An account with this email already exists." };
     }
     return { error: error.message };
+  }
+
+  // Supabase returns identities: [] when the email already exists (verified or
+  // unverified). It doesn't surface an error to prevent user enumeration, but
+  // it silently creates a session — which lets unverified users bypass email
+  // confirmation. Sign them out and surface a clear message instead.
+  if ((data.user?.identities?.length ?? 0) === 0) {
+    await supabase.auth.signOut();
+    return { error: "An account with this email already exists. Please sign in or check your inbox for the verification email." };
   }
 
   return { success: true, message: "Account created! Check your email to verify your address." };

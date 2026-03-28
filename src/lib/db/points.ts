@@ -1,18 +1,16 @@
 // ============================================================
-// DATABASE QUERIES: POINTS & REWARDS
+// DB QUERIES: POINTS & REWARDS
 // ============================================================
-// Functions for the gamification system: earning points, completing
-// missions, and redeeming rewards from the store.
+// All the gamification stuff: earning points, missions, redeeming rewards.
 //
-// POINTS FLOW:
-//   1. Student does an action (check-in, review, join group...)
-//   2. App calls awardPoints() → looks up the rule, adds points to profile
-//   3. App checks for completed missions → awards bonus points
-//   4. Student redeems points for items → calls redeemItem()
+// How points work:
+//   1. Student does something (check-in, leaves a review, joins a group...)
+//   2. We call awardPoints() which looks up the rule and adds to their profile
+//   3. After that we check if any missions got completed and award bonus points
+//   4. Student can redeem their points for rewards via redeemItem()
 //
-// POINT RULES are stored in the `point_rules` table.
-// Admins can adjust how many points each action gives without
-// changing any code — just update the database row.
+// Point values are stored in the point_rules table so admins can change
+// how much each action is worth without touching any code, just update the DB row.
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -21,8 +19,9 @@ import type { DbResult, Mission, PointRule, RedemptionItem, UserMission, UserRed
 // ─── ACTION NAMES ─────────────────────────────────────────────────────────────
 
 /**
- * The names of actions that can earn points.
- * These must match exactly what's stored in the `point_rules.action_name` column.
+ * Constants for the action names we use to look up point rules.
+ * These strings have to match exactly what's in the point_rules.action_name column,
+ * so using constants here means we dont have to remember the exact strings everywhere.
  */
 export const POINT_ACTIONS = {
   CHECK_IN: 'check_in',
@@ -36,26 +35,30 @@ export type PointAction = typeof POINT_ACTIONS[keyof typeof POINT_ACTIONS]
 // ─── AWARD POINTS ─────────────────────────────────────────────────────────────
 
 /**
- * Awards points to a student for completing an action.
+ * Gives points to a student for completing an action.
  *
- * Steps:
- *   1. Looks up how many points the action is worth (from point_rules table)
- *   2. Adds those points to the student's profile
- *   3. Returns the updated point total
+ * Two steps:
+ *   1. Look up how many points the action is worth from point_rules
+ *   2. Add that amount to the student's profile using an RPC call
  *
- * Cooldown: If the action has a cooldown set, and the student did it recently,
- * no points are awarded. (Full cooldown logic would require a points_log table —
- * add that to Supabase if you want strict enforcement.)
+ * We use an RPC (stored procedure on the DB side) instead of doing
+ * points = points + X on the client, because if two check-ins happen
+ * at the same time they could both read the same old value and one
+ * update would overwrite the other. The RPC handles this atomically
+ * (similar to how you'd use a mutex in OS / concurrency lecture stuff).
  *
- * @param userId     - The student receiving the points
- * @param actionName - The action being rewarded (use POINT_ACTIONS constants above)
+ * If no rule is found for the action, we just return 0 points, not an error.
+ * That way disabled actions silently do nothing.
+ *
+ * @param userId     - the student getting the points
+ * @param actionName - which action they did (use POINT_ACTIONS constants)
  */
 export async function awardPoints(
   supabase: SupabaseClient,
   userId: string,
   actionName: PointAction,
 ): Promise<DbResult<number>> {
-  // Step 1: Find the point rule for this action
+  // look up the point rule for this action
   const { data: rule, error: ruleError } = await supabase
     .from('point_rules')
     .select('*')
@@ -64,18 +67,17 @@ export async function awardPoints(
     .single()
 
   if (ruleError || !rule) {
-    // No rule found means this action doesn't earn points (or is disabled)
-    console.warn(`[awardPoints] No active rule for action: ${actionName}`)
+    // no rule means this action doesnt give points or its been disabled
+    console.warn(`[awardPoints] no active rule for action: ${actionName}`)
     return { data: 0, error: null }
   }
 
   const pointsToAdd = (rule as PointRule).points_awarded ?? 0
 
-  // Step 2: Add points to the student's profile using a Postgres RPC function.
-  // We use an RPC (remote procedure call) to do the math on the database side,
-  // which avoids race conditions if multiple check-ins happen at the same time.
+  // use increment_points RPC to do the addition on the DB side
+  // avoids race conditions if two updates happen at the same time
   //
-  // NOTE: You need to create this function in Supabase SQL Editor:
+  // you need this function in Supabase SQL Editor:
   //
   //   create or replace function increment_points(user_id uuid, amount integer)
   //   returns integer language plpgsql as $$
@@ -91,7 +93,7 @@ export async function awardPoints(
     .rpc('increment_points', { user_id: userId, amount: pointsToAdd })
 
   if (updateError) {
-    console.error(`[awardPoints] Failed to add points for ${actionName}:`, updateError.message)
+    console.error(`[awardPoints] failed to add points for ${actionName}:`, updateError.message)
     return { data: null, error: updateError.message }
   }
 
@@ -101,8 +103,8 @@ export async function awardPoints(
 // ─── GET POINT RULES ──────────────────────────────────────────────────────────
 
 /**
- * Fetches all active point rules.
- * Use this to display a "how to earn points" guide in the app.
+ * Gets all active point rules from the DB.
+ * Could use this to show a "how to earn points" list somewhere in the UI.
  */
 export async function getPointRules(
   supabase: SupabaseClient,
@@ -124,8 +126,9 @@ export async function getPointRules(
 // ─── REDEMPTION STORE ─────────────────────────────────────────────────────────
 
 /**
- * Fetches all items available in the rewards store.
- * Only shows items that are active and still in stock.
+ * Gets all items currently available in the rewards store.
+ * Filters to only show items that are active and still in stock.
+ * Sorted cheapest first so students can see what they can afford.
  */
 export async function getRedemptionItems(
   supabase: SupabaseClient,
@@ -134,8 +137,8 @@ export async function getRedemptionItems(
     .from('redemption_items')
     .select('*')
     .eq('is_active', true)
-    .gt('stock', 0)              // Only show items that are in stock
-    .order('cost', { ascending: true })  // Cheapest items first
+    .gt('stock', 0)              // only show items that are still in stock
+    .order('cost', { ascending: true })  // cheapest first
 
   if (error) {
     console.error('[getRedemptionItems]', error.message)
@@ -147,21 +150,26 @@ export async function getRedemptionItems(
 
 /**
  * Redeems a reward item for a student.
- * Deducts the item's cost from their points and creates a redemption record.
+ * Deducts the item cost from their points and creates a redemption record.
  *
- * Returns an error if:
- *   - The student doesn't have enough points
- *   - The item is out of stock
+ * Multi-step process (basically a mini-transaction):
+ *   1. Fetch the item and student profile at the same time (Promise.all so its not sequential)
+ *   2. Check stock and that they have enough points
+ *   3. Deduct points from profile
+ *   4. Decrement item stock
+ *   5. Create the redemption record
  *
- * @param userId - The student redeeming the item
- * @param itemId - The reward item they want
+ * Returns an error early if they cant afford it or item is sold out.
+ *
+ * @param userId - the student buying the reward
+ * @param itemId - the reward item they want
  */
 export async function redeemItem(
   supabase: SupabaseClient,
   userId: string,
   itemId: number,
 ): Promise<DbResult<UserRedemption>> {
-  // Step 1: Fetch the item and the student's current points together
+  // fetch the item and profile in parallel since they dont depend on each other
   const [itemResult, profileResult] = await Promise.all([
     supabase.from('redemption_items').select('cost, stock, is_active').eq('id', itemId).single(),
     supabase.from('profiles').select('points').eq('id', userId).single(),
@@ -177,7 +185,7 @@ export async function redeemItem(
   const item = itemResult.data
   const profile = profileResult.data
 
-  // Step 2: Validate stock and points
+  // validate before we touch anything
   if (!item.is_active || item.stock <= 0) {
     return { data: null, error: 'This item is no longer available.' }
   }
@@ -185,24 +193,24 @@ export async function redeemItem(
     return { data: null, error: `Not enough points. You need ${item.cost} points.` }
   }
 
-  // Step 3: Deduct points from the student's profile
+  // deduct the cost from their profile
   const { error: deductError } = await supabase
     .from('profiles')
     .update({ points: (profile.points ?? 0) - item.cost })
     .eq('id', userId)
 
   if (deductError) {
-    console.error('[redeemItem] Failed to deduct points:', deductError.message)
+    console.error('[redeemItem] failed to deduct points:', deductError.message)
     return { data: null, error: deductError.message }
   }
 
-  // Step 4: Decrement the item's stock
+  // reduce the stock by 1
   await supabase
     .from('redemption_items')
     .update({ stock: item.stock - 1 })
     .eq('id', itemId)
 
-  // Step 5: Create the redemption record
+  // create the redemption record (status starts as "pending" until admin confirms)
   const { data: redemption, error: redemptionError } = await supabase
     .from('user_redemptions')
     .insert({ user_id: userId, item_id: itemId, status: 'pending' })
@@ -210,7 +218,7 @@ export async function redeemItem(
     .single()
 
   if (redemptionError) {
-    console.error('[redeemItem] Failed to create redemption record:', redemptionError.message)
+    console.error('[redeemItem] failed to create redemption record:', redemptionError.message)
     return { data: null, error: redemptionError.message }
   }
 
@@ -218,9 +226,10 @@ export async function redeemItem(
 }
 
 /**
- * Fetches a student's full redemption history.
+ * Gets all redemptions a student has made, newest first.
+ * Shows their purchase history basically.
  *
- * @param userId - The student's profile ID
+ * @param userId - the student's profile ID
  */
 export async function getUserRedemptions(
   supabase: SupabaseClient,
@@ -243,13 +252,13 @@ export async function getUserRedemptions(
 // ─── MISSIONS ─────────────────────────────────────────────────────────────────
 
 /**
- * Fetches all missions (challenges) together with the student's progress on each.
- * Use this to display the missions/challenges screen.
+ * Gets all missions with the student's progress on each one.
+ * Does a join with the missions table so we get the mission details too.
  *
- * Returns each mission as a UserMission row (with progress + is_completed).
- * If the student hasn't started a mission yet, it won't appear in this list.
+ * Only shows missions the student has started. If they havent touched a
+ * mission yet it wont appear here (no row in user_mission yet).
  *
- * @param userId - The student to fetch missions for
+ * @param userId - the student to get missions for
  */
 export async function getUserMissions(
   supabase: SupabaseClient,
@@ -257,7 +266,7 @@ export async function getUserMissions(
 ): Promise<DbResult<UserMission[]>> {
   const { data, error } = await supabase
     .from('user_mission')
-    .select('*, missions(*)')   // Join with the missions table to get mission details
+    .select('*, missions(*)')   // join to get the mission details alongside progress
     .eq('user_id', userId)
     .order('last_updated', { ascending: false })
 
@@ -270,8 +279,9 @@ export async function getUserMissions(
 }
 
 /**
- * Fetches all available missions (regardless of user progress).
- * Use this to show the full mission list, including ones not yet started.
+ * Gets every mission regardless of whether the student has started it.
+ * Use this for showing the full mission list including ones they havent touched.
+ * Sorted by reward so the most valuable ones show up first.
  */
 export async function getAllMissions(
   supabase: SupabaseClient,
@@ -279,7 +289,7 @@ export async function getAllMissions(
   const { data, error } = await supabase
     .from('missions')
     .select('*')
-    .order('reward_points', { ascending: false })  // Highest reward first
+    .order('reward_points', { ascending: false })  // highest reward first
 
   if (error) {
     console.error('[getAllMissions]', error.message)
@@ -290,14 +300,18 @@ export async function getAllMissions(
 }
 
 /**
- * Updates a student's progress on a specific mission.
- * Call this whenever they do an action that counts toward a mission.
- * If progress reaches target_count, marks the mission as completed
- * and awards the bonus points.
+ * Updates the student's progress on a specific mission.
+ * Call this whenever they do something that counts toward the mission.
  *
- * @param userId    - The student
- * @param missionId - The mission to update
- * @param newProgress - The new progress count (e.g., 3 check-ins done out of 5)
+ * Uses upsert so it handles both the "first update" and "subsequent updates" cases
+ * without needing a separate check (like INSERT ... ON CONFLICT DO UPDATE in SQL).
+ *
+ * If newProgress hits the target_count, the mission gets marked as completed and
+ * we award the bonus points automatically.
+ *
+ * @param userId      - the student
+ * @param missionId   - which mission to update
+ * @param newProgress - their new progress count, e.g. 3 check-ins out of 5
  */
 export async function updateMissionProgress(
   supabase: SupabaseClient,
@@ -305,7 +319,7 @@ export async function updateMissionProgress(
   missionId: number,
   newProgress: number,
 ): Promise<DbResult<UserMission>> {
-  // First, get the mission to know the target_count and reward
+  // get the mission so we know the target and reward amount
   const { data: mission, error: missionError } = await supabase
     .from('missions')
     .select('target_count, reward_points')
@@ -318,7 +332,7 @@ export async function updateMissionProgress(
 
   const isCompleted = newProgress >= (mission.target_count ?? 1)
 
-  // Update or insert the user_mission record
+  // upsert the progress row (insert if new, update if already exists)
   const { data, error } = await supabase
     .from('user_mission')
     .upsert(
@@ -329,7 +343,7 @@ export async function updateMissionProgress(
         is_completed: isCompleted,
         last_updated: new Date().toISOString(),
       },
-      { onConflict: 'user_id,mission_id' },  // Update if already exists
+      { onConflict: 'user_id,mission_id' },  // if the row already exists, update it
     )
     .select()
     .single()
@@ -339,7 +353,7 @@ export async function updateMissionProgress(
     return { data: null, error: error.message }
   }
 
-  // If mission was just completed, award the bonus points
+  // if they just completed the mission, give them the bonus points
   if (isCompleted && (mission.reward_points ?? 0) > 0) {
     await supabase.rpc('increment_points', {
       user_id: userId,

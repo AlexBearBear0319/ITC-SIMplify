@@ -288,14 +288,15 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       user_id:  currentUserId,
     });
 
-    // Create active_sessions row so seat count is reflected
+    // Create active_sessions row so seat count is reflected.
+    // Only 1 seat is occupied now (the host) — seats_taken grows as members join.
     await supabase.from("active_sessions").insert({
       user_id:          currentUserId,
       location_id:      locationId,
       activity:         "study_group",
       module:           data.topic || null,
       duration_minutes: 120,
-      seats_taken:      data.max_members,
+      seats_taken:      1,
       is_active:        true,
     });
 

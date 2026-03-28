@@ -1,12 +1,12 @@
 // ============================================================
-// DATABASE QUERIES: PROFILES (Student Accounts)
+// DB QUERIES: PROFILES (student accounts)
 // ============================================================
-// Functions for reading and updating student profile data.
-// Each profile is tied to a Supabase Auth user (same UUID).
+// Functions for reading and writing student profile data.
+// Each profile row is linked to a Supabase Auth user (same UUID as the primary key).
 //
-// IMPORTANT: A profile is automatically created when a student signs up.
-//            You can set this up with a Supabase database trigger or by
-//            calling createProfile() in your sign-up handler.
+// Profiles are created automatically when a student signs up,
+// either via a DB trigger or by calling createProfile() in the
+// sign-up handler. Each student should only ever have one profile row.
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -15,10 +15,10 @@ import type { DbResult, Profile } from '@/lib/types/database'
 // ─── GET ONE PROFILE ──────────────────────────────────────────────────────────
 
 /**
- * Fetches a student's profile by their user ID.
- * Use this to display their name, points, level, streak etc.
+ * Gets a student's profile by their user ID.
+ * Use this when you already have the UUID and just need the profile data.
  *
- * @param userId - The student's UUID (from supabase.auth.getUser())
+ * @param userId - the student's UUID (same one from supabase.auth.getUser())
  */
 export async function getProfile(
   supabase: SupabaseClient,
@@ -41,22 +41,23 @@ export async function getProfile(
 // ─── GET LOGGED-IN USER'S OWN PROFILE ────────────────────────────────────────
 
 /**
- * Fetches the profile of the currently logged-in student.
- * Combines getUser() and getProfile() into one convenient call.
+ * Gets the profile of whoever is currently logged in.
+ * Basically just wraps getUser() + getProfile() into one call so you
+ * dont have to do it manually every time.
  *
- * Returns null data (not an error) if no one is logged in.
+ * Returns null data (not an error) if nobody is logged in.
  */
 export async function getMyProfile(
   supabase: SupabaseClient,
 ): Promise<DbResult<Profile | null>> {
-  // First, get the authenticated user from Supabase Auth
+  // first get the auth user to find out who's logged in
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser()
 
   if (authError || !user) {
-    // No one is logged in — return null without treating it as an error
+    // nobody logged in, thats fine, just return null
     return { data: null, error: null }
   }
 
@@ -66,12 +67,14 @@ export async function getMyProfile(
 // ─── CREATE PROFILE ───────────────────────────────────────────────────────────
 
 /**
- * Creates a new profile row for a student after they sign up.
- * Call this in your sign-up route/action right after auth.signUp().
+ * Creates a new profile row for a student right after they sign up.
+ * Should be called in the sign-up handler right after auth.signUp() succeeds.
  *
- * @param userId   - The new user's UUID from Supabase Auth
- * @param username - The username they chose during sign-up
- * @param fullName - Their full name (optional)
+ * Starts them at 0 points, level 1, and no streak (all the base case values).
+ *
+ * @param userId   - the new user's UUID from Supabase Auth
+ * @param username - the username they picked during sign-up
+ * @param fullName - their full name (optional)
  */
 export async function createProfile(
   supabase: SupabaseClient,
@@ -85,9 +88,9 @@ export async function createProfile(
       id: userId,
       username,
       full_name: fullName ?? null,
-      points: 0,       // Start with 0 points
-      level: 1,        // Start at level 1
-      streak_days: 0,  // No streak yet
+      points: 0,       // everyone starts at 0
+      level: 1,        // level 1 is the starting level
+      streak_days: 0,  // no streak yet
     })
     .select()
     .single()
@@ -103,14 +106,15 @@ export async function createProfile(
 // ─── UPDATE PROFILE ───────────────────────────────────────────────────────────
 
 /**
- * Updates a student's profile with the given fields.
- * Only provide the fields you want to change — others stay as they are.
+ * Updates specific fields on a student's profile.
+ * Uses Partial<Pick<...>> so you only pass in the fields you actually want to change,
+ * the rest stay the same (partial update, not a full replace).
  *
  * Example:
  *   updateProfile(supabase, userId, { username: 'newname', avatar_url: 'https://...' })
  *
- * @param userId  - The student's UUID
- * @param updates - An object with only the fields to update
+ * @param userId  - the student's UUID
+ * @param updates - object with only the fields to update
  */
 export async function updateProfile(
   supabase: SupabaseClient,
@@ -135,16 +139,18 @@ export async function updateProfile(
 // ─── UPDATE STREAK ────────────────────────────────────────────────────────────
 
 /**
- * Updates a student's check-in streak.
- * Call this after a successful check-in.
+ * Updates the student's check-in streak after they check in.
  *
- * Logic:
- *   - If last check-in was yesterday → increment streak by 1
- *   - If last check-in was today → do nothing (already counted)
- *   - If last check-in was 2+ days ago → reset streak to 1
+ * Logic (basically three cases):
+ *   - checked in yesterday -> increment streak by 1
+ *   - checked in today already -> do nothing, already counted
+ *   - checked in 2+ days ago -> streak resets back to 1
  *
- * @param userId  - The student's UUID
- * @param profile - Their current profile (to read last_checkin_at and streak_days)
+ * We calculate daysDiff using timestamps (converted to ms, divided by ms per day).
+ * This is similar to how you'd diff dates in any language.
+ *
+ * @param userId  - the student's UUID
+ * @param profile - their current profile (we need last_checkin_at and streak_days)
  */
 export async function updateStreak(
   supabase: SupabaseClient,
@@ -154,21 +160,20 @@ export async function updateStreak(
   const now = new Date()
   const lastCheckin = profile.last_checkin_at ? new Date(profile.last_checkin_at) : null
 
-  let newStreak = 1  // Default to 1 (starting or resetting a streak)
+  let newStreak = 1  // default is 1 (either fresh start or streak broke)
 
   if (lastCheckin) {
-    // Calculate how many calendar days since last check-in
     const msPerDay = 1000 * 60 * 60 * 24
     const daysDiff = Math.floor((now.getTime() - lastCheckin.getTime()) / msPerDay)
 
     if (daysDiff === 0) {
-      // Already checked in today — keep streak as-is, don't update
+      // already checked in today, dont change anything
       return { data: profile, error: null }
     } else if (daysDiff === 1) {
-      // Checked in yesterday — extend the streak
+      // checked in yesterday, extend the streak
       newStreak = (profile.streak_days ?? 0) + 1
     }
-    // If daysDiff >= 2, streak resets to 1 (default above)
+    // if daysDiff >= 2 the streak is broken, newStreak stays at 1
   }
 
   const { data, error } = await supabase
@@ -190,13 +195,44 @@ export async function updateStreak(
   return { data: data as Profile, error: null }
 }
 
+// ─── DELETE PROFILE ───────────────────────────────────────────────────────────
+
+/**
+ * Deletes the student's profile row from the profiles table.
+ * Called when they choose to delete their account from settings.
+ *
+ * After this you should also call supabase.auth.signOut() and redirect
+ * them to the login page.
+ *
+ * @param userId - the student's UUID
+ */
+export async function deleteProfile(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<DbResult<null>> {
+  const { error } = await supabase
+    .from('profiles')
+    .delete()
+    .eq('id', userId)
+
+  if (error) {
+    console.error(`[deleteProfile] userId=${userId}`, error.message)
+    return { data: null, error: error.message }
+  }
+
+  return { data: null, error: null }
+}
+
 // ─── GET LEADERBOARD ──────────────────────────────────────────────────────────
 
 /**
- * Fetches the top students ranked by points.
- * Use this to power the leaderboard / rankings page.
+ * Grabs the top students sorted by points, highest first.
+ * Used to populate the leaderboard/rankings page.
  *
- * @param limit - How many students to return (default: 10)
+ * Only selects the columns we actually need on the leaderboard,
+ * dont need to send the whole profile row over the wire.
+ *
+ * @param limit - how many students to return (default 10)
  */
 export async function getLeaderboard(
   supabase: SupabaseClient,
@@ -205,7 +241,7 @@ export async function getLeaderboard(
   const { data, error } = await supabase
     .from('profiles')
     .select('id, username, full_name, avatar_url, points, level, streak_days')
-    .order('points', { ascending: false })  // Highest points first
+    .order('points', { ascending: false })  // highest points first
     .limit(limit)
 
   if (error) {

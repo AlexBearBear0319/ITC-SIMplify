@@ -908,6 +908,24 @@ function FinderPageContent() {
   const [alreadyEarnedToday,   setAlreadyEarnedToday]   = useState(false);   // daily cooldown for group points
   const [blockToast,           setBlockToast]           = useState<string | null>(null); // inline message
 
+  // If the host disbanded the group the user was in, the group disappears from the
+  // active list but activeGroupId stays set — blocking the user from joining again.
+  // This effect detects that and clears the stale state + orphaned membership row.
+  useEffect(() => {
+    if (activeGroupId === null || activeGroupId === -1 || !currentUser) return;
+    const stillActive = groups.some((g) => g.id === activeGroupId);
+    if (!stillActive) {
+      // Remove the stale membership row so join counts stay accurate
+      supabase
+        .from("study_group_members")
+        .delete()
+        .eq("group_id", activeGroupId)
+        .eq("user_id", currentUser.id)
+        .then(() => {});
+      setActiveGroupId(null);
+    }
+  }, [groups, activeGroupId, currentUser, supabase]);
+
   // Always derive live group data from current state so dialog re-renders on join/leave
   const selectedGroup = selectedGroupId !== null
     ? groups.find((g) => g.id === selectedGroupId) ?? null
@@ -1013,6 +1031,13 @@ function FinderPageContent() {
       showBlockToast("You have an active solo check-in. End it on the location page before creating a group.");
       return;
     }
+
+    // Optimistic: close the dialog and mark a pending group immediately (-1 signals
+    // "in flight") so the session guards block double-creates during the DB round-trip.
+    setCreateOpen(false);
+    setScannedLocationId(undefined);
+    setActiveGroupId(-1);
+
     const { data, error } = await createStudyGroup(supabase, {
       host_id:     currentUser.id,
       location_id: form.location_id,
@@ -1020,7 +1045,12 @@ function FinderPageContent() {
       description: form.description,
       max_members: form.max_members,
     });
-    if (error || !data) { console.error("[handleCreate]", error); return; }
+    if (error || !data) {
+      console.error("[handleCreate]", error);
+      setActiveGroupId(null); // rollback
+      showBlockToast("Failed to create group. Please try again.");
+      return;
+    }
     // Daily cooldown: only award points once per day
     if (!alreadyEarnedToday) {
       await awardPoints(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);

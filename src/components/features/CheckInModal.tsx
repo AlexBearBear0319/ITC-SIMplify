@@ -23,6 +23,8 @@ type Props = {
   locationName: string;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: CheckInData) => Promise<void>;
+  defaultValues?: Partial<CheckInData>;
+  editMode?: boolean;
 };
 
 // ─────────────────────────────────────────────
@@ -40,11 +42,11 @@ const DURATION_OPTIONS = [
 // Component
 // ─────────────────────────────────────────────
 
-export default function CheckInModal({ open, locationName, onOpenChange, onSubmit }: Props) {
-  const [seatsNeeded, setSeatsNeeded] = useState(1);
-  const [activity,    setActivity]    = useState<Activity>("study");
-  const [module,      setModule]      = useState("");
-  const [duration,    setDuration]    = useState(60);
+export default function CheckInModal({ open, locationName, onOpenChange, onSubmit, defaultValues, editMode = false }: Props) {
+  const [seatsNeeded, setSeatsNeeded] = useState(defaultValues?.seats_needed ?? 1);
+  const [activity,    setActivity]    = useState<Activity>(defaultValues?.activity ?? "study");
+  const [module,      setModule]      = useState(defaultValues?.module ?? "");
+  const [duration,    setDuration]    = useState(defaultValues?.duration_minutes ?? 60);
   const [submitting,  setSubmitting]  = useState(false);
   const [success,     setSuccess]     = useState(false);
 
@@ -95,15 +97,18 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                 >
                   <CheckCircle2 size={30} className="text-success" />
                 </motion.div>
-                <p className="text-lg font-bold text-ink">Checked In!</p>
+                <p className="text-lg font-bold text-ink">{editMode ? "Session Updated!" : "Checked In!"}</p>
                 <p className="text-sm text-ink-muted mt-1">
-                  Your session has started at{" "}
-                  <span className="font-semibold text-ink">{locationName}</span>.
+                  {editMode ? "Your session details have been updated." : (
+                    <>Your session has started at{" "}<span className="font-semibold text-ink">{locationName}</span>.</>
+                  )}
                 </p>
-                <div className="flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-gold-light rounded-full border border-gold/30">
-                  <Coins size={13} className="text-gold" />
-                  <span className="text-sm font-bold text-gold">+10 pts earned</span>
-                </div>
+                {!editMode && (
+                  <div className="flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-gold-light rounded-full border border-gold/30">
+                    <Coins size={13} className="text-gold" />
+                    <span className="text-sm font-bold text-gold">+10 pts earned</span>
+                  </div>
+                )}
               </motion.div>
             ) : (
               /* ── Form state ── */
@@ -111,7 +116,7 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                 {/* Header */}
                 <div className="flex items-start justify-between p-6 pb-0">
                   <div>
-                    <Dialog.Title className="text-base font-bold text-ink">Check In</Dialog.Title>
+                    <Dialog.Title className="text-base font-bold text-ink">{editMode ? "Edit Session" : "Check In"}</Dialog.Title>
                     <p id="checkin-desc" className="text-xs text-ink-muted mt-0.5 truncate max-w-[220px]">
                       {locationName}
                     </p>
@@ -227,7 +232,9 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                     className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {submitting ? (
-                      <span className="animate-pulse">Checking in…</span>
+                      <span className="animate-pulse">{editMode ? "Saving…" : "Checking in…"}</span>
+                    ) : editMode ? (
+                      "Save Changes"
                     ) : (
                       <><Coins size={14} className="text-gold" /> Confirm Check-In · +10 pts</>
                     )}

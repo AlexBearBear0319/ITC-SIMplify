@@ -434,62 +434,34 @@ export default function ProfilePage() {
   // ── Save profile edits ──
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
+    if (!profile) return;
     setSaveState("saving");
     setSaveError(null);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const updatedFields = {
+      full_name:       editForm.full_name.trim(),
+      username:        editForm.username.trim(),
+      age:             editForm.age ? Number(editForm.age) : null,
+      school_id:       editForm.school_id || null,
+      major_id:        editForm.major_id  || null,
+      education_level: editForm.education_level || null,
+      semester_term:   editForm.semester_term.trim() || null,
+    };
+
+    // Snapshot for rollback, then apply immediately so the UI updates at once.
+    const snapshotProfile = profile;
+    setProfile((prev) => prev ? { ...prev, ...updatedFields } : prev);
 
     const { error } = await supabase
       .from("profiles")
-      .update({
-        full_name:       editForm.full_name.trim(),
-        username:        editForm.username.trim(),
-        age:             editForm.age ? Number(editForm.age) : null,
-        school_id:       editForm.school_id || null,
-        major_id:        editForm.major_id  || null,
-        education_level: editForm.education_level || null,
-        semester_term:   editForm.semester_term.trim() || null,
-      })
-      .eq("id", user.id);
+      .update(updatedFields)
+      .eq("id", profile.id);
 
     if (error) {
+      setProfile(snapshotProfile); // rollback
       setSaveState("error");
       setSaveError(error.message);
       return;
-    }
-
-    // Re-fetch from DB to ensure UI matches what was actually saved
-    const { data: refreshed } = await supabase
-      .from("profiles")
-      .select("id, full_name, username, avatar_url, points, streak_days, age, school_id, major_id, education_level, semester_term")
-      .eq("id", user.id)
-      .single();
-
-    if (refreshed) {
-      setProfile((prev) =>
-        prev
-          ? {
-              ...prev,
-              full_name:       refreshed.full_name       ?? prev.full_name,
-              username:        refreshed.username        ?? prev.username,
-              age:             refreshed.age             ?? null,
-              school_id:       refreshed.school_id       ?? null,
-              major_id:        refreshed.major_id        ?? null,
-              education_level: refreshed.education_level ?? null,
-              semester_term:   refreshed.semester_term   ?? null,
-            }
-          : prev
-      );
-      setEditForm({
-        full_name:       refreshed.full_name       ?? "",
-        username:        refreshed.username        ?? "",
-        age:             refreshed.age != null ? String(refreshed.age) : "",
-        school_id:       refreshed.school_id       ?? 0,
-        major_id:        refreshed.major_id        ?? 0,
-        education_level: refreshed.education_level ?? "",
-        semester_term:   refreshed.semester_term   ?? "",
-      });
     }
 
     setSaveState("saved");

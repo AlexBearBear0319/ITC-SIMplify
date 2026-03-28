@@ -27,6 +27,7 @@ import {
   Clock,
   Users,
   Zap,
+  AlertCircle,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -417,6 +418,13 @@ export default function DashboardPage() {
   // Floating +pts animation
   const [pointsDelta, setPointsDelta] = useState<number | null>(null);
 
+  // Error toast for optimistic rollbacks
+  const [errorToast, setErrorToast] = useState<string | null>(null);
+  const showErrorToast = (msg: string) => {
+    setErrorToast(msg);
+    setTimeout(() => setErrorToast(null), 4000);
+  };
+
   const [userRank, setUserRank] = useState<number | null>(null);
 
   // Computed from active_sessions seat tallies — drives the Peak Hour Alert banner
@@ -711,6 +719,16 @@ export default function DashboardPage() {
 
     const supabase = createClient();
 
+    // Optimistic: show the active-session banner and close the modal immediately.
+    // The session ID is filled in once the DB responds (two-phase).
+    setActiveSession({
+      locationId:   selectedLocation.id,
+      locationName: selectedLocation.name,
+      ...data,
+      endsAt: new Date(Date.now() + data.duration_minutes * 60_000),
+    });
+    setCheckInOpen(false);
+
     // 'seats_needed' in the modal maps to 'seats_taken' in the DB
     const { data: session, error } = await supabase
       .from("active_sessions")
@@ -728,6 +746,8 @@ export default function DashboardPage() {
 
     if (error) {
       console.error("[check-in] Failed to create session:", error.message);
+      setActiveSession(null); // rollback
+      showErrorToast("Check-in failed. Please try again.");
       return;
     }
 
@@ -771,14 +791,6 @@ export default function DashboardPage() {
       .from("locations")
       .update({ current_status: newStatus })
       .eq("id", selectedLocation.id);
-
-    setActiveSession({
-      locationId:   selectedLocation.id,
-      locationName: selectedLocation.name,
-      ...data,
-      endsAt: new Date(Date.now() + data.duration_minutes * 60_000),
-    });
-    setCheckInOpen(false);
   };
 
   // Creates a study group at the selected location, reserves seats, and awards points.
@@ -786,6 +798,18 @@ export default function DashboardPage() {
     if (!selectedLocation || !userId) return;
 
     const supabase = createClient();
+
+    // Optimistic: show the active-session banner and close the modal immediately.
+    setActiveSession({
+      locationId:       selectedLocation.id,
+      locationName:     selectedLocation.name,
+      seats_needed:     data.max_members,
+      activity:         "study",
+      module:           data.topic,
+      duration_minutes: 120,
+      endsAt:           new Date(Date.now() + 120 * 60_000),
+    });
+    setStudyBuddyOpen(false);
 
     // 1. Create the study group
     const { data: group, error: groupError } = await supabase
@@ -803,6 +827,8 @@ export default function DashboardPage() {
 
     if (groupError || !group) {
       console.error("[study-buddy] Failed to create group:", groupError?.message);
+      setActiveSession(null); // rollback
+      showErrorToast("Failed to create study group. Please try again.");
       return;
     }
 
@@ -821,7 +847,7 @@ export default function DashboardPage() {
         activity:         "study_group",
         module:           data.topic || null,
         duration_minutes: 120,
-        seats_taken:      data.max_members,
+        seats_taken:      1,
         is_active:        true,
       })
       .select("id")
@@ -864,19 +890,6 @@ export default function DashboardPage() {
       .from("locations")
       .update({ current_status: newStatus })
       .eq("id", selectedLocation.id);
-
-    // 6. Update local state so the drawer shows "Leave Spot"
-    setActiveSession({
-      locationId:       selectedLocation.id,
-      locationName:     selectedLocation.name,
-      seats_needed:     data.max_members,
-      activity:         "study",
-      module:           data.topic,
-      duration_minutes: 120,
-      endsAt:           new Date(Date.now() + 120 * 60_000),
-    });
-
-    setStudyBuddyOpen(false);
   };
 
   // Ends the session, awards feedback points, optionally saves a review, and
@@ -886,14 +899,34 @@ export default function DashboardPage() {
 
     const supabase = createClient();
 
+    // Snapshot for rollback
+    const snapshotSession   = activeSession;
+    const snapshotSessionId = activeSessionId;
+    const snapshotLocation  = selectedLocation;
+
+    // Optimistic: dismiss the session banner and close the drawer immediately.
+    setActiveSession(null);
+    setActiveSessionId(null);
+    setFeedbackOpen(false);
+    setSelectedLocation(null);
+
     // Soft-delete the session row (keeps the history intact for analytics)
-    await supabase
+    const { error: endError } = await supabase
       .from("active_sessions")
       .update({ is_active: false })
-      .eq("id", activeSessionId);
+      .eq("id", snapshotSessionId);
 
-    // Step 2: Award feedback points (matches the "+15 pts" shown in the modal).
-    // Uses point_rules so admins can tune the value without a code deploy.
+    if (endError) {
+      // Rollback so the user can try again
+      setActiveSession(snapshotSession);
+      setActiveSessionId(snapshotSessionId);
+      setFeedbackOpen(true);
+      setSelectedLocation(snapshotLocation);
+      showErrorToast("Failed to end session. Please try again.");
+      return;
+    }
+
+    // Award feedback points. Uses point_rules so admins can tune without a deploy.
     const { data: feedbackRule } = await supabase
       .from("point_rules")
       .select("points_awarded")
@@ -914,24 +947,24 @@ export default function DashboardPage() {
         data.crowd_status === "busy"  ? 3 : 1;
 
       await supabase.from("reviews").insert({
-        location_id: selectedLocation.id,
+        location_id: snapshotLocation.id,
         user_id:     userId,
         comment:     data.comment,
         rating,
       });
     }
 
-    // Step 5: Recalculate location status now that this session has ended
+    // Recalculate location status now that this session has ended
     const { data: remaining } = await supabase
       .from("active_sessions")
       .select("seats_taken")
-      .eq("location_id", selectedLocation.id)
+      .eq("location_id", snapshotLocation.id)
       .eq("is_active", true);
 
     const totalOccupied = (remaining ?? []).reduce(
       (sum, s) => sum + (s.seats_taken ?? 1), 0
     );
-    const totalSeats = selectedLocation.total_seats ?? 0;
+    const totalSeats = snapshotLocation.total_seats ?? 0;
     const fillPct    = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
     const newStatus: LocationStatus =
       fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
@@ -939,17 +972,13 @@ export default function DashboardPage() {
     await supabase
       .from("locations")
       .update({ current_status: newStatus })
-      .eq("id", selectedLocation.id);
+      .eq("id", snapshotLocation.id);
 
     setLocations((prev) =>
       prev.map((l) =>
-        l.id === selectedLocation.id ? { ...l, current_status: newStatus } : l
+        l.id === snapshotLocation.id ? { ...l, current_status: newStatus } : l
       )
     );
-    setActiveSession(null);
-    setActiveSessionId(null);
-    setFeedbackOpen(false);
-    setSelectedLocation(null);
   };
 
   return (
@@ -966,6 +995,22 @@ export default function DashboardPage() {
           >
             <Coins size={16} />
             +{pointsDelta} pts
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Error toast (optimistic rollback feedback) ── */}
+      <AnimatePresence>
+        {errorToast && (
+          <motion.div
+            key="error-toast"
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0,  scale: 1    }}
+            exit={{    opacity: 0, y: 8,   scale: 0.97 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-start gap-2.5 bg-ink text-surface text-sm font-medium px-4 py-3 rounded-2xl shadow-xl max-w-xs w-[calc(100vw-2rem)]"
+          >
+            <AlertCircle size={16} className="text-alert shrink-0 mt-0.5" />
+            {errorToast}
           </motion.div>
         )}
       </AnimatePresence>
