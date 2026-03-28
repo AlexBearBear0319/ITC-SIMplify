@@ -1,31 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-/**
- * Token-exchange endpoint for all Supabase email flows.
- *
- * PKCE flow (default for @supabase/ssr) — ?code=...
- * Email OTP flow                        — ?token_hash=...&type=...
- *
- * Why we use createServerClient directly (not createClient from server.ts):
- *   server.ts sets cookies via next/headers cookies(), but those mutations are
- *   NOT automatically forwarded when the handler returns a NextResponse.redirect().
- *   We manually attach session cookies to the redirect response instead —
- *   the same pattern the middleware uses.
- */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
-  const code       = searchParams.get("code");
-  const token_hash = searchParams.get("token_hash");
-  const type       = searchParams.get("type") as "recovery" | "signup" | "email" | null;
-  const next       = searchParams.get("next") ?? "/";
+  const code = searchParams.get("code");
 
-  const redirectTo = `${origin}${next}`;
-  const errorTo    = `${origin}/auth/login?error=invalid_or_expired_link`;
+  // Define our destinations right at the top
+  const errorTo = `${origin}/auth/login?error=invalid_or_expired_link`;
+  const successTo = `${origin}/auth/reset-password`;
 
-  // Start with an optimistic success redirect. The setAll callback will
-  // re-create it with session cookies baked in once the exchange succeeds.
-  let redirectResponse = NextResponse.redirect(redirectTo);
+  if (!code) return NextResponse.redirect(errorTo);
+
+  let redirectResponse = NextResponse.redirect(successTo);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,30 +22,34 @@ export async function GET(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          // Mirror onto the request for any subsequent supabase calls.
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          // Re-build the redirect response so the browser receives the tokens.
-          redirectResponse = NextResponse.redirect(redirectTo);
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value),
+          );
+          redirectResponse = NextResponse.redirect(successTo);
           cookiesToSet.forEach(({ name, value, options }) =>
-            redirectResponse.cookies.set(name, value, options)
+            redirectResponse.cookies.set(name, value, options),
           );
         },
       },
-    }
+    },
   );
 
-  if (code) {
-    // PKCE flow
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) return NextResponse.redirect(errorTo);
-  } else if (token_hash && type) {
-    // Email OTP / token_hash flow
-    const { error } = await supabase.auth.verifyOtp({ type, token_hash });
-    if (error) return NextResponse.redirect(errorTo);
-  } else {
+  const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+  if (error) {
+    // FIX: Next.js pre-fetching double-fires the route. Check if already logged in!
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      // Already logged in! Proceed to reset password.
+      return NextResponse.redirect(successTo);
+    }
+
+    // Truly no user, link is invalid.
     return NextResponse.redirect(errorTo);
   }
 
-  // redirectResponse now carries the Set-Cookie headers for the new session.
   return redirectResponse;
 }
