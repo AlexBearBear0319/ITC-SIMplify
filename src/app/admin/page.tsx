@@ -82,6 +82,7 @@ type ALocation = {
   total_seats: number | null; power_outlets: number | null;
   location_text: string | null; description: string | null; opening_time: string | null;
   qr_token: string | null; coordinates_x: number | null; coordinates_y: number | null;
+  image_url: string | null; images: string[] | null;
 };
 
 type AReview = {
@@ -887,11 +888,13 @@ type LocForm = {
   name: string; category: string; location_text: string; description: string;
   total_seats: string; power_outlets: string; opening_time: string;
   coordinates_x: string; coordinates_y: string;
+  image_url: string; images: string[];
 };
 const EMPTY_LOC: LocForm = {
   name: "", category: "", location_text: "", description: "",
   total_seats: "", power_outlets: "", opening_time: "",
   coordinates_x: "", coordinates_y: "",
+  image_url: "", images: [],
 };
 
 // Clickable floor-plan mini-map for setting coordinates_x / coordinates_y
@@ -958,7 +961,7 @@ function LocationsTab() {
   const load = async () => {
     const { data } = await supabase
       .from("locations")
-      .select("id, name, category, current_status, total_seats, power_outlets, location_text, description, opening_time, qr_token, coordinates_x, coordinates_y")
+      .select("id, name, category, current_status, total_seats, power_outlets, location_text, description, opening_time, qr_token, coordinates_x, coordinates_y, image_url, images")
       .order("name");
     if (data) setLocs(data as ALocation[]);
     setLoading(false);
@@ -985,6 +988,8 @@ function LocationsTab() {
       opening_time:  l.opening_time  ?? "",
       coordinates_x: l.coordinates_x != null ? String(l.coordinates_x) : "",
       coordinates_y: l.coordinates_y != null ? String(l.coordinates_y) : "",
+      image_url:     l.image_url     ?? "",
+      images:        l.images        ?? [],
     });
     setOpen(true);
   };
@@ -992,6 +997,7 @@ function LocationsTab() {
   const handleSave = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
+    const cleanImages = form.images.map((u) => u.trim()).filter(Boolean);
     const payload: Record<string, unknown> = {
       name:          form.name.trim(),
       category:      form.category      || null,
@@ -1002,6 +1008,8 @@ function LocationsTab() {
       opening_time:  form.opening_time.trim()  || null,
       coordinates_x: form.coordinates_x ? Number(form.coordinates_x) : null,
       coordinates_y: form.coordinates_y ? Number(form.coordinates_y) : null,
+      image_url:     form.image_url.trim() || null,
+      images:        cleanImages.length ? cleanImages : null,
     };
     if (!editing) payload.qr_token = currentQrToken;
     const res = await adminSaveLocation(payload, editing?.id);
@@ -1023,7 +1031,12 @@ function LocationsTab() {
     setLocs((prev) => prev.map((x) => x.id === l.id ? { ...x, current_status: status } : x));
   };
 
-  const set = (k: keyof LocForm, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: Exclude<keyof LocForm, "images">, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const setImage = (i: number, v: string) =>
+    setForm((f) => { const imgs = [...f.images]; imgs[i] = v; return { ...f, images: imgs }; });
+  const addImage = () => setForm((f) => ({ ...f, images: [...f.images, ""] }));
+  const removeImage = (i: number) =>
+    setForm((f) => { const imgs = f.images.filter((_, idx) => idx !== i); return { ...f, images: imgs }; });
 
   const STATUS_COLOR: Record<string, string> = {
     empty: "text-success", busy: "text-gold", full: "text-alert",
@@ -1128,6 +1141,68 @@ function LocationsTab() {
               </div>
             </div>
           )}
+          {/* Hero image */}
+          <div>
+            <label className={LABEL}>Hero Image URL</label>
+            <input
+              type="url"
+              value={form.image_url}
+              onChange={(e) => set("image_url", e.target.value)}
+              className={INPUT}
+              placeholder="https://…"
+            />
+            {form.image_url.trim() && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={form.image_url.trim()}
+                alt="Hero preview"
+                className="mt-2 w-full h-32 object-cover rounded-xl border border-border"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
+            )}
+            <p className="text-[10px] text-ink-faint mt-1">Shown as the large header image on the location detail page.</p>
+          </div>
+
+          {/* Gallery images */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className={LABEL + " mb-0"}>Gallery Images</label>
+              <button type="button" onClick={addImage} className={BTN_GHOST + " py-1 px-2 text-[11px]"}>
+                <Plus size={11} /> Add
+              </button>
+            </div>
+            {form.images.length === 0 && (
+              <p className="text-xs text-ink-faint py-2">No gallery images. Click Add to include photos shown in the carousel.</p>
+            )}
+            <div className="space-y-2">
+              {form.images.map((url, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="url"
+                      value={url}
+                      onChange={(e) => setImage(i, e.target.value)}
+                      className={INPUT}
+                      placeholder={`Image ${i + 1} URL — https://…`}
+                    />
+                    <button type="button" onClick={() => removeImage(i)} className="shrink-0 p-1.5 rounded-lg text-ink-faint hover:text-alert hover:bg-alert-light transition-colors">
+                      <X size={13} />
+                    </button>
+                  </div>
+                  {url.trim() && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={url.trim()}
+                      alt={`Gallery ${i + 1} preview`}
+                      className="w-full h-24 object-cover rounded-xl border border-border"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className={LABEL}>Description</label>
             <textarea rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} className={INPUT} placeholder="About this space…" />
