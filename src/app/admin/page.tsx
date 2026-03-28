@@ -4,6 +4,17 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import * as Dialog from "@radix-ui/react-dialog";
 import { createClient } from "@/utils/supabase/client";
+import {
+  adminSaveEvent, adminDeleteEvent,
+  adminSaveReward, adminDeleteReward, adminToggleReward, adminAdjustStock,
+  adminToggleAdmin, adminUpdatePoints,
+  adminSaveLocation, adminDeleteLocation, adminUpdateLocationStatus,
+  adminDeleteReview,
+  adminUpdateRule, adminToggleRule,
+  adminSaveSchool, adminDeleteSchool,
+  adminSaveMajor, adminDeleteMajor,
+  adminSaveSubject, adminDeleteSubject,
+} from "@/app/admin/actions";
 import { getLevelEmoji } from "@/lib/levels";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -443,18 +454,14 @@ function EventsTab() {
       location_id:   form.location_id ? Number(form.location_id) : null,
       is_peak_alert: form.is_peak_alert,
     };
-    if (editing) {
-      await supabase.from("events").update(payload).eq("id", editing.id);
-    } else {
-      await supabase.from("events").insert(payload);
-    }
+    await adminSaveEvent(payload, editing?.id);
     await load();
     setOpen(false);
     setSaving(false);
   };
 
   const handleDelete = async (id: number | string) => {
-    await supabase.from("events").delete().eq("id", id);
+    await adminDeleteEvent(id as number);
     setEvents((prev) => prev.filter((e) => e.id !== id));
   };
 
@@ -591,30 +598,26 @@ function RewardsTab() {
       cost: Number(form.cost), stock: form.stock ? Number(form.stock) : null,
       image_url: form.image_url.trim() || null, is_active: form.is_active,
     };
-    if (editing) {
-      await supabase.from("redemption_items").update(payload).eq("id", editing.id);
-    } else {
-      await supabase.from("redemption_items").insert(payload);
-    }
+    await adminSaveReward(payload, editing?.id);
     await load();
     setOpen(false);
     setSaving(false);
   };
 
   const handleDelete = async (id: number | string) => {
-    await supabase.from("redemption_items").delete().eq("id", id);
+    await adminDeleteReward(id as number);
     setItems((prev) => prev.filter((r) => r.id !== id));
   };
 
   const toggleActive = async (r: AReward) => {
     const next = !r.is_active;
-    await supabase.from("redemption_items").update({ is_active: next }).eq("id", r.id);
+    await adminToggleReward(r.id, next);
     setItems((prev) => prev.map((x) => x.id === r.id ? { ...x, is_active: next } : x));
   };
 
   const adjustStock = async (r: AReward, delta: number) => {
     const next = Math.max(0, (r.stock ?? 0) + delta);
-    await supabase.from("redemption_items").update({ stock: next }).eq("id", r.id);
+    await adminAdjustStock(r.id, next);
     setItems((prev) => prev.map((x) => x.id === r.id ? { ...x, stock: next } : x));
   };
 
@@ -745,7 +748,7 @@ function UsersTab() {
 
   const toggleAdmin = async (u: AUser) => {
     const next = !u.is_admin;
-    await supabase.from("profiles").update({ is_admin: next }).eq("id", u.id);
+    await adminToggleAdmin(u.id, next);
     setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, is_admin: next } : x));
   };
 
@@ -753,7 +756,7 @@ function UsersTab() {
     if (!editingPts || ptsVal === "") return;
     setSavingPts(true);
     const pts = Math.max(0, Number(ptsVal));
-    await supabase.from("profiles").update({ points: pts }).eq("id", editingPts.id);
+    await adminUpdatePoints(editingPts.id, pts);
     setUsers((prev) => prev.map((x) => x.id === editingPts.id ? { ...x, points: pts } : x));
     setEditingPts(null);
     setSavingPts(false);
@@ -982,24 +985,20 @@ function LocationsTab() {
       coordinates_x: form.coordinates_x ? Number(form.coordinates_x) : null,
       coordinates_y: form.coordinates_y ? Number(form.coordinates_y) : null,
     };
-    if (editing) {
-      await supabase.from("locations").update(payload).eq("id", editing.id);
-    } else {
-      payload.qr_token = currentQrToken;
-      await supabase.from("locations").insert(payload);
-    }
+    if (!editing) payload.qr_token = currentQrToken;
+    await adminSaveLocation(payload, editing?.id);
     await load();
     setOpen(false);
     setSaving(false);
   };
 
   const handleDelete = async (id: number | string) => {
-    await supabase.from("locations").delete().eq("id", id);
+    await adminDeleteLocation(id as number);
     setLocs((prev) => prev.filter((l) => l.id !== id));
   };
 
   const updateStatus = async (l: ALocation, status: string) => {
-    await supabase.from("locations").update({ current_status: status }).eq("id", l.id);
+    await adminUpdateLocationStatus(l.id, status);
     setLocs((prev) => prev.map((x) => x.id === l.id ? { ...x, current_status: status } : x));
   };
 
@@ -1156,7 +1155,7 @@ function ReviewsTab() {
   }, []);
 
   const handleDelete = async (id: number | string) => {
-    await supabase.from("reviews").delete().eq("id", id);
+    await adminDeleteReview(id as number);
     setReviews((prev) => prev.filter((r) => r.id !== id));
   };
 
@@ -1254,7 +1253,7 @@ function PointRulesTab() {
       points_awarded:   form.pts      ? Number(form.pts)      : null,
       cooldown_minutes: form.cooldown ? Number(form.cooldown) : null,
     };
-    await supabase.from("point_rules").update(payload).eq("id", editing.id);
+    await adminUpdateRule(editing.id, payload);
     setRules((prev) => prev.map((x) => x.id === editing.id ? { ...x, ...payload } : x));
     setEditing(null);
     setSaving(false);
@@ -1262,7 +1261,7 @@ function PointRulesTab() {
 
   const toggleActive = async (r: ARule) => {
     const next = !r.is_active;
-    await supabase.from("point_rules").update({ is_active: next }).eq("id", r.id);
+    await adminToggleRule(r.id, next);
     setRules((prev) => prev.map((x) => x.id === r.id ? { ...x, is_active: next } : x));
   };
 
@@ -1423,17 +1422,13 @@ function SchoolsTab() {
     if (!schoolForm.name.trim() || !schoolForm.abbr.trim()) return;
     setSaving(true);
     const payload = { name: schoolForm.name.trim(), abbr: schoolForm.abbr.trim().toUpperCase() };
-    if (schoolModal.editing) {
-      await supabase.from("schools").update(payload).eq("id", schoolModal.editing.id);
-    } else {
-      await supabase.from("schools").insert(payload);
-    }
+    await adminSaveSchool(payload, schoolModal.editing?.id);
     await load();
     setSchoolModal({ open: false, editing: null });
     setSaving(false);
   };
   const deleteSchool = async (id: number) => {
-    await supabase.from("schools").delete().eq("id", id);
+    await adminDeleteSchool(id);
     setSchools((prev) => prev.filter((x) => x.id !== id));
     setMajors((prev) => prev.filter((x) => x.school_id !== id));
   };
@@ -1455,17 +1450,13 @@ function SchoolsTab() {
       education_level: majorForm.education_level,
       school_id: majorModal.schoolId,
     };
-    if (majorModal.editing) {
-      await supabase.from("majors").update(payload).eq("id", majorModal.editing.id);
-    } else {
-      await supabase.from("majors").insert(payload);
-    }
+    await adminSaveMajor(payload, majorModal.editing?.id);
     await load();
     setMajorModal((p) => ({ ...p, open: false }));
     setSaving(false);
   };
   const deleteMajor = async (id: number) => {
-    await supabase.from("majors").delete().eq("id", id);
+    await adminDeleteMajor(id);
     setMajors((prev) => prev.filter((x) => x.id !== id));
     setSubjects((prev) => prev.filter((x) => x.major_id !== id));
   };
@@ -1487,17 +1478,13 @@ function SchoolsTab() {
       course_code: subjectForm.course_code.trim().toUpperCase() || null,
       major_id:    subjectModal.majorId,
     };
-    if (subjectModal.editing) {
-      await supabase.from("subjects").update(payload).eq("id", subjectModal.editing.id);
-    } else {
-      await supabase.from("subjects").insert(payload);
-    }
+    await adminSaveSubject(payload, subjectModal.editing?.id);
     await load();
     setSubjectModal((p) => ({ ...p, open: false }));
     setSaving(false);
   };
   const deleteSubject = async (id: number) => {
-    await supabase.from("subjects").delete().eq("id", id);
+    await adminDeleteSubject(id);
     setSubjects((prev) => prev.filter((x) => x.id !== id));
   };
 
