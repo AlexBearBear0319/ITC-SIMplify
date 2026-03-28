@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, ArrowRight, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
 import { resetPasswordAction } from "@/app/auth/actions";
@@ -62,7 +61,6 @@ function PasswordInput({
 }
 
 export default function ResetPasswordPage() {
-  const router = useRouter();
   const [state, action, pending] = useActionState<ActionResult, FormData>(resetPasswordAction, null);
 
   const fe = (state && "fieldErrors" in state ? state.fieldErrors : {}) ?? {};
@@ -71,12 +69,11 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     if (isSuccess) {
       const t = setTimeout(() => {
-        router.refresh();
-        router.push("/auth/login");
+        window.location.href = "/auth/login";
       }, 2500);
       return () => clearTimeout(t);
     }
-  }, [isSuccess, router]);
+  }, [isSuccess]);
 
   return (
     <div className="flex min-h-full flex-col items-center justify-center p-6">

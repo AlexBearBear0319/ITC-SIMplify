@@ -344,7 +344,7 @@ function LoginPageContent() {
                   transition={{ duration: 0.2, ease: "easeInOut" }}
                 >
                   {mode === "login" ? (
-                    <LoginForm onSuccess={() => { router.refresh(); router.push("/"); }} />
+                    <LoginForm onSuccess={() => { window.location.href = "/"; }} />
                   ) : (
                     <SignUpForm onSuccess={(msg) => setSignupSuccess(msg)} />
                   )}
