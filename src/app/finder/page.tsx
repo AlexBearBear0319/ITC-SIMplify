@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { createClient } from "@/utils/supabase/client";
 import { joinStudyGroup, leaveStudyGroup, createStudyGroup } from "@/lib/db/study-groups";
-import { awardPoints, POINT_ACTIONS } from "@/lib/db/points";
+import { awardPoints, POINT_ACTIONS, trackMissionProgress } from "@/lib/db/points";
 import QRScannerModal from "@/components/features/QRScannerModal";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -1002,6 +1002,7 @@ function FinderPageContent() {
       setAlreadyEarnedToday(true);
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
+    trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.JOIN_STUDY_GROUP);
     setActiveGroupId(id);
     await fetchGroups();
   };
@@ -1058,6 +1059,7 @@ function FinderPageContent() {
       setAlreadyEarnedToday(true);
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
+    trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);
     setActiveGroupId(data.id);
     await fetchGroups();
   };

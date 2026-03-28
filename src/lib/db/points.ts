@@ -363,3 +363,59 @@ export async function updateMissionProgress(
 
   return { data: data as UserMission, error: null }
 }
+
+/**
+ * Checks whether today's mission matches the given action type and, if so,
+ * increments the student's progress by `increment` (default 1).
+ *
+ * This is the single entry point for all mission tracking — handles both
+ * action-count missions (check-in 3 times → increment = 1) and duration-based
+ * missions (study 3 hours → increment = session duration_minutes).
+ *
+ * Safe to call fire-and-forget from the UI layer; errors are logged, not thrown.
+ *
+ * @param userId     - the student doing the action
+ * @param actionType - e.g. POINT_ACTIONS.CHECK_IN, or "study_duration"
+ * @param increment  - how much to add to progress (default 1)
+ */
+export async function trackMissionProgress(
+  supabase: SupabaseClient,
+  userId: string,
+  actionType: string,
+  increment: number = 1,
+): Promise<void> {
+  if (!userId || increment <= 0) return
+
+  // fetch all missions ordered by id — same query as the dashboard
+  const { data: missions, error: missionsError } = await supabase
+    .from('missions')
+    .select('id, target_action, target_count, reward_points')
+    .order('id')
+
+  if (missionsError || !missions || missions.length === 0) {
+    console.warn('[trackMissionProgress] could not fetch missions:', missionsError?.message)
+    return
+  }
+
+  // compute today's mission using the same day-of-year algorithm as the dashboard
+  const startOfYear   = new Date(new Date().getFullYear(), 0, 0)
+  const dayOfYear     = Math.floor((Date.now() - startOfYear.getTime()) / 86_400_000)
+  const todaysMission = missions[dayOfYear % missions.length] as Mission
+
+  // only advance progress if this action matches today's mission
+  if (todaysMission.target_action !== actionType) return
+
+  // fetch current progress (may not exist yet)
+  const { data: userMission } = await supabase
+    .from('user_mission')
+    .select('progress, is_completed')
+    .eq('user_id', userId)
+    .eq('mission_id', todaysMission.id)
+    .maybeSingle()
+
+  // don't double-reward a completed mission
+  if (userMission?.is_completed) return
+
+  const currentProgress = (userMission?.progress as number) ?? 0
+  await updateMissionProgress(supabase, userId, todaysMission.id, currentProgress + increment)
+}

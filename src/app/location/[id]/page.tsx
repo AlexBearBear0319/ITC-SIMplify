@@ -5,7 +5,7 @@ import Link from "next/link";
 import * as Tabs from "@radix-ui/react-tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/utils/supabase/client";
-import { awardPoints, POINT_ACTIONS } from "@/lib/db/points";
+import { awardPoints, POINT_ACTIONS, trackMissionProgress } from "@/lib/db/points";
 import QRScannerModal from "@/components/features/QRScannerModal";
 import ActionChoiceModal from "@/components/features/ActionChoiceModal";
 import StudyBuddyModal, { type StudyBuddyData } from "@/components/features/StudyBuddyModal";
@@ -314,6 +314,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       const pts = (rule as { points_awarded: number } | null)?.points_awarded ?? 20;
 
       await awardPoints(supabase, currentUserId, POINT_ACTIONS.CREATE_STUDY_GROUP);
+      trackMissionProgress(supabase, currentUserId, POINT_ACTIONS.CREATE_STUDY_GROUP);
       setPointsDelta(pts);
       setTimeout(() => setPointsDelta(null), 2500);
       setAlreadyEarnedToday(true);
@@ -371,6 +372,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       const pts = (rule as { points_awarded: number } | null)?.points_awarded ?? 10;
 
       await awardPoints(supabase, currentUserId, POINT_ACTIONS.CHECK_IN);
+      trackMissionProgress(supabase, currentUserId, POINT_ACTIONS.CHECK_IN);
 
       setPointsDelta(pts);
       setTimeout(() => setPointsDelta(null), 2500);
