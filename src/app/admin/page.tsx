@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, createContext, useContext, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import * as Dialog from "@radix-ui/react-dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -37,6 +38,11 @@ const INPUT = [
 const LABEL    = "block text-xs font-semibold text-ink-muted mb-1.5";
 const BTN_PRI  = "flex items-center gap-1.5 px-4 py-2 bg-ink text-surface text-sm font-medium rounded-full hover:bg-ink/80 active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed";
 const BTN_GHOST = "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors";
+
+// ── Error context ────────────────────────────────────────────────────────────
+
+const AdminErrorCtx = createContext<(msg: string | null) => void>(() => {});
+function useAdminError() { return useContext(AdminErrorCtx); }
 
 // ── Tab config ──────────────────────────────────────────────────────────────
 
@@ -406,6 +412,7 @@ const EMPTY_EVENT: EventForm = {
 };
 
 function EventsTab() {
+  const setErr = useAdminError();
   const supabase = createClient();
   const [events,    setEvents]    = useState<AEvent[]>([]);
   const [locs,      setLocs]      = useState<{ id: number; name: string }[]>([]);
@@ -454,14 +461,16 @@ function EventsTab() {
       location_id:   form.location_id ? Number(form.location_id) : null,
       is_peak_alert: form.is_peak_alert,
     };
-    await adminSaveEvent(payload, editing?.id);
+    const res = await adminSaveEvent(payload, editing?.id);
+    if (res.error) { setErr(res.error); setSaving(false); return; }
     await load();
     setOpen(false);
     setSaving(false);
   };
 
   const handleDelete = async (id: number | string) => {
-    await adminDeleteEvent(id as number);
+    const res = await adminDeleteEvent(id as number);
+    if (res.error) { setErr(res.error); return; }
     setEvents((prev) => prev.filter((e) => e.id !== id));
   };
 
@@ -562,6 +571,7 @@ const EMPTY_REWARD: RewardForm = {
 };
 
 function RewardsTab() {
+  const setErr = useAdminError();
   const supabase = createClient();
   const [items,     setItems]     = useState<AReward[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -598,26 +608,30 @@ function RewardsTab() {
       cost: Number(form.cost), stock: form.stock ? Number(form.stock) : null,
       image_url: form.image_url.trim() || null, is_active: form.is_active,
     };
-    await adminSaveReward(payload, editing?.id);
+    const res = await adminSaveReward(payload, editing?.id);
+    if (res.error) { setErr(res.error); setSaving(false); return; }
     await load();
     setOpen(false);
     setSaving(false);
   };
 
   const handleDelete = async (id: number | string) => {
-    await adminDeleteReward(id as number);
+    const res = await adminDeleteReward(id as number);
+    if (res.error) { setErr(res.error); return; }
     setItems((prev) => prev.filter((r) => r.id !== id));
   };
 
   const toggleActive = async (r: AReward) => {
     const next = !r.is_active;
-    await adminToggleReward(r.id, next);
+    const res = await adminToggleReward(r.id, next);
+    if (res.error) { setErr(res.error); return; }
     setItems((prev) => prev.map((x) => x.id === r.id ? { ...x, is_active: next } : x));
   };
 
   const adjustStock = async (r: AReward, delta: number) => {
     const next = Math.max(0, (r.stock ?? 0) + delta);
-    await adminAdjustStock(r.id, next);
+    const res = await adminAdjustStock(r.id, next);
+    if (res.error) { setErr(res.error); return; }
     setItems((prev) => prev.map((x) => x.id === r.id ? { ...x, stock: next } : x));
   };
 
@@ -731,6 +745,7 @@ function RewardsTab() {
 // ── Users Tab ───────────────────────────────────────────────────────────────
 
 function UsersTab() {
+  const setErr = useAdminError();
   const supabase = createClient();
   const [users,      setUsers]      = useState<AUser[]>([]);
   const [loading,    setLoading]    = useState(true);
@@ -748,7 +763,8 @@ function UsersTab() {
 
   const toggleAdmin = async (u: AUser) => {
     const next = !u.is_admin;
-    await adminToggleAdmin(u.id, next);
+    const res = await adminToggleAdmin(u.id, next);
+    if (res.error) { setErr(res.error); return; }
     setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, is_admin: next } : x));
   };
 
@@ -756,7 +772,8 @@ function UsersTab() {
     if (!editingPts || ptsVal === "") return;
     setSavingPts(true);
     const pts = Math.max(0, Number(ptsVal));
-    await adminUpdatePoints(editingPts.id, pts);
+    const res = await adminUpdatePoints(editingPts.id, pts);
+    if (res.error) { setErr(res.error); setSavingPts(false); return; }
     setUsers((prev) => prev.map((x) => x.id === editingPts.id ? { ...x, points: pts } : x));
     setEditingPts(null);
     setSavingPts(false);
@@ -927,6 +944,7 @@ function MapPinSelector({
 }
 
 function LocationsTab() {
+  const setErr = useAdminError();
   const supabase = createClient();
   const [locs,      setLocs]      = useState<ALocation[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -986,19 +1004,22 @@ function LocationsTab() {
       coordinates_y: form.coordinates_y ? Number(form.coordinates_y) : null,
     };
     if (!editing) payload.qr_token = currentQrToken;
-    await adminSaveLocation(payload, editing?.id);
+    const res = await adminSaveLocation(payload, editing?.id);
+    if (res.error) { setErr(res.error); setSaving(false); return; }
     await load();
     setOpen(false);
     setSaving(false);
   };
 
   const handleDelete = async (id: number | string) => {
-    await adminDeleteLocation(id as number);
+    const res = await adminDeleteLocation(id as number);
+    if (res.error) { setErr(res.error); return; }
     setLocs((prev) => prev.filter((l) => l.id !== id));
   };
 
   const updateStatus = async (l: ALocation, status: string) => {
-    await adminUpdateLocationStatus(l.id, status);
+    const res = await adminUpdateLocationStatus(l.id, status);
+    if (res.error) { setErr(res.error); return; }
     setLocs((prev) => prev.map((x) => x.id === l.id ? { ...x, current_status: status } : x));
   };
 
@@ -1136,6 +1157,7 @@ function LocationsTab() {
 // ── Reviews Tab ──────────────────────────────────────────────────────────────
 
 function ReviewsTab() {
+  const setErr = useAdminError();
   const supabase = createClient();
   const [reviews,   setReviews]   = useState<AReview[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -1155,7 +1177,8 @@ function ReviewsTab() {
   }, []);
 
   const handleDelete = async (id: number | string) => {
-    await adminDeleteReview(id as number);
+    const res = await adminDeleteReview(id as number);
+    if (res.error) { setErr(res.error); return; }
     setReviews((prev) => prev.filter((r) => r.id !== id));
   };
 
@@ -1226,6 +1249,7 @@ function ReviewsTab() {
 // ── Point Rules Tab ──────────────────────────────────────────────────────────
 
 function PointRulesTab() {
+  const setErr = useAdminError();
   const supabase = createClient();
   const [rules,   setRules]   = useState<ARule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1253,7 +1277,8 @@ function PointRulesTab() {
       points_awarded:   form.pts      ? Number(form.pts)      : null,
       cooldown_minutes: form.cooldown ? Number(form.cooldown) : null,
     };
-    await adminUpdateRule(editing.id, payload);
+    const res = await adminUpdateRule(editing.id, payload);
+    if (res.error) { setErr(res.error); setSaving(false); return; }
     setRules((prev) => prev.map((x) => x.id === editing.id ? { ...x, ...payload } : x));
     setEditing(null);
     setSaving(false);
@@ -1261,7 +1286,8 @@ function PointRulesTab() {
 
   const toggleActive = async (r: ARule) => {
     const next = !r.is_active;
-    await adminToggleRule(r.id, next);
+    const res = await adminToggleRule(r.id, next);
+    if (res.error) { setErr(res.error); return; }
     setRules((prev) => prev.map((x) => x.id === r.id ? { ...x, is_active: next } : x));
   };
 
@@ -1370,6 +1396,7 @@ function SmallDeleteBtn({ onAsk, onConfirm, onCancel, asking }: {
 }
 
 function SchoolsTab() {
+  const setErr = useAdminError();
   const supabase = createClient();
 
   const [schools,  setSchools]  = useState<SSchool[]>([]);
@@ -1422,13 +1449,15 @@ function SchoolsTab() {
     if (!schoolForm.name.trim() || !schoolForm.abbr.trim()) return;
     setSaving(true);
     const payload = { name: schoolForm.name.trim(), abbr: schoolForm.abbr.trim().toUpperCase() };
-    await adminSaveSchool(payload, schoolModal.editing?.id);
+    const res = await adminSaveSchool(payload, schoolModal.editing?.id);
+    if (res.error) { setErr(res.error); setSaving(false); return; }
     await load();
     setSchoolModal({ open: false, editing: null });
     setSaving(false);
   };
   const deleteSchool = async (id: number) => {
-    await adminDeleteSchool(id);
+    const res = await adminDeleteSchool(id);
+    if (res.error) { setErr(res.error); return; }
     setSchools((prev) => prev.filter((x) => x.id !== id));
     setMajors((prev) => prev.filter((x) => x.school_id !== id));
   };
@@ -1450,13 +1479,15 @@ function SchoolsTab() {
       education_level: majorForm.education_level,
       school_id: majorModal.schoolId,
     };
-    await adminSaveMajor(payload, majorModal.editing?.id);
+    const res = await adminSaveMajor(payload, majorModal.editing?.id);
+    if (res.error) { setErr(res.error); setSaving(false); return; }
     await load();
     setMajorModal((p) => ({ ...p, open: false }));
     setSaving(false);
   };
   const deleteMajor = async (id: number) => {
-    await adminDeleteMajor(id);
+    const res = await adminDeleteMajor(id);
+    if (res.error) { setErr(res.error); return; }
     setMajors((prev) => prev.filter((x) => x.id !== id));
     setSubjects((prev) => prev.filter((x) => x.major_id !== id));
   };
@@ -1478,13 +1509,15 @@ function SchoolsTab() {
       course_code: subjectForm.course_code.trim().toUpperCase() || null,
       major_id:    subjectModal.majorId,
     };
-    await adminSaveSubject(payload, subjectModal.editing?.id);
+    const res = await adminSaveSubject(payload, subjectModal.editing?.id);
+    if (res.error) { setErr(res.error); setSaving(false); return; }
     await load();
     setSubjectModal((p) => ({ ...p, open: false }));
     setSaving(false);
   };
   const deleteSubject = async (id: number) => {
-    await adminDeleteSubject(id);
+    const res = await adminDeleteSubject(id);
+    if (res.error) { setErr(res.error); return; }
     setSubjects((prev) => prev.filter((x) => x.id !== id));
   };
 
@@ -1810,60 +1843,97 @@ function SchoolsTab() {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
-export default function AdminPage() {
-  const [tab, setTab] = useState<Tab>("overview");
+const VALID_TABS = new Set<Tab>(["overview", "events", "rewards", "users", "locations", "reviews", "rules", "schools"]);
+
+function AdminPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawTab = searchParams.get("tab") as Tab | null;
+  const tab: Tab = rawTab && VALID_TABS.has(rawTab) ? rawTab : "overview";
+
+  const [err, setErr] = useState<string | null>(null);
+
+  function switchTab(id: Tab) {
+    router.replace(`/admin?tab=${id}`, { scroll: false });
+  }
 
   return (
-    <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <AdminErrorCtx.Provider value={setErr}>
+      <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
+        <div className="max-w-5xl mx-auto space-y-6">
 
-        <div>
-          <h1 className="text-2xl font-extrabold text-ink">Admin Panel</h1>
-          <p className="text-sm text-ink-muted mt-1">
-            Manage campus content, users, and gamification.
-          </p>
-        </div>
+          <div>
+            <h1 className="text-2xl font-extrabold text-ink">Admin Panel</h1>
+            <p className="text-sm text-ink-muted mt-1">
+              Manage campus content, users, and gamification.
+            </p>
+          </div>
 
-        {/* Tab navigation */}
-        <div className="flex gap-1 overflow-x-auto pb-0.5">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={[
-                "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150",
-                tab === id
-                  ? "bg-ink text-surface shadow-sm"
-                  : "text-ink-muted hover:text-ink hover:bg-surface",
-              ].join(" ")}
+          {/* Error banner */}
+          <AnimatePresence>
+            {err && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                className="flex items-start gap-3 rounded-xl border border-alert/30 bg-alert-light px-4 py-3 text-sm text-alert"
+              >
+                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                <span className="flex-1">{err}</span>
+                <button onClick={() => setErr(null)} className="shrink-0 text-alert/60 hover:text-alert transition-colors">
+                  <X size={14} />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Tab navigation */}
+          <div className="flex gap-1 overflow-x-auto pb-0.5">
+            {TABS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => switchTab(id)}
+                className={[
+                  "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150",
+                  tab === id
+                    ? "bg-ink text-surface shadow-sm"
+                    : "text-ink-muted hover:text-ink hover:bg-surface",
+                ].join(" ")}
+              >
+                <Icon size={13} />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
-              <Icon size={13} />
-              {label}
-            </button>
-          ))}
+              {tab === "overview"  && <OverviewTab />}
+              {tab === "events"    && <EventsTab />}
+              {tab === "rewards"   && <RewardsTab />}
+              {tab === "users"     && <UsersTab />}
+              {tab === "locations" && <LocationsTab />}
+              {tab === "reviews"   && <ReviewsTab />}
+              {tab === "rules"     && <PointRulesTab />}
+              {tab === "schools"   && <SchoolsTab />}
+            </motion.div>
+          </AnimatePresence>
+
         </div>
-
-        {/* Tab content */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={tab}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-          >
-            {tab === "overview"  && <OverviewTab />}
-            {tab === "events"    && <EventsTab />}
-            {tab === "rewards"   && <RewardsTab />}
-            {tab === "users"     && <UsersTab />}
-            {tab === "locations" && <LocationsTab />}
-            {tab === "reviews"   && <ReviewsTab />}
-            {tab === "rules"     && <PointRulesTab />}
-            {tab === "schools"   && <SchoolsTab />}
-          </motion.div>
-        </AnimatePresence>
-
       </div>
-    </div>
+    </AdminErrorCtx.Provider>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense>
+      <AdminPageContent />
+    </Suspense>
   );
 }
