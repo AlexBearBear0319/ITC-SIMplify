@@ -20,11 +20,11 @@
   /* 60% – Page background */
   --color-canvas:        #F7F2E8;
 
-  /* 30% – Primary brand (muted sage) */
-  --color-brand:         #B7C7A3;
-  --color-brand-dark:    #9FB287;   /* hover / pressed states */
-  --color-brand-light:   #DDE6D1;   /* subtle fills */
-  --color-brand-faint:   #F2F6ED;   /* near-white tint for hover rows */
+  /* 30% – Primary brand (soft apricot orange) */
+  --color-brand:         #E3B17A;
+  --color-brand-dark:    #CC9862;   /* hover / pressed states */
+  --color-brand-light:   #F6E3CC;   /* subtle fills */
+  --color-brand-faint:   #FBF2E6;   /* near-white tint for hover rows */
 
   /* Ink – Typography (warm espresso neutrals) */
   --color-ink:           #3A2F2A;   /* primary text */
@@ -65,25 +65,25 @@
    ───────────────────────────────────────────────────────────── */
 .dark {
   /* Page & surface backgrounds */
-  --color-canvas:        #1B1612;   /* espresso — main page bg       */
-  --color-surface:       #2A231D;   /* dark cocoa — cards, sidebar   */
-  --color-border:        #4A3D33;   /* warm stone — dividers         */
+  --color-canvas:        #000000;   /* true black canvas             */
+  --color-surface:       #141414;   /* elevated dark surfaces        */
+  --color-border:        #2A2A2A;   /* subtle neutral divider        */
 
   /* Typography — ink flips to light so all text-ink reads on dark bg */
-  --color-ink:           #F3E9DD;   /* warm cream — primary text     */
-  --color-ink-muted:     #C6B6A7;   /* muted sand — secondary text   */
-  --color-ink-faint:     #9D8C7E;   /* warm taupe — placeholder text */
+  --color-ink:           #F0E6DB;   /* warm ivory primary text       */
+  --color-ink-muted:     #C7B8AA;   /* softened secondary text       */
+  --color-ink-faint:     #9E8E81;   /* subtle placeholder text       */
 
-  /* Brand — deeper sage tones tuned for dark backgrounds */
-  --color-brand:         #6F8A5C;
-  --color-brand-dark:    #5E774E;
-  --color-brand-light:   #3A332A;
-  --color-brand-faint:   #312A22;
+  /* Brand — warm orange accent preserved for continuity */
+  --color-brand:         #C98A55;
+  --color-brand-dark:    #AF7442;
+  --color-brand-light:   #4E3A2D;
+  --color-brand-faint:   #3A2B21;
 
   /* Status light backgrounds — deep tinted darks */
-  --color-success-light: #1F2A1B;
-  --color-alert-light:   #3B241E;
-  --color-gold-light:    #3A2D16;
+  --color-success-light: #243128;
+  --color-alert-light:   #472C26;
+  --color-gold-light:    #493822;
 }
 
 /* ── Base styles ── */
