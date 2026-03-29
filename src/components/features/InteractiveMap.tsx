@@ -226,10 +226,6 @@ export default function InteractiveMap({
                       }}
                       onClick={() => onSelectLocation?.(loc)}
                     >
-                      {/* Location name above marker, always on top */}
-                      <span className="mb-1 text-xs text-ink bg-surface/90 px-1.5 py-0.5 rounded shadow whitespace-nowrap pointer-events-none select-none relative z-20">
-                        {loc.name}
-                      </span>
                       {/* Pulse ring */}
                       <span
                         className={`absolute inset-0 rounded-full ${colorClass} opacity-30 animate-ping z-0`}
@@ -246,6 +242,10 @@ export default function InteractiveMap({
                       >
                         <div className="w-2 h-2 rounded-full bg-surface/80" />
                       </div>
+                      {/* Location name above marker, always on top */}
+                      <span className="mt-1 text-xs text-ink bg-surface/90 px-1.5 py-0.5 rounded shadow whitespace-nowrap pointer-events-none select-none relative z-20">
+                        {loc.name}
+                      </span>
                     </div>
                   );
                 })}
