@@ -15,37 +15,37 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* ── Morning Study Café – SIMplify Design System ── */
+  /* ── Cozy Campus Study Nook – SIMplify Design System ── */
 
   /* 60% – Page background */
-  --color-canvas:        #F1F1EE;
+  --color-canvas:        #F7F2E8;
 
-  /* 30% – Primary brand (soft dusty blue) */
-  --color-brand:         #B3D2D5;
-  --color-brand-dark:    #8FBDC1;   /* hover / pressed states */
-  --color-brand-light:   #D4E9EB;   /* subtle fills */
-  --color-brand-faint:   #EDF5F6;   /* near-white tint for hover rows */
+  /* 30% – Primary brand (muted sage) */
+  --color-brand:         #B7C7A3;
+  --color-brand-dark:    #9FB287;   /* hover / pressed states */
+  --color-brand-light:   #DDE6D1;   /* subtle fills */
+  --color-brand-faint:   #F2F6ED;   /* near-white tint for hover rows */
 
-  /* Ink – Typography */
-  --color-ink:           #2C3E50;   /* primary text */
-  --color-ink-muted:     #6B7C8D;   /* secondary / labels */
-  --color-ink-faint:     #A8B8C8;   /* placeholder / disabled */
+  /* Ink – Typography (warm espresso neutrals) */
+  --color-ink:           #3A2F2A;   /* primary text */
+  --color-ink-muted:     #7A6B63;   /* secondary / labels */
+  --color-ink-faint:     #B29F94;   /* placeholder / disabled */
 
-  /* Alert – busy / crowded status */
-  --color-alert:         #E5989B;
-  --color-alert-light:   #FAEAEA;
+  /* Alert – busy / crowded status (soft terracotta) */
+  --color-alert:         #C97B63;
+  --color-alert-light:   #F8E9E4;
 
-  /* Gold – points / rewards */
-  --color-gold:          #E2C044;
-  --color-gold-light:    #FBF3D0;
+  /* Gold – points / rewards (warm amber) */
+  --color-gold:          #D4A447;
+  --color-gold-light:    #FBF1D8;
 
-  /* Success – available / empty status */
-  --color-success:       #7BC99A;
-  --color-success-light: #E8F6EE;
+  /* Success – available / empty status (moss green) */
+  --color-success:       #7E9B6A;
+  --color-success-light: #EAF2E3;
 
   /* Surfaces & borders */
-  --color-surface:       #FFFFFF;   /* cards, sidebar */
-  --color-border:        #E4E4E0;   /* dividers, card outlines */
+  --color-surface:       #FFFCF7;   /* cards, sidebar */
+  --color-border:        #EADFD1;   /* dividers, card outlines */
 
   /*
    * Overlay — modal backdrops & scanner bg.
@@ -65,28 +65,25 @@
    ───────────────────────────────────────────────────────────── */
 .dark {
   /* Page & surface backgrounds */
-  --color-canvas:        #0f172a;   /* slate-900 — main page bg      */
-  --color-surface:       #1e293b;   /* slate-800 — cards, sidebar    */
-  --color-border:        #334155;   /* slate-700 — dividers          */
+  --color-canvas:        #1B1612;   /* espresso — main page bg       */
+  --color-surface:       #2A231D;   /* dark cocoa — cards, sidebar   */
+  --color-border:        #4A3D33;   /* warm stone — dividers         */
 
   /* Typography — ink flips to light so all text-ink reads on dark bg */
-  --color-ink:           #e2e8f0;   /* slate-200 — primary text      */
-  --color-ink-muted:     #94a3b8;   /* slate-400 — secondary text    */
-  --color-ink-faint:     #64748b;   /* slate-500 — placeholder text  */
+  --color-ink:           #F3E9DD;   /* warm cream — primary text     */
+  --color-ink-muted:     #C6B6A7;   /* muted sand — secondary text   */
+  --color-ink-faint:     #9D8C7E;   /* warm taupe — placeholder text */
 
-  /*
-   * Brand — darkened teal so text-ink (#e2e8f0) meets WCAG AA contrast
-   * (~3.5:1) on active nav items and primary buttons.
-   */
-  --color-brand:         #2B7A80;
-  --color-brand-dark:    #236870;
-  --color-brand-light:   #1a3045;
-  --color-brand-faint:   #112030;
+  /* Brand — deeper sage tones tuned for dark backgrounds */
+  --color-brand:         #6F8A5C;
+  --color-brand-dark:    #5E774E;
+  --color-brand-light:   #3A332A;
+  --color-brand-faint:   #312A22;
 
   /* Status light backgrounds — deep tinted darks */
-  --color-success-light: #052e16;
-  --color-alert-light:   #450a0a;
-  --color-gold-light:    #422006;
+  --color-success-light: #1F2A1B;
+  --color-alert-light:   #3B241E;
+  --color-gold-light:    #3A2D16;
 }
 
 /* ── Base styles ── */
@@ -112,5 +109,5 @@ body {
 /* ── Thin branded scrollbar ── */
 ::-webkit-scrollbar        { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track  { background: transparent; }
-::-webkit-scrollbar-thumb  { background: #B3D2D5; border-radius: 9999px; }
-::-webkit-scrollbar-thumb:hover { background: #8FBDC1; }
+::-webkit-scrollbar-thumb  { background: var(--color-brand); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-brand-dark); }
