@@ -51,6 +51,9 @@ export async function loginAction(
     if (error.message.toLowerCase().includes("invalid login")) {
       return { error: "Incorrect email or password." };
     }
+    if (error.message.toLowerCase().includes("email not confirmed")) {
+      return { error: "Please verify your email before signing in. Check your inbox for the verification link." };
+    }
     return { error: error.message };
   }
 
@@ -101,6 +104,13 @@ export async function signUpAction(
     return { error: "Please fix the errors below.", fieldErrors: zodFieldErrors(parsed.error) };
   }
 
+  // Derive the live origin so the email verification link points to /auth/confirm
+  // on whatever host the app is running on (local dev, staging, or production).
+  const headersList = await headers();
+  const host  = headersList.get("host") ?? "localhost:3000";
+  const proto = headersList.get("x-forwarded-proto") ?? "http";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? `${proto}://${host}`;
+
   const supabase = await createClient();
 
   // ── Username uniqueness check (query profiles table before creating auth user)
@@ -125,6 +135,10 @@ export async function signUpAction(
     password: parsed.data.password,
     options:  {
       data: { username: parsed.data.username },
+      // Tell Supabase where to redirect after the user clicks the verification link.
+      // Without this, Supabase falls back to the dashboard "Site URL" which points
+      // to the homepage — the ?code= param would be ignored and email never verified.
+      emailRedirectTo: `${siteUrl}/auth/confirm`,
     },
   });
 
@@ -143,6 +157,11 @@ export async function signUpAction(
     await supabase.auth.signOut();
     return { error: "An account with this email already exists. Please sign in or check your inbox for the verification email." };
   }
+
+  // Sign out any partial session Supabase may have created during signUp.
+  // Some Supabase configurations set session cookies even when email confirmation
+  // is required — clearing it here prevents unverified users from bypassing login.
+  await supabase.auth.signOut();
 
   return { success: true, message: "Account created! Check your email to verify your address." };
 }

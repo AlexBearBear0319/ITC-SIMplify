@@ -34,6 +34,7 @@ import type { LucideIcon } from "lucide-react";
 
 type UserProfile = {
   id: string;
+  email: string;
   full_name: string;
   username: string;
   avatar_url: string | null;
@@ -252,6 +253,7 @@ export default function ProfilePage() {
 
         const loaded: UserProfile = {
           ...prof,
+          email:          user.email ?? "",
           full_name:      prof.full_name ?? "Unknown",
           username:       prof.username  ?? "unknown",
           points:         pts,
@@ -587,6 +589,18 @@ export default function ProfilePage() {
 
           <form onSubmit={handleSaveProfile} className="p-5 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+              {/* Email (read-only — managed in Settings) */}
+              <div className="sm:col-span-2">
+                <label className={FIELD_LABEL}>Email</label>
+                <div className={`${FIELD_INPUT} bg-canvas/50 text-ink-muted cursor-not-allowed select-none`}>
+                  {profile.email}
+                </div>
+                <p className="mt-1 text-xs text-ink-faint">
+                  To change your email, go to{" "}
+                  <a href="/settings" className="underline hover:text-ink">Settings</a>.
+                </p>
+              </div>
 
               {/* Full Name */}
               <div>
