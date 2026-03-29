@@ -259,7 +259,7 @@ export function MorphPanel() {
 
                   {error && (
                     <p className="text-[11px] text-alert text-center py-1">
-                      Aiyah, something went wrong lah. Try again?
+                      Something went wrong. Please try again.
                     </p>
                   )}
 
