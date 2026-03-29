@@ -17,6 +17,7 @@ import {
   Flame,
   AlertTriangle,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Trophy,
   Star,
@@ -210,6 +211,25 @@ function LocationDrawer({
   const s = STATUS_CONFIG[location.current_status];
   const isMyActiveLocation = activeSession?.locationId === location.id;
   const hasImages = (location.images?.length ?? 0) > 0;
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  useEffect(() => {
+    // Reset gallery index whenever user opens a different location.
+    setActiveImageIndex(0);
+  }, [location.id]);
+
+  const totalImages = location.images?.length ?? 0;
+  const currentImage = hasImages ? location.images![activeImageIndex] : null;
+
+  const showPrevImage = () => {
+    if (!hasImages || totalImages <= 1) return;
+    setActiveImageIndex((prev) => (prev === 0 ? totalImages - 1 : prev - 1));
+  };
+
+  const showNextImage = () => {
+    if (!hasImages || totalImages <= 1) return;
+    setActiveImageIndex((prev) => (prev === totalImages - 1 ? 0 : prev + 1));
+  };
 
   return (
     <>
@@ -239,33 +259,61 @@ function LocationDrawer({
           <div className="w-10 h-1 rounded-full bg-border" />
         </div>
 
-        {/* Scrollable body */}
-        <div className="overflow-y-auto flex-1 pb-8">
+        {/* Body: left media stays static, right details scroll independently on desktop. */}
+        <div className="flex-1 overflow-y-auto md:overflow-hidden px-4 pt-3 pb-8 md:px-5">
+          <div className="h-full flex flex-col md:flex-row gap-4 md:gap-5">
 
-          {/* ── Image carousel ── */}
-          {hasImages ? (
-            <div
-              className="flex gap-2.5 overflow-x-auto px-4 pt-3 pb-1 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden"
-              style={{ scrollbarWidth: "none" }}
-            >
-              {location.images!.map((src, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={i}
-                  src={src}
-                  alt={`${location.name} photo ${i + 1}`}
-                  className="w-64 h-36 object-cover rounded-xl shrink-0 snap-start"
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="mx-4 mt-3 h-36 rounded-xl bg-linear-to-br from-brand-faint to-brand/20 flex items-center justify-center">
-              <MapPin size={36} className="text-brand-dark opacity-30" />
-            </div>
-          )}
+            {/* ── Left: image gallery (static placement) ── */}
+            <div className="md:w-[42%] md:max-w-md shrink-0">
+              {hasImages && currentImage ? (
+                <div className="relative rounded-xl overflow-hidden border border-border bg-canvas h-48 md:h-105">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={currentImage}
+                    alt={`${location.name} photo ${activeImageIndex + 1}`}
+                    className="w-full h-full object-cover"
+                  />
 
-          {/* ── Header: status + name + close ── */}
-          <div className="px-5 pt-4">
+                  {totalImages > 1 && (
+                    <>
+                      <button
+                        onClick={showPrevImage}
+                        aria-label="Previous image"
+                        className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-overlay/55 text-white flex items-center justify-center hover:bg-overlay/70 transition-colors"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <button
+                        onClick={showNextImage}
+                        aria-label="Next image"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-overlay/55 text-white flex items-center justify-center hover:bg-overlay/70 transition-colors"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2 py-1 rounded-full bg-overlay/45">
+                        {location.images!.map((_, i) => (
+                          <span
+                            key={i}
+                            className={`w-1.5 h-1.5 rounded-full ${i === activeImageIndex ? "bg-white" : "bg-white/45"}`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-linear-to-br from-brand-faint to-brand/20 flex items-center justify-center h-48 md:h-105 border border-border">
+                  <MapPin size={36} className="text-brand-dark opacity-30" />
+                </div>
+              )}
+            </div>
+
+            {/* ── Right: details (scrollable) ── */}
+            <div className="flex-1 md:overflow-y-auto md:pr-1">
+
+              {/* ── Header: status + name + close ── */}
+              <div className="pt-1">
             <div className="flex items-start justify-between mb-2">
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${s.bg} ${s.text}`}
@@ -321,11 +369,11 @@ function LocationDrawer({
                 {location.description}
               </p>
             )}
-          </div>
+              </div>
 
-          {/* ── Active session timer ── */}
-          {isMyActiveLocation && activeSession && (
-            <div className="mx-5 mt-4 flex items-center gap-2.5 px-3 py-2.5 bg-success-light border border-success/30 rounded-xl">
+              {/* ── Active session timer ── */}
+              {isMyActiveLocation && activeSession && (
+                <div className="mt-4 flex items-center gap-2.5 px-3 py-2.5 bg-success-light border border-success/30 rounded-xl">
               <CheckCircle2 size={15} className="text-success shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-ink">You&apos;re checked in here</p>
@@ -337,55 +385,56 @@ function LocationDrawer({
                   {activeSession.seats_needed} seat{activeSession.seats_needed !== 1 ? "s" : ""} reserved
                 </p>
               </div>
-            </div>
-          )}
-
-          {/* ── Action buttons ── */}
-          <div className="px-5 mt-4">
-            {isMyActiveLocation ? (
-              <button
-                onClick={onLeaveSpot}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-alert-light hover:bg-alert/20 text-alert border border-alert/40 font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
-              >
-                <LogOut size={15} />
-                Leave Spot
-              </button>
-            ) : (
-              <button
-                onClick={onCheckIn}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
-              >
-                <LogIn size={15} />
-                Scan QR to Enter
-              </button>
-            )}
-          </div>
-
-          {/* ── Reviews ── */}
-          <div className="px-5 mt-6">
-            <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest mb-3">
-              Reviews
-            </p>
-            {reviews.length === 0 ? (
-              <p className="text-xs text-ink-faint py-3">No reviews yet. Be the first!</p>
-            ) : (
-              reviews.map((review) => (
-                <div key={review.id} className="py-3 border-b border-border last:border-0">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="w-6 h-6 rounded-full bg-brand-light flex items-center justify-center text-[9px] font-bold text-ink shrink-0">
-                      {review.username.slice(0, 2).toUpperCase()}
-                    </div>
-                    <span className="text-xs font-semibold text-ink">@{review.username}</span>
-                    <span className="text-[10px] text-ink-faint ml-auto">
-                      {timeAgo(review.created_at)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-ink-muted leading-relaxed">{review.comment}</p>
                 </div>
-              ))
-            )}
-          </div>
+              )}
 
+              {/* ── Action buttons ── */}
+              <div className="mt-4">
+                {isMyActiveLocation ? (
+                  <button
+                    onClick={onLeaveSpot}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-alert-light hover:bg-alert/20 text-alert border border-alert/40 font-semibold text-sm rounded-full transition-all duration-200 active:scale-[0.98]"
+                  >
+                    <LogOut size={15} />
+                    Leave Spot
+                  </button>
+                ) : (
+                  <button
+                    onClick={onCheckIn}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
+                  >
+                    <LogIn size={15} />
+                    Scan QR to Enter
+                  </button>
+                )}
+              </div>
+
+              {/* ── Reviews ── */}
+              <div className="mt-6">
+                <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest mb-3">
+                  Reviews
+                </p>
+                {reviews.length === 0 ? (
+                  <p className="text-xs text-ink-faint py-3">No reviews yet. Be the first!</p>
+                ) : (
+                  reviews.map((review) => (
+                    <div key={review.id} className="py-3 border-b border-border last:border-0">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className="w-6 h-6 rounded-full bg-brand-light flex items-center justify-center text-[9px] font-bold text-ink shrink-0">
+                          {review.username.slice(0, 2).toUpperCase()}
+                        </div>
+                        <span className="text-xs font-semibold text-ink">@{review.username}</span>
+                        <span className="text-[10px] text-ink-faint ml-auto">
+                          {timeAgo(review.created_at)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-ink-muted leading-relaxed">{review.comment}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </motion.div>
     </>
