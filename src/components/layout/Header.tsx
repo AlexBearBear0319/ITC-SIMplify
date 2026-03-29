@@ -112,6 +112,16 @@ export default function Header() {
       <div className="flex items-center gap-2 md:gap-3">
         {/* Header-only theme switch (no separate component file).
             Hidden on very small screens to keep header uncluttered. */}
+        {/* Mobile: single cycle button (auto → light → dark → auto) */}
+        <button
+          type="button"
+          onClick={() => setMode(mode === "auto" ? "light" : mode === "light" ? "dark" : "auto")}
+          title={`Theme: ${mode} (tap to cycle)`}
+          className="md:hidden inline-flex items-center justify-center w-8 h-8 rounded-full border border-border bg-surface text-ink-muted hover:bg-brand-faint hover:text-ink transition-colors duration-200"
+        >
+          {mode === "auto" ? <Monitor size={14} /> : mode === "light" ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
+
         <div className="hidden md:flex items-center gap-1">
           {/* Auto mode = follow SG timing in ThemeProvider */}
           <button

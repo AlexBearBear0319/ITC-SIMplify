@@ -11,6 +11,7 @@ import ActionChoiceModal from "@/components/features/ActionChoiceModal";
 import StudyBuddyModal, { type StudyBuddyData } from "@/components/features/StudyBuddyModal";
 import { createClient } from "@/utils/supabase/client";
 import { getLevelNumber } from "@/lib/levels";
+import { trackMissionProgress, POINT_ACTIONS } from "@/lib/db/points";
 import {
   MapPin,
   Flame,
@@ -819,6 +820,7 @@ export default function DashboardPage() {
       setTimeout(() => setPointsDelta(null), 2500);
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
+    trackMissionProgress(supabase, userId, POINT_ACTIONS.CHECK_IN);
 
     // Recalculate the location's live status based on total seats now occupied
     const { data: activeSessions } = await supabase
@@ -921,6 +923,7 @@ export default function DashboardPage() {
       setTimeout(() => setPointsDelta(null), 2500);
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
+    trackMissionProgress(supabase, userId, POINT_ACTIONS.CREATE_STUDY_GROUP);
 
     // 5. Recalculate location status
     const { data: activeSessions } = await supabase
@@ -988,6 +991,8 @@ export default function DashboardPage() {
     setProfile((prev) =>
       prev ? { ...prev, points: prev.points + feedbackPts } : prev
     );
+    trackMissionProgress(supabase, userId, POINT_ACTIONS.LEAVE_REVIEW);
+    trackMissionProgress(supabase, userId, "study_duration", snapshotSession?.duration_minutes ?? 0);
 
     // crowd_status → star rating: empty = 5★, busy = 3★, full = 1★
     if (data.comment.trim()) {
