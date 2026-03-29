@@ -21,7 +21,7 @@ import {
   Settings,
   Menu,
   X,
-  Sparkles,
+  MapPin,
 } from "lucide-react";
 
 const NAV_MAIN = [
@@ -127,7 +127,7 @@ export default function Sidebar() {
         <div className="px-5 h-16 border-b border-border dark:border-slate-700 flex items-center shrink-0">
           <Link href="/" className="flex items-center gap-3 group flex-1 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-200 shrink-0">
-              <Sparkles size={17} className="text-ink" strokeWidth={2.2} />
+              <MapPin size={17} className="text-ink" strokeWidth={2.2} />
             </div>
             <div className="min-w-0">
               <p className="font-bold text-[15px] text-ink tracking-tight leading-none">
