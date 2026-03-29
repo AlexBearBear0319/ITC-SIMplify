@@ -888,7 +888,7 @@ const IMG_MAX_MB    = 5;
 const IMG_MAX_BYTES = IMG_MAX_MB * 1024 * 1024;
 const IMG_TYPES     = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 const IMG_ACCEPT    = IMG_TYPES.join(",");
-const IMG_LABELS    = "JPG · PNG · WEBP · GIF";
+const IMG_LABELS    = "JPG · JPEG · PNG · WEBP · GIF";
 
 function clientValidate(file: File): string | null {
   if (!(IMG_TYPES as readonly string[]).includes(file.type))
@@ -1092,7 +1092,7 @@ const MAP_ACCEPT    = MAP_TYPES.join(",");
 
 function validateMapFile(file: File): string | null {
   if (!(MAP_TYPES as readonly string[]).includes(file.type))
-    return `"${file.name}" is not supported. Please upload a JPG, PNG, or WEBP image.`;
+    return `"${file.name}" is not supported. Please upload a JPG, JPEG, PNG, or WEBP image.`;
   if (file.size > MAP_MAX_BYTES)
     return `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — map images must be under ${MAP_MAX_MB} MB.`;
   return null;
@@ -1246,7 +1246,7 @@ function CampusMapTab() {
                   <p className="text-sm font-semibold text-ink">
                     {dragOver ? "Drop to upload" : currentMap ? "Click or drag to replace map" : "Click or drag & drop"}
                   </p>
-                  <p className="text-xs text-ink-faint mt-1">JPG · PNG · WEBP &nbsp;·&nbsp; Max {MAP_MAX_MB} MB</p>
+                  <p className="text-xs text-ink-faint mt-1">JPG · JPEG · PNG · WEBP &nbsp;·&nbsp; Max {MAP_MAX_MB} MB</p>
                   <p className="text-[11px] font-semibold text-brand-dark mt-1.5">Recommended: 1200 × 800 px or wider</p>
                 </div>
               </>

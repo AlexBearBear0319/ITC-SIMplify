@@ -256,10 +256,6 @@ export default function InteractiveMap({
                       >
                         <div className="w-2 h-2 rounded-full bg-surface/80" />
                       </div>
-                      {/* Location name above marker, always on top */}
-                      <span className="mt-1 text-xs text-ink whitespace-nowrap pointer-events-none select-none relative z-20">
-                        {loc.name}
-                      </span>
                     </div>
                   );
                 })}
