@@ -218,7 +218,7 @@ export default function InteractiveMap({
                   return (
                     <div
                       key={loc.id}
-                      className="absolute z-10 cursor-pointer"
+                      className="absolute z-10 cursor-pointer flex flex-col items-center"
                       style={{
                         left:      `${loc.coordinates_x}%`,
                         top:       `${loc.coordinates_y}%`,
@@ -242,6 +242,10 @@ export default function InteractiveMap({
                       >
                         <div className="w-2 h-2 rounded-full bg-surface/80" />
                       </div>
+                      {/* Location name below marker */}
+                      <span className="mt-1 text-xs text-ink bg-surface/90 px-1.5 py-0.5 rounded shadow whitespace-nowrap pointer-events-none select-none">
+                        {loc.name}
+                      </span>
                     </div>
                   );
                 })}
