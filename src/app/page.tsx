@@ -1107,7 +1107,7 @@ export default function DashboardPage() {
                   ) : (
                     <>
                       Ready to tackle your work,{" "}
-                      <span className="text-brand-dark">
+                      <span className="text-brand-dark dark:text-brand">
                         {profile.full_name ?? profile.username ?? "Student"}
                       </span>?
                     </>
@@ -1235,10 +1235,11 @@ export default function DashboardPage() {
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
-                <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest leading-none">
+                {/* Match primary/secondary text colors with other section headers. */}
+                <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
                   Tay Eng Soon Library
                 </p>
-                <p className="text-base font-bold text-ink mt-0.5">Live Zone Status</p>
+                <p className="text-base text-ink-muted mt-1.5">Live Zone Status</p>
               </div>
               <div className="flex gap-1.5 flex-wrap">
                 {FILTER_OPTIONS.map(({ value, label, active, inactive }) => (
@@ -1331,10 +1332,11 @@ export default function DashboardPage() {
                     <Target size={16} className="text-gold" strokeWidth={2.2} />
                   </div>
                   <div>
-                    <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest leading-none">
+                    {/* Promote mission heading text so the card title is legible at a glance. */}
+                    <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
                       Daily Mission
                     </p>
-                    <p className="text-xs text-ink-muted leading-none mt-0.5">Resets at midnight</p>
+                    <p className="text-sm text-ink-muted leading-none mt-0.5">Resets at midnight</p>
                   </div>
                   <span className="hidden sm:block h-0.5 flex-1 rounded-full bg-linear-to-r from-brand/70 to-transparent" />
                 </div>
@@ -1408,10 +1410,11 @@ export default function DashboardPage() {
                     <Trophy size={15} className="text-gold" strokeWidth={2.2} />
                   </div>
                   <div>
-                    <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest leading-none">
+                    {/* Match leaderboard title sizing with mission for consistent hierarchy. */}
+                    <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
                       This Week
                     </p>
-                    <p className="text-xs text-ink-muted leading-none mt-0.5">Top Contributors</p>
+                    <p className="text-sm text-ink-muted leading-none mt-0.5">Top Contributors</p>
                   </div>
                   <span className="hidden sm:block h-0.5 flex-1 rounded-full bg-linear-to-r from-brand/70 to-transparent" />
                 </div>
