@@ -1112,7 +1112,7 @@ export default function DashboardPage() {
                   ) : (
                     <>
                       Ready to tackle your work,{" "}
-                      <span className="text-brand-dark">
+                      <span className="text-brand-dark dark:text-brand">
                         {profile.full_name ?? profile.username ?? "Student"}
                       </span>?
                     </>
@@ -1161,7 +1161,8 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* ── Active session banner ── */}
+        {/* Layout update: keep the live map near the welcome message for quicker access. */}
+        {/* Check-in notifications are separate cards above the map (not inside the map wrapper). */}
         {activeSession && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -1197,10 +1198,6 @@ export default function DashboardPage() {
           </motion.div>
         )}
 
-        {/* ── 2. Peak Hour Alert ──────────────────────────────────────────────
-            Only shown when busiestLocation is not null (someone is actually checked in).
-            Dynamically shows the name of the currently busiest study spot.
-        ── */}
         {alertVisible && busiestLocation && (
           <motion.div variants={cardVariants}>
             <div className="flex items-start gap-3 bg-alert-light border border-alert/40 rounded-2xl px-4 py-3.5">
@@ -1230,6 +1227,104 @@ export default function DashboardPage() {
           </motion.div>
         )}
 
+        {/* ── 2. Library Map ── */}
+        <motion.div variants={cardVariants} id="library-map">
+          <div className="bg-surface rounded-2xl border border-border shadow-sm p-5 md:p-6">
+            {/* Primary heading above map status labels to guide first action. */}
+            <div className="flex items-center gap-2 mb-3">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-gold-light border border-gold/30">
+                <MapPin size={14} className="text-gold" />
+              </span>
+              <h3 className="text-lg md:text-xl font-bold text-ink">Pick a spot</h3>
+              <span className="h-0.5 flex-1 rounded-full bg-linear-to-r from-brand/70 to-transparent" />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                {/* Match primary/secondary text colors with other section headers. */}
+                <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
+                  Tay Eng Soon Library
+                </p>
+                <p className="text-base text-ink-muted mt-1.5">Live Zone Status</p>
+              </div>
+              <div className="flex gap-1.5 flex-wrap">
+                {FILTER_OPTIONS.map(({ value, label, active, inactive }) => (
+                  <button
+                    key={String(value)}
+                    onClick={() => setStatusFilter(value)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-200 ${
+                      statusFilter === value ? active : inactive
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {locLoading ? (
+              <div className="h-72 md:h-96 rounded-xl bg-canvas border border-border flex items-center justify-center">
+                <div className="text-center">
+                  <div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  <p className="text-sm text-ink-muted">Loading library zones…</p>
+                </div>
+              </div>
+            ) : locError ? (
+              <div className="h-72 md:h-96 rounded-xl bg-alert-light border border-alert/20 flex items-center justify-center px-4">
+                <div className="text-center">
+                  <AlertTriangle size={24} className="text-alert mx-auto mb-2" />
+                  <p className="text-sm text-alert font-medium">Failed to load locations</p>
+                  <p className="text-xs text-ink-muted mt-1">{locError}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="h-72 md:h-96 rounded-xl overflow-hidden border border-border">
+                <InteractiveMap
+                  locations={filteredLocations}
+                  onSelectLocation={(loc) => {
+                    const dloc = locations.find((l) => l.id === loc.id);
+                    if (dloc) setSelectedLocation(dloc);
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Quick-pick cards stay below the map for fast filtering and selection. */}
+            {locLoading ? (
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="h-16 bg-canvas rounded-xl animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                {filteredLocations.map((loc) => {
+                  const s = STATUS_CONFIG[loc.current_status];
+                  const isCheckedIn = activeSession?.locationId === loc.id;
+                  return (
+                    <button
+                      key={loc.id}
+                      onClick={() => setSelectedLocation(loc)}
+                      className="group p-3 bg-canvas border border-border rounded-xl hover:border-brand hover:bg-brand-faint transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm text-left"
+                    >
+                      <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold mb-1.5 ${s.bg} ${s.text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
+                        {isCheckedIn ? "You're here" : s.label}
+                      </div>
+                      <p className="text-xs font-semibold text-ink leading-tight truncate">{loc.name}</p>
+                      <p className="text-[10px] text-ink-faint mt-0.5 truncate">{loc.category}</p>
+                    </button>
+                  );
+                })}
+                {filteredLocations.length === 0 && (
+                  <div className="col-span-full text-center py-6 text-sm text-ink-muted">
+                    No zones match this filter.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </motion.div>
+
         {/* ── 3 + 4. Daily Mission + Leaderboard ── */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-5">
 
@@ -1237,16 +1332,18 @@ export default function DashboardPage() {
           <motion.div variants={cardVariants} className="lg:col-span-3">
             <div className="h-full bg-surface rounded-2xl border border-border shadow-sm p-5 md:p-6 flex flex-col">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   <div className="w-8 h-8 rounded-xl bg-gold-light flex items-center justify-center">
                     <Target size={16} className="text-gold" strokeWidth={2.2} />
                   </div>
                   <div>
-                    <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest leading-none">
+                    {/* Promote mission heading text so the card title is legible at a glance. */}
+                    <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
                       Daily Mission
                     </p>
-                    <p className="text-xs text-ink-muted leading-none mt-0.5">Resets at midnight</p>
+                    <p className="text-sm text-ink-muted leading-none mt-0.5">Resets at midnight</p>
                   </div>
+                  <span className="hidden sm:block h-0.5 flex-1 rounded-full bg-linear-to-r from-brand/70 to-transparent" />
                 </div>
                 {mission && (
                   <div className="flex items-center gap-1 bg-gold-light border border-gold/30 px-2.5 py-1 rounded-full">
@@ -1313,16 +1410,18 @@ export default function DashboardPage() {
           <motion.div variants={cardVariants} className="lg:col-span-2">
             <div className="h-full bg-surface rounded-2xl border border-border shadow-sm p-5 md:p-6 flex flex-col">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   <div className="w-8 h-8 rounded-xl bg-gold-light flex items-center justify-center">
                     <Trophy size={15} className="text-gold" strokeWidth={2.2} />
                   </div>
                   <div>
-                    <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest leading-none">
+                    {/* Match leaderboard title sizing with mission for consistent hierarchy. */}
+                    <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
                       This Week
                     </p>
-                    <p className="text-xs text-ink-muted leading-none mt-0.5">Top Contributors</p>
+                    <p className="text-sm text-ink-muted leading-none mt-0.5">Top Contributors</p>
                   </div>
+                  <span className="hidden sm:block h-0.5 flex-1 rounded-full bg-linear-to-r from-brand/70 to-transparent" />
                 </div>
                 <Link
                   href="/leaderboard"
@@ -1385,95 +1484,6 @@ export default function DashboardPage() {
             </div>
           </motion.div>
         </div>
-
-        {/* ── 5. Library Map ── */}
-        <motion.div variants={cardVariants} id="library-map">
-          <div className="bg-surface rounded-2xl border border-border shadow-sm p-5 md:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <div>
-                <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest leading-none">
-                  Tay Eng Soon Library
-                </p>
-                <p className="text-base font-bold text-ink mt-0.5">Live Zone Status</p>
-              </div>
-              <div className="flex gap-1.5 flex-wrap">
-                {FILTER_OPTIONS.map(({ value, label, active, inactive }) => (
-                  <button
-                    key={String(value)}
-                    onClick={() => setStatusFilter(value)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-200 ${
-                      statusFilter === value ? active : inactive
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {locLoading ? (
-              <div className="h-72 md:h-96 rounded-xl bg-canvas border border-border flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                  <p className="text-sm text-ink-muted">Loading library zones…</p>
-                </div>
-              </div>
-            ) : locError ? (
-              <div className="h-72 md:h-96 rounded-xl bg-alert-light border border-alert/20 flex items-center justify-center px-4">
-                <div className="text-center">
-                  <AlertTriangle size={24} className="text-alert mx-auto mb-2" />
-                  <p className="text-sm text-alert font-medium">Failed to load locations</p>
-                  <p className="text-xs text-ink-muted mt-1">{locError}</p>
-                </div>
-              </div>
-            ) : (
-              <div className="h-72 md:h-96 rounded-xl overflow-hidden border border-border">
-                <InteractiveMap
-                  locations={filteredLocations}
-                  onSelectLocation={(loc) => {
-                    const dloc = locations.find((l) => l.id === loc.id);
-                    if (dloc) setSelectedLocation(dloc);
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Location cards */}
-            {locLoading ? (
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="h-16 bg-canvas rounded-xl animate-pulse" />
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                {filteredLocations.map((loc) => {
-                  const s = STATUS_CONFIG[loc.current_status];
-                  const isCheckedIn = activeSession?.locationId === loc.id;
-                  return (
-                    <button
-                      key={loc.id}
-                      onClick={() => setSelectedLocation(loc)}
-                      className="group p-3 bg-canvas border border-border rounded-xl hover:border-brand hover:bg-brand-faint transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm text-left"
-                    >
-                      <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold mb-1.5 ${s.bg} ${s.text}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
-                        {isCheckedIn ? "You're here" : s.label}
-                      </div>
-                      <p className="text-xs font-semibold text-ink leading-tight truncate">{loc.name}</p>
-                      <p className="text-[10px] text-ink-faint mt-0.5 truncate">{loc.category}</p>
-                    </button>
-                  );
-                })}
-                {filteredLocations.length === 0 && (
-                  <div className="col-span-full text-center py-6 text-sm text-ink-muted">
-                    No zones match this filter.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </motion.div>
 
       </motion.div>
     </>

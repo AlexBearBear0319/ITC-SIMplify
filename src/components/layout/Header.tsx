@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { UserCircle, Settings, ChevronDown, Coins, LogOut, ShieldCheck } from "lucide-react";
+import { UserCircle, Settings, ChevronDown, Coins, LogOut, ShieldCheck, Monitor, Sun, Moon,} from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { useThemeMode } from "@/components/providers/ThemeProvider";
 
 type UserProfile = {
   username: string;
@@ -32,6 +33,12 @@ export default function Header() {
   const [open, setOpen]       = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+
+  // Theme controls from provider:
+  // - mode = "auto" | "light" | "dark"
+  // - resolvedTheme = actual applied theme ("light" | "dark")
+  // - setMode = updates theme mode
+  const { mode, resolvedTheme, setMode } = useThemeMode();
 
   // Resolve title – match prefix for dynamic routes like /location/[id]
   const title =
@@ -87,12 +94,63 @@ export default function Header() {
     ? displayName.slice(0, 2).toUpperCase()
     : "…";
 
+  // Shared classes for theme mode buttons
+  const themeButtonBase =
+    "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] border transition-colors duration-200";
+  const themeButtonActive = "bg-brand text-ink border-brand";
+  const themeButtonIdle =
+    "bg-surface text-ink-muted border-border hover:bg-brand-faint hover:text-ink";
+
   return (
     <header className="sticky top-0 z-20 h-16 bg-surface/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 md:px-6 shrink-0">
       {/* Page title – offset on mobile for hamburger */}
       <h1 className="text-base md:text-lg font-bold text-ink pl-10 md:pl-0 truncate">
         {title}
       </h1>
+
+ {/* Right side controls: theme switch + profile */}
+      <div className="flex items-center gap-2 md:gap-3">
+        {/* Header-only theme switch (no separate component file).
+            Hidden on very small screens to keep header uncluttered. */}
+        <div className="hidden md:flex items-center gap-1">
+          {/* Auto mode = follow SG timing in ThemeProvider */}
+          <button
+            type="button"
+            onClick={() => setMode("auto")}
+            aria-pressed={mode === "auto"}
+            title={`Auto mode (SGT). Current: ${resolvedTheme}`}
+            className={`${themeButtonBase} ${mode === "auto" ? themeButtonActive : themeButtonIdle}`}
+          >
+            <Monitor size={12} />
+            Auto
+          </button>
+  
+
+          {/* Force light mode */}
+          <button
+            type="button"
+            onClick={() => setMode("light")}
+            aria-pressed={mode === "light"}
+            title="Force light mode"
+            className={`${themeButtonBase} ${mode === "light" ? themeButtonActive : themeButtonIdle}`}
+          >
+            <Sun size={12} />
+            Light
+          </button>
+
+{/* Force dark mode */}
+          <button
+            type="button"
+            onClick={() => setMode("dark")}
+            aria-pressed={mode === "dark"}
+            title="Force dark mode"
+            className={`${themeButtonBase} ${mode === "dark" ? themeButtonActive : themeButtonIdle}`}
+          >
+            <Moon size={12} />
+            Dark
+          </button>
+        </div>
+
 
       {/* Profile button */}
       <div className="relative shrink-0" ref={ref}>
@@ -175,6 +233,7 @@ export default function Header() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </header>
   );
