@@ -1338,7 +1338,7 @@ function FullSizeMapPinModal({
     supabase
       .from("campus_maps")
       .select("image_url")
-      .order("updated_at", { ascending: false })
+      .order("uploaded_at", { ascending: false })
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
@@ -1508,6 +1508,7 @@ function LocationsTab() {
   const [saving,    setSaving]    = useState(false);
   const [confirmId, setConfirmId] = useState<number | string | null>(null);
   const [currentQrToken, setCurrentQrToken] = useState<string | null>(null);
+  const [campusMapUrl, setCampusMapUrl] = useState<string | undefined>(undefined);
 
   const load = async () => {
     const { data } = await supabase
@@ -1519,6 +1520,18 @@ function LocationsTab() {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    supabase
+      .from("campus_maps")
+      .select("image_url")
+      .order("uploaded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.image_url) setCampusMapUrl(data.image_url);
+      });
+  }, [supabase]);
 
   const openCreate = () => {
     setEditing(null);
@@ -1660,7 +1673,7 @@ function LocationsTab() {
               x={form.coordinates_x ? Number(form.coordinates_x) : 0}
               y={form.coordinates_y ? Number(form.coordinates_y) : 0}
               onChange={(x, y) => { set("coordinates_x", String(x)); set("coordinates_y", String(y)); }}
-              imageUrl={form.image_url || undefined}
+              imageUrl={campusMapUrl}
             />
             {(form.coordinates_x || form.coordinates_y) && (
               <p className="text-[10px] text-ink-faint mt-1">x: {form.coordinates_x}% · y: {form.coordinates_y}%</p>
