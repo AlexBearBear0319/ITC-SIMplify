@@ -26,7 +26,7 @@ import {
   Activity, MapPin, Users, Lightbulb, CalendarDays, Gift, Star,
   Plus, Pencil, Trash2, X, Coins, Shield, BarChart2, MessageSquare,
   Minus, AlertTriangle, ChevronRight, GraduationCap, BookOpen,
-  Upload, ImageIcon, Copy, CheckCircle2,
+  Upload, ImageIcon, Copy, CheckCircle2, Maximize2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -1319,11 +1319,14 @@ const EMPTY_LOC: LocForm = {
 };
 
 // Clickable floor-plan mini-map for setting coordinates_x / coordinates_y
-function MapPinSelector({
-  x, y, onChange,
+function FullSizeMapPinModal({
+  open, onClose, x, y, onChange, imageUrl,
 }: {
+  open: boolean;
+  onClose: () => void;
   x: number; y: number;
   onChange: (x: number, y: number) => void;
+  imageUrl?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -1334,36 +1337,140 @@ function MapPinSelector({
     onChange(Math.max(0, Math.min(100, px)), Math.max(0, Math.min(100, py)));
   };
   const hasPin = x > 0 || y > 0;
+
   return (
-    <div
-      ref={containerRef}
-      onClick={handleClick}
-      role="button"
-      tabIndex={0}
-      aria-label="Click map to set pin location"
-      className="relative w-full h-28 bg-brand-faint/30 rounded-xl overflow-hidden cursor-crosshair border border-dashed border-brand/40 select-none"
-    >
-      {/* Simplified floor-plan silhouette */}
-      <svg viewBox="0 0 600 400" className="absolute inset-0 w-full h-full opacity-20" aria-hidden="true">
-        <rect x="12"  y="12"  width="180" height="136" rx="4" fill="#B3D2D5" />
-        <rect x="204" y="12"  width="180" height="136" rx="4" fill="#B3D2D5" />
-        <rect x="396" y="12"  width="192" height="148" rx="4" fill="#B3D2D5" />
-        <rect x="12"  y="164" width="576" height="108" rx="4" fill="#B3D2D5" />
-        <rect x="12"  y="280" width="216" height="108" rx="4" fill="#B3D2D5" />
-        <rect x="234" y="280" width="108" height="108" rx="4" fill="#B3D2D5" />
-        <rect x="348" y="280" width="240" height="108" rx="4" fill="#B3D2D5" />
-      </svg>
-      {hasPin ? (
-        <div
-          className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-alert border-2 border-surface shadow-sm pointer-events-none"
-          style={{ left: `${x}%`, top: `${y}%` }}
-        />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <p className="text-xs text-ink-faint">Click map to pin location</p>
+    <Dialog.Root open={open} onOpenChange={onClose}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-black/50 z-50" />
+        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[90vw] h-[90vh] max-w-5xl max-h-5xl bg-canvas rounded-2xl border border-border shadow-xl flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b border-border">
+            <Dialog.Title className="text-lg font-bold text-ink">Pin Location on Map</Dialog.Title>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-brand-faint transition-colors"
+              title="Close"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden flex items-center justify-center p-4">
+            <div
+              ref={containerRef}
+              onClick={handleClick}
+              role="button"
+              tabIndex={0}
+              aria-label="Click map to set pin location"
+              className="relative w-full h-full bg-brand-faint/30 rounded-xl overflow-hidden cursor-crosshair border border-dashed border-brand/40 select-none flex items-center justify-center"
+            >
+              {/* Display uploaded location image if available, otherwise show floor-plan */}
+              {imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imageUrl}
+                  alt="Location image"
+                  className="absolute inset-0 w-full h-full object-contain"
+                />
+              ) : (
+                <svg viewBox="0 0 600 400" className="absolute inset-0 w-full h-full opacity-30" aria-hidden="true">
+                  <rect x="12"  y="12"  width="180" height="136" rx="4" fill="#B3D2D5" />
+                  <rect x="204" y="12"  width="180" height="136" rx="4" fill="#B3D2D5" />
+                  <rect x="396" y="12"  width="192" height="148" rx="4" fill="#B3D2D5" />
+                  <rect x="12"  y="164" width="576" height="108" rx="4" fill="#B3D2D5" />
+                  <rect x="12"  y="280" width="216" height="108" rx="4" fill="#B3D2D5" />
+                  <rect x="234" y="280" width="108" height="108" rx="4" fill="#B3D2D5" />
+                  <rect x="348" y="280" width="240" height="108" rx="4" fill="#B3D2D5" />
+                </svg>
+              )}
+              {hasPin ? (
+                <div
+                  className="absolute w-5 h-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-alert border-3 border-surface shadow-lg pointer-events-none"
+                  style={{ left: `${x}%`, top: `${y}%` }}
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <p className="text-sm text-ink-faint bg-surface/80 px-4 py-2 rounded-lg">Click map to pin location</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between p-4 border-t border-border">
+            <p className="text-xs text-ink-faint">
+              {hasPin ? `x: ${x}% · y: ${y}%` : "Click on the map to place a pin"}
+            </p>
+            <button
+              onClick={onClose}
+              className={BTN_PRI}
+            >
+              Done
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function MapPinSelector({
+  x, y, onChange, imageUrl,
+}: {
+  x: number; y: number;
+  onChange: (x: number, y: number) => void;
+  imageUrl?: string;
+}) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const hasPin = x > 0 || y > 0;
+
+  return (
+    <>
+      <div className="flex gap-2 items-end">
+        <div className="flex-1 relative w-full h-28 bg-brand-faint/30 rounded-xl overflow-hidden border border-dashed border-brand/40">
+          {/* Display uploaded location image if available, otherwise show floor-plan silhouette */}
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl}
+              alt="Location image"
+              className="absolute inset-0 w-full h-full object-cover opacity-70"
+            />
+          ) : (
+            <svg viewBox="0 0 600 400" className="absolute inset-0 w-full h-full opacity-20" aria-hidden="true">
+              <rect x="12"  y="12"  width="180" height="136" rx="4" fill="#B3D2D5" />
+              <rect x="204" y="12"  width="180" height="136" rx="4" fill="#B3D2D5" />
+              <rect x="396" y="12"  width="192" height="148" rx="4" fill="#B3D2D5" />
+              <rect x="12"  y="164" width="576" height="108" rx="4" fill="#B3D2D5" />
+              <rect x="12"  y="280" width="216" height="108" rx="4" fill="#B3D2D5" />
+              <rect x="234" y="280" width="108" height="108" rx="4" fill="#B3D2D5" />
+              <rect x="348" y="280" width="240" height="108" rx="4" fill="#B3D2D5" />
+            </svg>
+          )}
+          {hasPin ? (
+            <div
+              className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-alert border-2 border-surface shadow-sm pointer-events-none"
+              style={{ left: `${x}%`, top: `${y}%` }}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <p className="text-xs text-ink-faint">Preview</p>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          className={BTN_PRI + " shrink-0"}
+        >
+          <Maximize2 size={14} /> Open
+        </button>
+      </div>
+      <FullSizeMapPinModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        x={x}
+        y={y}
+        onChange={onChange}
+        imageUrl={imageUrl}
+      />
+    </>
   );
 }
 
@@ -1525,11 +1632,12 @@ function LocationsTab() {
             <input type="text" value={form.location_text} onChange={(e) => set("location_text", e.target.value)} className={INPUT} placeholder="e.g., Block A, Level 2" />
           </div>
           <div>
-            <label className={LABEL}>Map Pin — click to place</label>
+            <label className={LABEL}>Map Pin — open to place on full-size image</label>
             <MapPinSelector
               x={form.coordinates_x ? Number(form.coordinates_x) : 0}
               y={form.coordinates_y ? Number(form.coordinates_y) : 0}
               onChange={(x, y) => { set("coordinates_x", String(x)); set("coordinates_y", String(y)); }}
+              imageUrl={form.image_url || undefined}
             />
             {(form.coordinates_x || form.coordinates_y) && (
               <p className="text-[10px] text-ink-faint mt-1">x: {form.coordinates_x}% · y: {form.coordinates_y}%</p>
