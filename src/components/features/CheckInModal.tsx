@@ -3,7 +3,7 @@
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Minus, Plus, BookOpen, Coffee, CheckCircle2, Coins } from "lucide-react";
+import { X, Minus, Plus, BookOpen, Coffee, CheckCircle2, Coins, ChevronLeft } from "lucide-react";
 
 // ─────────────────────────────────────────────
 // Types
@@ -23,6 +23,7 @@ type Props = {
   locationName: string;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: CheckInData) => Promise<void>;
+  onBack?: () => void;
   defaultValues?: Partial<CheckInData>;
   editMode?: boolean;
 };
@@ -42,7 +43,7 @@ const DURATION_OPTIONS = [
 // Component
 // ─────────────────────────────────────────────
 
-export default function CheckInModal({ open, locationName, onOpenChange, onSubmit, defaultValues, editMode = false }: Props) {
+export default function CheckInModal({ open, locationName, onOpenChange, onSubmit, onBack, defaultValues, editMode = false }: Props) {
   const [seatsNeeded, setSeatsNeeded] = useState(defaultValues?.seats_needed ?? 1);
   const [activity,    setActivity]    = useState<Activity>(defaultValues?.activity ?? "study");
   const [module,      setModule]      = useState(defaultValues?.module ?? "");
@@ -63,6 +64,16 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
     onOpenChange(next);
   };
 
+  const handleBack = () => {
+    if (submitting) return;
+    reset();
+    if (onBack) {
+      onBack();
+      return;
+    }
+    onOpenChange(false);
+  };
+
   const handleSubmit = async () => {
     if (submitting) return;
     setSubmitting(true);
@@ -75,10 +86,10 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay/50 backdrop-blur-sm" />
+        <Dialog.Overlay className="fixed inset-0 z-60 bg-overlay/50 backdrop-blur-sm" />
         <Dialog.Content
           aria-describedby="checkin-desc"
-          className="fixed left-1/2 top-1/2 z-[60] w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 bg-surface rounded-2xl shadow-xl outline-none overflow-hidden"
+          className="fixed left-1/2 top-1/2 z-60 w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 bg-surface rounded-2xl shadow-xl outline-none overflow-hidden"
         >
           <AnimatePresence mode="wait">
             {success ? (
@@ -116,8 +127,18 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                 {/* Header */}
                 <div className="flex items-start justify-between p-6 pb-0">
                   <div>
+                    {onBack && !editMode && (
+                      <button
+                        type="button"
+                        onClick={handleBack}
+                        className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-ink-muted hover:text-ink transition-colors"
+                      >
+                        <ChevronLeft size={14} />
+                        Back
+                      </button>
+                    )}
                     <Dialog.Title className="text-base font-bold text-ink">{editMode ? "Edit Session" : "Check In"}</Dialog.Title>
-                    <p id="checkin-desc" className="text-xs text-ink-muted mt-0.5 truncate max-w-[220px]">
+                    <p id="checkin-desc" className="text-xs text-ink-muted mt-0.5 truncate max-w-55">
                       {locationName}
                     </p>
                   </div>

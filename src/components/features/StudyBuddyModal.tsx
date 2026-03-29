@@ -3,7 +3,7 @@
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Minus, Plus, Users, Coins } from "lucide-react";
+import { X, Minus, Plus, Users, Coins, ChevronLeft } from "lucide-react";
 
 // ─────────────────────────────────────────────
 // Types
@@ -19,13 +19,14 @@ type Props = {
   locationName: string;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: StudyBuddyData) => Promise<void>;
+  onBack?: () => void;
 };
 
 // ─────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────
 
-export default function StudyBuddyModal({ open, locationName, onOpenChange, onSubmit }: Props) {
+export default function StudyBuddyModal({ open, locationName, onOpenChange, onSubmit, onBack }: Props) {
   const [topic,      setTopic]      = useState("");
   const [maxMembers, setMaxMembers] = useState(4);
   const [submitting, setSubmitting] = useState(false);
@@ -42,6 +43,16 @@ export default function StudyBuddyModal({ open, locationName, onOpenChange, onSu
     onOpenChange(next);
   };
 
+  const handleBack = () => {
+    if (submitting) return;
+    reset();
+    if (onBack) {
+      onBack();
+      return;
+    }
+    onOpenChange(false);
+  };
+
   const handleSubmit = async () => {
     if (submitting) return;
     setSubmitting(true);
@@ -54,10 +65,10 @@ export default function StudyBuddyModal({ open, locationName, onOpenChange, onSu
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[60] bg-overlay/50 backdrop-blur-sm" />
+        <Dialog.Overlay className="fixed inset-0 z-60 bg-overlay/50 backdrop-blur-sm" />
         <Dialog.Content
           aria-describedby="buddy-desc"
-          className="fixed left-1/2 top-1/2 z-[60] w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 bg-surface rounded-2xl shadow-xl outline-none overflow-hidden"
+          className="fixed left-1/2 top-1/2 z-60 w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 bg-surface rounded-2xl shadow-xl outline-none overflow-hidden"
         >
           <AnimatePresence mode="wait">
             {success ? (
@@ -92,10 +103,20 @@ export default function StudyBuddyModal({ open, locationName, onOpenChange, onSu
                 {/* Header */}
                 <div className="flex items-start justify-between p-6 pb-0">
                   <div>
+                    {onBack && (
+                      <button
+                        type="button"
+                        onClick={handleBack}
+                        className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-ink-muted hover:text-ink transition-colors"
+                      >
+                        <ChevronLeft size={14} />
+                        Back
+                      </button>
+                    )}
                     <Dialog.Title className="text-base font-bold text-ink">
                       Find Study Buddy
                     </Dialog.Title>
-                    <p id="buddy-desc" className="text-xs text-ink-muted mt-0.5 truncate max-w-[220px]">
+                    <p id="buddy-desc" className="text-xs text-ink-muted mt-0.5 truncate max-w-55">
                       {locationName}
                     </p>
                   </div>

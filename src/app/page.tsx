@@ -1106,6 +1106,10 @@ export default function DashboardPage() {
           open={studyBuddyOpen}
           locationName={selectedLocation.name}
           onOpenChange={(open) => { if (!open) setStudyBuddyOpen(false); }}
+          onBack={() => {
+            setStudyBuddyOpen(false);
+            setActionChoiceOpen(true);
+          }}
           onSubmit={handleStudyBuddySubmit}
         />
       )}
@@ -1116,6 +1120,10 @@ export default function DashboardPage() {
           open={checkInOpen}
           locationName={selectedLocation.name}
           onOpenChange={(open) => { if (!open) setCheckInOpen(false); }}
+          onBack={() => {
+            setCheckInOpen(false);
+            setActionChoiceOpen(true);
+          }}
           onSubmit={handleCheckInSubmit}
         />
       )}
@@ -1134,16 +1142,16 @@ export default function DashboardPage() {
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto space-y-4 md:space-y-5"
+        className="px-3 py-3 md:px-4 md:py-4 lg:px-5 lg:py-5 max-w-6xl mx-auto space-y-3 md:space-y-4"
       >
 
         {/* ── 1. Greeting Hero ── */}
         <motion.div variants={cardVariants}>
-          <div className="relative bg-surface rounded-2xl p-6 md:p-8 shadow-sm border border-border overflow-hidden">
+          <div className="relative bg-surface rounded-2xl p-5 md:p-6 shadow-sm border border-border overflow-hidden">
             <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-brand opacity-20 blur-3xl pointer-events-none" />
             <div className="absolute -bottom-10 left-24 w-36 h-36 rounded-full bg-gold opacity-10 blur-3xl pointer-events-none" />
 
-            <div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div>
                 <p className="text-sm text-ink-muted font-medium flex items-center gap-1.5">
                   {greeting.emoji && <span>{greeting.emoji}</span>}
@@ -1163,7 +1171,7 @@ export default function DashboardPage() {
                   )}
                 </h2>
 
-                <p className="text-sm text-ink-muted mt-2 flex items-center gap-1.5">
+                <p className="text-sm text-ink-muted mt-1.5 flex items-center gap-1.5">
                   <Flame size={14} className="text-alert shrink-0" />
                   {profile === null ? (
                     <span className="inline-block h-4 w-40 bg-canvas rounded animate-pulse" />
@@ -1177,7 +1185,7 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 shrink-0">
+              <div className="flex flex-row sm:flex-col items-center sm:items-end gap-1.5 shrink-0">
                 {/* ── Points badge ── */}
                 <div className="flex items-center gap-1.5 bg-gold-light border border-gold/30 px-3 py-1.5 rounded-full">
                   <Coins size={13} className="text-gold" />
@@ -1214,7 +1222,7 @@ export default function DashboardPage() {
             exit={{ opacity: 0, y: -8 }}
             variants={cardVariants}
           >
-            <div className="flex items-center gap-3 px-4 py-3 bg-success-light border border-success/30 rounded-2xl">
+            <div className="flex items-center gap-2.5 px-4 py-2.5 bg-success-light border border-success/30 rounded-2xl">
               <CheckCircle2 size={16} className="text-success shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-ink truncate">
@@ -1244,7 +1252,7 @@ export default function DashboardPage() {
 
         {alertVisible && busiestLocation && (
           <motion.div variants={cardVariants}>
-            <div className="flex items-start gap-3 bg-alert-light border border-alert/40 rounded-2xl px-4 py-3.5">
+            <div className="flex items-start gap-2.5 bg-alert-light border border-alert/40 rounded-2xl px-4 py-3">
               <AlertTriangle size={18} className="text-alert shrink-0 mt-0.5" strokeWidth={2.2} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-ink leading-snug">
@@ -1273,7 +1281,7 @@ export default function DashboardPage() {
 
         {/* ── 2. Library Map ── */}
         <motion.div variants={cardVariants} id="library-map">
-          <div className="bg-surface rounded-2xl border border-border shadow-sm p-5 md:p-6">
+          <div className="bg-surface rounded-2xl border border-border shadow-sm p-4 md:p-5">
             {/* Primary heading above map status labels to guide first action. */}
             <div className="flex items-center gap-2 mb-3">
               <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-gold-light border border-gold/30">
@@ -1282,7 +1290,7 @@ export default function DashboardPage() {
               <h3 className="text-lg md:text-xl font-bold text-ink">Pick a spot</h3>
               <span className="h-0.5 flex-1 rounded-full bg-linear-to-r from-brand/70 to-transparent" />
             </div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
               <div>
                 {/* Match primary/secondary text colors with other section headers. */}
                 <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
@@ -1334,13 +1342,13 @@ export default function DashboardPage() {
 
             {/* Quick-pick cards stay below the map for fast filtering and selection. */}
             {locLoading ? (
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="h-16 bg-canvas rounded-xl animate-pulse" />
                 ))}
               </div>
             ) : (
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                 {filteredLocations.map((loc) => {
                   const s = STATUS_CONFIG[loc.current_status];
                   const isCheckedIn = activeSession?.locationId === loc.id;
@@ -1370,12 +1378,12 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* ── 3 + 4. Daily Mission + Leaderboard ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 md:gap-4">
 
           {/* ── 3. Daily Mission ── */}
           <motion.div variants={cardVariants} className="lg:col-span-3">
-            <div className="h-full bg-surface rounded-2xl border border-border shadow-sm p-5 md:p-6 flex flex-col">
-              <div className="flex items-center justify-between mb-4">
+            <div className="h-full bg-surface rounded-2xl border border-border shadow-sm p-4 md:p-5 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <div className="w-8 h-8 rounded-xl bg-gold-light flex items-center justify-center">
                     <Target size={16} className="text-gold" strokeWidth={2.2} />
@@ -1412,12 +1420,12 @@ export default function DashboardPage() {
                     {mission.description}
                   </p>
 
-                  <div className="flex items-center gap-1.5 mt-3 text-xs text-ink-muted">
+                  <div className="flex items-center gap-1.5 mt-2.5 text-xs text-ink-muted">
                     <MapPin size={12} className="shrink-0 text-brand-dark" />
                     <span>{mission.location_hint}</span>
                   </div>
 
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-medium text-ink-muted">Progress</span>
                       <span className="text-xs font-semibold text-ink">
@@ -1435,7 +1443,7 @@ export default function DashboardPage() {
 
                   <button
                     onClick={scrollToMap}
-                    className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
+                    className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
                   >
                     <CheckCircle2 size={15} />
                     Start Mission
@@ -1452,8 +1460,8 @@ export default function DashboardPage() {
 
           {/* ── 4. Leaderboard Snippet ── */}
           <motion.div variants={cardVariants} className="lg:col-span-2">
-            <div className="h-full bg-surface rounded-2xl border border-border shadow-sm p-5 md:p-6 flex flex-col">
-              <div className="flex items-center justify-between mb-4">
+            <div className="h-full bg-surface rounded-2xl border border-border shadow-sm p-4 md:p-5 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <div className="w-8 h-8 rounded-xl bg-gold-light flex items-center justify-center">
                     <Trophy size={15} className="text-gold" strokeWidth={2.2} />
@@ -1475,7 +1483,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              <div className="flex flex-col gap-2 flex-1">
+              <div className="flex flex-col gap-1.5 flex-1">
                 {topEntries.length === 0 ? (
                   <>
                     {[1, 2, 3].map((i) => (
@@ -1514,7 +1522,7 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              <div className="mt-4 pt-3 border-t border-border">
+              <div className="mt-3 pt-2.5 border-t border-border">
                 <div className="flex items-center justify-between text-xs text-ink-muted">
                   <span>Your rank this week</span>
                   <span className="font-semibold text-ink">
