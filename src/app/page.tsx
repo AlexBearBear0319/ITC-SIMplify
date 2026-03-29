@@ -484,6 +484,7 @@ export default function DashboardPage() {
   const [locations, setLocations]   = useState<DashboardLocation[]>([]);
   const [locLoading, setLocLoading] = useState(true);
   const [locError, setLocError]     = useState<string | null>(null);
+  const [mapImageUrl, setMapImageUrl] = useState<string | undefined>(undefined);
 
   // Daily mission
   const [mission, setMission]           = useState<Mission | null>(null);
@@ -558,6 +559,18 @@ export default function DashboardPage() {
 
     loadProfile();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch the latest campus map image from Supabase
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("campus_maps")
+      .select("image_url")
+      .order("uploaded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { if (data?.image_url) setMapImageUrl(data.image_url); });
+  }, []);
 
   // Fetches all locations and computes which is currently busiest (for the alert banner).
   useEffect(() => {
@@ -1330,6 +1343,7 @@ export default function DashboardPage() {
               <div className="h-72 md:h-96 rounded-xl overflow-hidden border border-border">
                 <InteractiveMap
                   locations={filteredLocations}
+                  mapImageUrl={mapImageUrl}
                   onSelectLocation={(loc) => {
                     const dloc = locations.find((l) => l.id === loc.id);
                     if (dloc) setSelectedLocation(dloc);

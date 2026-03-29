@@ -10,7 +10,7 @@ import {
   adminSaveReward, adminDeleteReward, adminToggleReward, adminAdjustStock,
   adminToggleAdmin, adminUpdatePoints,
   adminSaveLocation, adminDeleteLocation, adminUpdateLocationStatus,
-  adminUploadLocationImage,
+  adminUploadLocationImage, adminUploadCampusMap,
   adminDeleteReview,
   adminUpdateRule, adminToggleRule,
   adminSaveSchool, adminDeleteSchool,
@@ -48,7 +48,7 @@ function useAdminError() { return useContext(AdminErrorCtx); }
 
 // ── Tab config ──────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "events" | "rewards" | "users" | "locations" | "reviews" | "rules" | "schools";
+type Tab = "overview" | "events" | "rewards" | "users" | "locations" | "map" | "reviews" | "rules" | "schools";
 
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "overview",   label: "Overview",     icon: BarChart2      },
@@ -56,6 +56,7 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "rewards",    label: "Rewards",      icon: Gift           },
   { id: "users",      label: "Users",        icon: Users          },
   { id: "locations",  label: "Locations",    icon: MapPin         },
+  { id: "map",        label: "Campus Map",   icon: ImageIcon      },
   { id: "reviews",    label: "Reviews",      icon: MessageSquare  },
   { id: "rules",      label: "Point Rules",  icon: Coins          },
   { id: "schools",    label: "Schools",      icon: GraduationCap  },
@@ -1080,6 +1081,225 @@ function ImageUpload({
   );
 }
 
+// ── Campus Map Tab ────────────────────────────────────────────────────────────
+
+type CampusMap = { id: number; label: string; image_url: string; uploaded_at: string };
+
+const MAP_MAX_MB    = 10;
+const MAP_MAX_BYTES = MAP_MAX_MB * 1024 * 1024;
+const MAP_TYPES     = ["image/jpeg", "image/png", "image/webp"] as const;
+const MAP_ACCEPT    = MAP_TYPES.join(",");
+
+function validateMapFile(file: File): string | null {
+  if (!(MAP_TYPES as readonly string[]).includes(file.type))
+    return `"${file.name}" is not supported. Please upload a JPG, PNG, or WEBP image.`;
+  if (file.size > MAP_MAX_BYTES)
+    return `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — map images must be under ${MAP_MAX_MB} MB.`;
+  return null;
+}
+
+function CampusMapTab() {
+  const supabase = createClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const [currentMap, setCurrentMap] = useState<CampusMap | null>(null);
+  const [mapLoading, setMapLoading] = useState(true);
+  const [uploading,  setUploading]  = useState(false);
+  const [fileName,   setFileName]   = useState<string | null>(null);
+  const [dragOver,   setDragOver]   = useState(false);
+  const [uploadErr,  setUploadErr]  = useState<string | null>(null);
+  const [success,    setSuccess]    = useState(false);
+  const [copied,     setCopied]     = useState(false);
+
+  const loadMap = async () => {
+    const { data } = await supabase
+      .from("campus_maps")
+      .select("id, label, image_url, uploaded_at")
+      .order("uploaded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setCurrentMap(data ?? null);
+    setMapLoading(false);
+  };
+
+  useEffect(() => { loadMap(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const doUpload = async (file: File) => {
+    const clientErr = validateMapFile(file);
+    if (clientErr) { setUploadErr(clientErr); return; }
+
+    setUploading(true);
+    setUploadErr(null);
+    setSuccess(false);
+    setFileName(file.name);
+
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await adminUploadCampusMap(fd);
+
+    setUploading(false);
+    setFileName(null);
+    if (inputRef.current) inputRef.current.value = "";
+
+    if (res.error) { setUploadErr(res.error); return; }
+    setSuccess(true);
+    setTimeout(() => setSuccess(false), 3000);
+    await loadMap();
+  };
+
+  const copyError = () => {
+    if (!uploadErr) return;
+    navigator.clipboard.writeText(`[Campus Map Upload Error]\n${uploadErr}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <>
+      <SectionHeader title="Campus Map" sub="Map image displayed on the student homepage" />
+
+      <div className="space-y-6 mt-2">
+        {/* ── Current map preview ── */}
+        <div>
+          <p className={LABEL}>Current Map</p>
+          {mapLoading ? (
+            <div className="h-52 bg-canvas rounded-xl animate-pulse border border-border" />
+          ) : currentMap ? (
+            <div className="rounded-xl border border-border overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={currentMap.image_url} alt="Campus map" className="w-full h-52 object-contain bg-canvas" />
+              <div className="px-3 py-2 border-t border-border bg-canvas flex items-center justify-between">
+                <p className="text-[11px] text-ink-muted">
+                  Last updated: {new Date(currentMap.uploaded_at).toLocaleString()}
+                </p>
+                <span className="text-[10px] font-semibold text-success bg-success/10 px-2 py-0.5 rounded-full border border-success/20">
+                  Active
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="h-32 rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-canvas">
+              <p className="text-sm text-ink-muted">No map uploaded yet — students see the default floor plan.</p>
+            </div>
+          )}
+        </div>
+
+        {/* ── Upload new map ── */}
+        <div>
+          <p className={LABEL}>Upload New Map</p>
+          <p className="text-xs text-ink-faint mb-3 leading-relaxed">
+            The new image will immediately replace what students see on the homepage.
+            Make sure location marker positions (x/y %) still match the new image layout.
+          </p>
+
+          {/* Drop zone */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => { setUploadErr(null); inputRef.current?.click(); }}
+            onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) doUpload(f);
+            }}
+            className={[
+              "w-full rounded-xl border-2 border-dashed transition-all duration-150 select-none",
+              "flex flex-col items-center justify-center gap-3 py-8 px-4 text-center",
+              uploading
+                ? "border-brand/40 bg-brand-faint/10 cursor-wait pointer-events-none"
+                : success
+                  ? "border-success/50 bg-success/5 cursor-pointer"
+                  : dragOver
+                    ? "border-brand bg-brand-faint/20 scale-[1.01] cursor-copy"
+                    : "border-border hover:border-brand/60 hover:bg-brand-faint/10 cursor-pointer",
+            ].join(" ")}
+          >
+            {uploading ? (
+              <>
+                <span className="w-7 h-7 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
+                <div>
+                  <p className="text-sm font-medium text-ink">Uploading map…</p>
+                  <p className="text-xs text-ink-muted mt-0.5 max-w-[220px] truncate">{fileName}</p>
+                </div>
+              </>
+            ) : success ? (
+              <>
+                <div className="w-11 h-11 rounded-xl bg-success/10 flex items-center justify-center">
+                  <CheckCircle2 size={22} className="text-success" />
+                </div>
+                <p className="text-sm font-semibold text-success">Map updated — students can see it now</p>
+                <p className="text-xs text-ink-faint">Click or drag to upload another</p>
+              </>
+            ) : (
+              <>
+                <div className="w-11 h-11 rounded-xl bg-brand-faint/30 flex items-center justify-center">
+                  {dragOver
+                    ? <ImageIcon size={22} className="text-brand-dark" />
+                    : <Upload size={20} className="text-ink-muted" />
+                  }
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-ink">
+                    {dragOver ? "Drop to upload" : currentMap ? "Click or drag to replace map" : "Click or drag & drop"}
+                  </p>
+                  <p className="text-xs text-ink-faint mt-1">JPG · PNG · WEBP &nbsp;·&nbsp; Max {MAP_MAX_MB} MB</p>
+                  <p className="text-[11px] font-semibold text-brand-dark mt-1.5">Recommended: 1200 × 800 px or wider</p>
+                </div>
+              </>
+            )}
+          </div>
+
+          <input
+            ref={inputRef}
+            type="file"
+            accept={MAP_ACCEPT}
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) doUpload(f); }}
+          />
+
+          {/* ── Error panel (same design as ImageUpload) ── */}
+          {uploadErr && (
+            <div className="mt-3 rounded-xl border border-alert/30 bg-alert-light overflow-hidden">
+              <div className="flex items-start gap-2.5 px-3.5 py-3">
+                <AlertTriangle size={14} className="shrink-0 text-alert mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-alert">Upload failed</p>
+                  <p className="text-xs text-alert/80 mt-0.5 leading-relaxed">{uploadErr}</p>
+                  <p className="text-[10px] text-ink-faint mt-2 leading-relaxed">
+                    If this keeps happening, copy the error and report it to the IT team.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setUploadErr(null)}
+                  className="shrink-0 text-alert/40 hover:text-alert transition-colors mt-0.5"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+              <div className="border-t border-alert/20 px-3.5 py-2 flex items-center justify-between bg-alert/5">
+                <p className="text-[10px] font-mono text-alert/60 truncate max-w-[70%]">{uploadErr}</p>
+                <button
+                  onClick={copyError}
+                  className="flex items-center gap-1 text-[10px] font-semibold text-alert/70 hover:text-alert transition-colors shrink-0"
+                >
+                  {copied
+                    ? <><CheckCircle2 size={11} /> Copied</>
+                    : <><Copy size={11} /> Copy error</>
+                  }
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── Locations Tab ────────────────────────────────────────────────────────────
 
 const LOC_CATEGORIES = ["IT Lab", "Library", "Cafeteria", "Study Room", "Lecture Hall", "Outdoor", "Other"];
@@ -2100,7 +2320,7 @@ function SchoolsTab() {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
-const VALID_TABS = new Set<Tab>(["overview", "events", "rewards", "users", "locations", "reviews", "rules", "schools"]);
+const VALID_TABS = new Set<Tab>(["overview", "events", "rewards", "users", "locations", "map", "reviews", "rules", "schools"]);
 
 function AdminPageContent() {
   const router = useRouter();
@@ -2175,6 +2395,7 @@ function AdminPageContent() {
               {tab === "rewards"   && <RewardsTab />}
               {tab === "users"     && <UsersTab />}
               {tab === "locations" && <LocationsTab />}
+              {tab === "map"       && <CampusMapTab />}
               {tab === "reviews"   && <ReviewsTab />}
               {tab === "rules"     && <PointRulesTab />}
               {tab === "schools"   && <SchoolsTab />}

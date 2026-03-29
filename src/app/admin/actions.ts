@@ -65,6 +65,65 @@ export async function adminUploadLocationImage(
   }
 }
 
+// ── Campus Map ────────────────────────────────────────────────────────────────
+
+const MAP_BUCKET    = "campus-map";
+const MAP_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAP_TYPES     = ["image/jpeg", "image/png", "image/webp"] as const;
+
+export async function adminUploadCampusMap(
+  formData: FormData,
+): Promise<{ url: string | null; error: string | null }> {
+  const authErr = await requireAdmin();
+  if (authErr) return { url: null, error: authErr };
+
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0)
+    return { url: null, error: "No file received. Please try selecting the file again." };
+
+  if (!(MAP_TYPES as readonly string[]).includes(file.type))
+    return { url: null, error: `"${file.name}" is not a supported format. Please upload a JPG, PNG, or WEBP image.` };
+
+  if (file.size > MAP_MAX_BYTES)
+    return { url: null, error: `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — map images must be under 10 MB.` };
+
+  try {
+    const db       = createAdminClient();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Ensure bucket exists (created in Supabase dashboard, but guard just in case)
+    const { data: buckets } = await db.storage.listBuckets();
+    if (!buckets?.find((b) => b.name === MAP_BUCKET)) {
+      await db.storage.createBucket(MAP_BUCKET, { public: true });
+    }
+
+    const ext  = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    const path = `campus-map-${Date.now()}.${ext}`;
+
+    const bytes = await file.arrayBuffer();
+    const { error: uploadErr } = await db.storage
+      .from(MAP_BUCKET)
+      .upload(path, bytes, { contentType: file.type, upsert: false });
+
+    if (uploadErr) return { url: null, error: `Storage error: ${uploadErr.message}` };
+
+    const { data: { publicUrl } } = db.storage.from(MAP_BUCKET).getPublicUrl(path);
+
+    // Insert a new row — homepage always fetches the latest
+    const { error: dbErr } = await supabase
+      .from("campus_maps")
+      .insert({ label: "Campus Map", image_url: publicUrl, uploaded_by: user?.id ?? null });
+
+    if (dbErr)
+      return { url: null, error: `Image uploaded but failed to save record: ${dbErr.message}` };
+
+    return { url: publicUrl, error: null };
+  } catch (e) {
+    return { url: null, error: e instanceof Error ? e.message : "An unexpected error occurred during upload." };
+  }
+}
+
 export async function adminDeleteLocationImage(path: string): Promise<{ error: string | null }> {
   const authErr = await requireAdmin();
   if (authErr) return { error: authErr };

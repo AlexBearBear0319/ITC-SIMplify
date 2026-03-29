@@ -156,9 +156,12 @@ function LibraryFloorPlan() {
 export default function InteractiveMap({
   locations,
   onSelectLocation,
+  mapImageUrl,
 }: {
   locations: MapLocation[];
   onSelectLocation?: (loc: MapLocation) => void;
+  /** When set, displays the uploaded campus map image instead of the built-in SVG floor plan. */
+  mapImageUrl?: string;
 }) {
   return (
     <div className="relative w-full h-full bg-canvas overflow-hidden rounded-2xl select-none">
@@ -202,12 +205,23 @@ export default function InteractiveMap({
               {/* ── Map canvas — 600 × 400 px ── */}
               <div className="relative w-150 h-100 bg-surface rounded-xl overflow-hidden">
 
-                {/* Floor plan (SVG zones + labels) */}
-                <LibraryFloorPlan />
+                {/* Floor plan: uploaded image takes priority over built-in SVG */}
+                {mapImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={mapImageUrl}
+                    alt="Campus map"
+                    className="absolute inset-0 w-full h-full object-contain"
+                  />
+                ) : (
+                  <LibraryFloorPlan />
+                )}
 
-                {/* ── Library label chip ── */}
+                {/* ── Label chip ── */}
                 <div className="absolute top-3 left-3 z-10 bg-surface/90 backdrop-blur-sm px-2.5 py-1.5 rounded-lg border border-border shadow-sm">
-                  <p className="text-[11px] font-semibold text-ink-muted">Tay Eng Soon Library</p>
+                  <p className="text-[11px] font-semibold text-ink-muted">
+                    {mapImageUrl ? "Campus Map" : "Tay Eng Soon Library"}
+                  </p>
                 </div>
 
                 {/* ── Zone markers from Supabase ── */}
