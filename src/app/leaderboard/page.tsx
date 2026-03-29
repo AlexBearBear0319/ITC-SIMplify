@@ -126,7 +126,7 @@ function Avatar({
           className="w-full h-full rounded-full object-cover"
         />
       ) : (
-        displayName.charAt(0).toUpperCase()
+        (entry.full_name ?? entry.username ?? "?").charAt(0).toUpperCase()
       )}
     </div>
   );

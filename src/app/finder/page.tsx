@@ -137,6 +137,7 @@ function MemberAvatar({ username, isHost }: { username: string; isHost?: boolean
 function GroupDetailDialog({
   group,
   activeGroupId,
+  currentUserId,
   supabase,
   onJoin,
   onLeave,
@@ -144,6 +145,7 @@ function GroupDetailDialog({
 }: {
   group: StudyGroup;
   activeGroupId: number | null;
+  currentUserId: string | null;
   supabase: ReturnType<typeof createClient>;
   onJoin: (id: number) => void;
   onLeave: (id: number) => void;
@@ -170,11 +172,17 @@ function GroupDetailDialog({
     return () => { supabase.removeChannel(channel); };
   }, [group.id, supabase]);
 
-  const liveCount          = members.length || group.current_members;
+  // Use actual member rows once loaded; fall back to stored count but never below 1 (host always exists)
+  const liveCount          = members.length > 0 ? members.length : Math.max(1, group.current_members);
   const cap                = getCapacityInfo(liveCount, group.max_members);
   const isFull             = liveCount >= group.max_members;
-  const isThisGroupActive  = activeGroupId === group.id;
-  const hasOtherActiveGroup = activeGroupId !== null && activeGroupId !== group.id;
+  // Check in-memory state OR actual membership list OR host identity so the correct
+  // button shows even after a page refresh or if activeGroupId hasn't synced yet
+  const isThisGroupActive  =
+    activeGroupId === group.id ||
+    group.host_id === currentUserId ||
+    members.some((m) => m.user_id === currentUserId);
+  const hasOtherActiveGroup = activeGroupId !== null && activeGroupId !== group.id && !isThisGroupActive;
   const emptySlots         = Math.max(0, group.max_members - liveCount);
   const hostInitials       = group.profiles.username.slice(0, 2).toUpperCase();
 
@@ -218,9 +226,9 @@ function GroupDetailDialog({
           {/* Body */}
           <div className="px-6 py-5 space-y-5">
             {/* Description */}
-            <p id="group-detail-desc" className="text-sm text-ink-muted leading-relaxed">
+            <Dialog.Description id="group-detail-desc" className="text-sm text-ink-muted leading-relaxed">
               {group.description || "No description provided."}
-            </p>
+            </Dialog.Description>
 
             {/* Meta */}
             <div className="space-y-2.5">
@@ -334,12 +342,14 @@ function GroupDetailDialog({
 function StudyGroupCard({
   group,
   activeGroupId,
+  currentUserId,
   onSelect,
   onJoin,
   onLeave,
 }: {
   group: StudyGroup;
   activeGroupId: number | null;
+  currentUserId: string | null;
   onSelect: () => void;
   onJoin: (id: number) => void;
   onLeave: (id: number) => void;
@@ -348,8 +358,8 @@ function StudyGroupCard({
   const isFull           = group.current_members >= group.max_members;
   const spotsLeft        = group.max_members - group.current_members;
   const initials         = group.profiles.username.slice(0, 2).toUpperCase();
-  const isThisGroupActive  = activeGroupId === group.id;
-  const hasOtherActiveGroup = activeGroupId !== null && activeGroupId !== group.id;
+  const isThisGroupActive   = activeGroupId === group.id || group.host_id === currentUserId;
+  const hasOtherActiveGroup = activeGroupId !== null && !isThisGroupActive;
   const pipCount  = Math.min(group.max_members, 8);
   const pipFilled = Math.min(group.current_members, pipCount);
 
@@ -548,10 +558,10 @@ function CreateGroupDialog({
                   <Dialog.Title className="text-base font-bold text-ink leading-tight">
                     Start a Study Session
                   </Dialog.Title>
-                  <p id="create-dialog-desc" className="text-xs text-ink-muted mt-0.5">
+                  <Dialog.Description id="create-dialog-desc" className="text-xs text-ink-muted mt-0.5">
                     Create a group and earn{" "}
                     <span className="text-gold font-semibold">+20 pts</span>
-                  </p>
+                  </Dialog.Description>
                 </div>
                 <Dialog.Close className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors mt-0.5">
                   <X size={16} />
@@ -772,7 +782,7 @@ function FinderPageContent() {
 
     // Override current_members with the real count and self-heal stale DB counters
     const mapped = data.map((g) => {
-      const real = countMap[g.id] ?? 0;
+      const real = Math.max(1, countMap[g.id] ?? 0);
       if (g.current_members !== real) {
         // Fire-and-forget: sync the counter in the background
         supabase
@@ -1002,7 +1012,7 @@ function FinderPageContent() {
       setAlreadyEarnedToday(true);
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
-    trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.JOIN_STUDY_GROUP);
+    trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.JOIN_GROUP);
     setActiveGroupId(id);
     await fetchGroups();
   };
@@ -1071,6 +1081,7 @@ function FinderPageContent() {
         <GroupDetailDialog
           group={selectedGroup}
           activeGroupId={activeGroupId}
+          currentUserId={currentUser?.id ?? null}
           supabase={supabase}
           onJoin={handleJoinGroup}
           onLeave={handleLeaveGroup}
@@ -1329,6 +1340,7 @@ function FinderPageContent() {
                 <StudyGroupCard
                   group={group}
                   activeGroupId={activeGroupId}
+                  currentUserId={currentUser?.id ?? null}
                   onSelect={() => setSelectedGroupId(group.id)}
                   onJoin={handleJoinGroup}
                   onLeave={handleLeaveGroup}

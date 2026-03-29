@@ -38,10 +38,12 @@ function FieldError({ msg }: { msg?: string }) {
 }
 
 function PasswordInput({
-  id, name, label, autoComplete, placeholder, error,
+  id, name, label, autoComplete, placeholder, error, value, onChange,
 }: {
   id: string; name: string; label: string;
   autoComplete: string; placeholder?: string; error?: string;
+  value?: string;
+  onChange?: (v: string) => void;
 }) {
   const [show, setShow] = useState(false);
   return (
@@ -53,6 +55,8 @@ function PasswordInput({
           type={show ? "text" : "password"}
           autoComplete={autoComplete}
           placeholder={placeholder ?? "••••••••"}
+          value={value}
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
           className={`w-full px-4 py-2.5 pr-11 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${error ? "border-alert" : "border-border"}`}
         />
         <button
@@ -130,7 +134,10 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 
 function SignUpForm({ onSuccess }: { onSuccess: (msg: string) => void }) {
   const [state, action, pending] = useActionState<ActionResult, FormData>(signUpAction, null);
-  const [username, setUsername] = useState("");
+  const [username,        setUsername]        = useState("");
+  const [email,           setEmail]           = useState("");
+  const [password,        setPassword]        = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   useEffect(() => {
     if (state && "success" in state && state.success) {
@@ -149,6 +156,8 @@ function SignUpForm({ onSuccess }: { onSuccess: (msg: string) => void }) {
         <input
           id="signup-email" name="email" type="email" autoComplete="email"
           placeholder="your.email@example.com" required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           className={`w-full px-4 py-2.5 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${fe.email ? "border-alert" : "border-border"}`}
         />
         <FieldError msg={fe.email} />
@@ -165,6 +174,7 @@ function SignUpForm({ onSuccess }: { onSuccess: (msg: string) => void }) {
           className={`w-full px-4 py-2.5 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${fe.username ? "border-alert" : "border-border"}`}
         />
         <FieldError msg={fe.username} />
+        <p className="text-[11px] text-ink-faint mt-1">Letters and numbers only, no spaces.</p>
         <AnimatePresence>
           {suggestions && suggestions.length > 0 && (
             <motion.div
@@ -193,6 +203,7 @@ function SignUpForm({ onSuccess }: { onSuccess: (msg: string) => void }) {
       <PasswordInput
         id="signup-password" name="password" label="Password"
         autoComplete="new-password" error={fe.password}
+        value={password} onChange={setPassword}
       />
       <p className="text-[11px] text-ink-faint -mt-2">
         Min. 8 characters, 1 uppercase letter, 1 number.
@@ -202,6 +213,7 @@ function SignUpForm({ onSuccess }: { onSuccess: (msg: string) => void }) {
       <PasswordInput
         id="signup-confirm" name="confirmPassword" label="Confirm Password"
         autoComplete="new-password" placeholder="••••••••" error={fe.confirmPassword}
+        value={confirmPassword} onChange={setConfirmPassword}
       />
 
       {/* Global error */}

@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
 
   // Define our destinations right at the top
   const errorTo = `${origin}/auth/login?error=invalid_or_expired_link`;
-  const successTo = `${origin}/auth/reset-password`;
+  const successTo = `${origin}/`;
 
   if (!code) return NextResponse.redirect(errorTo);
 

@@ -44,6 +44,7 @@ type Mission = {
   progress: number;
   target_count: number;
   location_hint: string;
+  target_action: string;
 };
 
 type LeaderboardEntry = {
@@ -489,6 +490,14 @@ export default function DashboardPage() {
   // Daily mission
   const [mission, setMission]           = useState<Mission | null>(null);
   const [missionLoading, setMissionLoading] = useState(true);
+  const [missionStarted, setMissionStarted] = useState(false);
+
+  // Ticks every 60 s — drives real-time progress for time-based missions
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Leaderboard snippet (top 3)
   const [topEntries, setTopEntries] = useState<LeaderboardEntry[]>([]);
@@ -660,7 +669,11 @@ export default function DashboardPage() {
           target_count:  todaysMission.target_count ?? 1,
           progress:      userMission?.progress ?? 0,
           location_hint: todaysMission.period ?? "Daily",
+          target_action: todaysMission.target_action ?? "",
         });
+        if (sessionStorage.getItem(`mission-started-${todaysMission.id}`) === "true") {
+          setMissionStarted(true);
+        }
       }
 
       setMissionLoading(false);
@@ -773,8 +786,42 @@ export default function DashboardPage() {
     ? Math.round((mission.progress / mission.target_count) * 100)
     : 0;
 
-  const scrollToMap = () =>
-    document.getElementById("library-map")?.scrollIntoView({ behavior: "smooth" });
+  // Minutes a session must last to count toward each time-based mission
+  const MISSION_TIME_THRESHOLDS: Record<string, number> = {
+    study:        120, // Focused Scholar — 2-hour study session
+    stay_3_hours: 180, // Study Marathon  — 3-hour session
+  };
+
+  const realtimeProgressPct = (() => {
+    if (!mission) return 0;
+    const threshold = MISSION_TIME_THRESHOLDS[mission.target_action];
+    if (threshold && activeSession?.activity === "study") {
+      const sessionStart = new Date(
+        activeSession.endsAt.getTime() - activeSession.duration_minutes * 60_000
+      );
+      const elapsedMin = Math.max(0, (now.getTime() - sessionStart.getTime()) / 60_000);
+      const sessionFraction = Math.min(1, elapsedMin / threshold);
+      return Math.min(100, Math.round(
+        ((mission.progress + sessionFraction) / mission.target_count) * 100
+      ));
+    }
+    return progressPct; // non-time missions use integer-based count
+  })();
+
+  const missionDone       = progressPct >= 100;
+  const missionInProgress = !missionDone && (
+    (mission?.progress ?? 0) > 0 ||
+    missionStarted ||
+    realtimeProgressPct > progressPct   // active session contributing real-time progress
+  );
+
+  const scrollToMap = () => {
+    const el = document.querySelector<HTMLElement>("#library-map");
+    const main = document.querySelector<HTMLElement>("main");
+    if (!el || !main) return;
+    const top = main.scrollTop + el.getBoundingClientRect().top - main.getBoundingClientRect().top - 16;
+    main.scrollTo({ top, behavior: "smooth" });
+  };
 
   // Creates an active_sessions row, awards check-in points, and recalculates location status.
   const handleCheckInSubmit = async (data: CheckInData) => {
@@ -834,6 +881,10 @@ export default function DashboardPage() {
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, userId, POINT_ACTIONS.CHECK_IN);
+    // Early Bird: also fire if checking in before 9 AM local time
+    if (new Date().getHours() < 9) {
+      trackMissionProgress(supabase, userId, POINT_ACTIONS.CHECK_IN_EARLY);
+    }
 
     // Recalculate the location's live status based on total seats now occupied
     const { data: activeSessions } = await supabase
@@ -1005,7 +1056,15 @@ export default function DashboardPage() {
       prev ? { ...prev, points: prev.points + feedbackPts } : prev
     );
     trackMissionProgress(supabase, userId, POINT_ACTIONS.LEAVE_REVIEW);
-    trackMissionProgress(supabase, userId, "study_duration", snapshotSession?.duration_minutes ?? 0);
+    const durationMins = snapshotSession?.duration_minutes ?? 0;
+    // Study Marathon: session was planned for 3+ hours (180 min)
+    if (durationMins >= 180) {
+      trackMissionProgress(supabase, userId, POINT_ACTIONS.STAY_3_HOURS);
+    }
+    // Focused Scholar: 2+ hour study session (not eating)
+    if (durationMins >= 120 && snapshotSession?.activity === "study") {
+      trackMissionProgress(supabase, userId, POINT_ACTIONS.STUDY);
+    }
 
     // crowd_status → star rating: empty = 5★, busy = 3★, full = 1★
     if (data.comment.trim()) {
@@ -1441,25 +1500,49 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-medium text-ink-muted">Progress</span>
                       <span className="text-xs font-semibold text-ink">
-                        {mission.progress} / {mission.target_count} zones
+                        {mission.progress} / {mission.target_count}
                       </span>
                     </div>
                     <div className="h-2 bg-brand-light rounded-full overflow-hidden">
                       <div
                         className="h-full bg-brand-dark rounded-full transition-all duration-700"
-                        style={{ width: `${progressPct}%` }}
+                        style={{ width: `${realtimeProgressPct}%` }}
                       />
                     </div>
-                    <p className="text-[10px] text-ink-faint mt-1 text-right">{progressPct}%</p>
+                    <p className="text-[10px] text-ink-faint mt-1 text-right">{realtimeProgressPct}%</p>
                   </div>
 
-                  <button
-                    onClick={scrollToMap}
-                    className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
-                  >
-                    <CheckCircle2 size={15} />
-                    Start Mission
-                  </button>
+                  {missionDone ? (
+                    <button
+                      disabled
+                      className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 bg-gold-light border border-gold/30 text-gold font-semibold text-sm rounded-full cursor-not-allowed"
+                    >
+                      <CheckCircle2 size={15} />
+                      Mission Complete!
+                    </button>
+                  ) : missionInProgress ? (
+                    <button
+                      onClick={scrollToMap}
+                      className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 bg-brand-faint border border-brand/40 text-brand-dark font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-brand-dark animate-pulse shrink-0" />
+                      {realtimeProgressPct > 0
+                        ? `In Progress · ${realtimeProgressPct}%`
+                        : "In Progress"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setMissionStarted(true);
+                        sessionStorage.setItem(`mission-started-${mission.id}`, "true");
+                        scrollToMap();
+                      }}
+                      className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
+                    >
+                      <CheckCircle2 size={15} />
+                      Start Mission
+                    </button>
+                  )}
                 </>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-center py-4">

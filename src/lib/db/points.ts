@@ -24,9 +24,13 @@ import type { DbResult, Mission, PointRule, RedemptionItem, UserMission, UserRed
  * so using constants here means we dont have to remember the exact strings everywhere.
  */
 export const POINT_ACTIONS = {
-  CHECK_IN: 'check_in',
-  LEAVE_REVIEW: 'leave_review',
-  JOIN_STUDY_GROUP: 'study_group_join',
+  CHECK_IN:           'check_in',
+  CHECK_IN_EARLY:     'check_in_early',     // Early Bird — check-in before 9 AM
+  STAY_3_HOURS:       'stay_3_hours',       // Study Marathon — 3-hour session
+  STUDY:              'study',              // Focused Scholar — 2-hour study session
+  JOIN_GROUP:         'join_group',         // Social Butterfly — join a study group
+  LEAVE_REVIEW:       'leave_review',
+  JOIN_STUDY_GROUP:   'study_group_join',   // used by awardPoints() for point_rules lookup
   CREATE_STUDY_GROUP: 'study_group_create',
 } as const
 
