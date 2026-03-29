@@ -484,7 +484,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
 
         {/* ── Sticky Action Bar ── */}
         <div className="sticky top-16 z-10 bg-surface/80 backdrop-blur-md border-b border-border">
-          <div className="max-w-3xl mx-auto px-4 md:px-6 py-3 flex items-center gap-2">
+          <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 flex items-center gap-2">
             {/* Scan QR — disabled when user already has an active session */}
             <button
               onClick={() => {
@@ -509,7 +509,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         </div>
 
         {/* ── Page Body ── */}
-        <div className="max-w-3xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-4">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-4">
 
           {/* Blocked — existing session elsewhere */}
           <AnimatePresence>

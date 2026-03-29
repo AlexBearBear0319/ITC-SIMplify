@@ -56,7 +56,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
 
         <div>
           <h1 className="text-2xl font-extrabold text-ink">Settings</h1>

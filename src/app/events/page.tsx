@@ -414,7 +414,7 @@ export default function EventsPage() {
       variants={pageEntry}
       initial="hidden"
       animate="show"
-      className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto"
+      className="p-4 md:p-6 lg:p-8 max-w-6xl mx-auto"
     >
       {/* ── Page header ── */}
       <motion.div variants={blockEntry} className="mb-6 md:mb-8">

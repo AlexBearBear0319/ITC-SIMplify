@@ -1151,69 +1151,62 @@ export default function DashboardPage() {
       >
 
         {/* ── 1. Greeting Hero ── */}
-        <motion.div variants={cardVariants}>
-          <div className="relative bg-surface rounded-2xl p-5 md:p-6 shadow-sm border border-border overflow-hidden">
-            <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-brand opacity-20 blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-10 left-24 w-36 h-36 rounded-full bg-gold opacity-10 blur-3xl pointer-events-none" />
+        <motion.div variants={cardVariants} className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <p className="text-sm text-ink-muted font-medium flex items-center gap-1.5">
+              {greeting.emoji && <span>{greeting.emoji}</span>}
+              {greeting.text}
+            </p>
 
-            <div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-              <div>
-                <p className="text-sm text-ink-muted font-medium flex items-center gap-1.5">
-                  {greeting.emoji && <span>{greeting.emoji}</span>}
-                  {greeting.text}
-                </p>
+            <h2 className="text-2xl md:text-3xl font-bold text-ink mt-1 leading-tight">
+              {profile === null ? (
+                <span className="inline-block h-8 w-48 bg-canvas rounded-lg animate-pulse" />
+              ) : (
+                <>
+                  Ready to tackle your work,{" "}
+                  <span className="text-brand-dark dark:text-brand">
+                    {profile.full_name ?? profile.username ?? "Student"}
+                  </span>?
+                </>
+              )}
+            </h2>
 
-                <h2 className="text-2xl md:text-3xl font-bold text-ink mt-1 leading-tight">
-                  {profile === null ? (
-                    <span className="inline-block h-8 w-48 bg-canvas rounded-lg animate-pulse" />
-                  ) : (
-                    <>
-                      Ready to tackle your work,{" "}
-                      <span className="text-brand-dark dark:text-brand">
-                        {profile.full_name ?? profile.username ?? "Student"}
-                      </span>?
-                    </>
-                  )}
-                </h2>
+            <p className="text-sm text-ink-muted mt-1.5 flex items-center gap-1.5">
+              <Flame size={14} className="text-alert shrink-0" />
+              {profile === null ? (
+                <span className="inline-block h-4 w-40 bg-canvas rounded animate-pulse" />
+              ) : (
+                <>
+                  You&apos;re on a{" "}
+                  <span className="font-semibold text-ink">{profile.streak_days}-day</span>{" "}
+                  study streak. Keep it up!
+                </>
+              )}
+            </p>
+          </div>
 
-                <p className="text-sm text-ink-muted mt-1.5 flex items-center gap-1.5">
-                  <Flame size={14} className="text-alert shrink-0" />
-                  {profile === null ? (
-                    <span className="inline-block h-4 w-40 bg-canvas rounded animate-pulse" />
-                  ) : (
-                    <>
-                      You&apos;re on a{" "}
-                      <span className="font-semibold text-ink">{profile.streak_days}-day</span>{" "}
-                      study streak. Keep it up!
-                    </>
-                  )}
-                </p>
-              </div>
-
-              <div className="flex flex-row sm:flex-col items-center sm:items-end gap-1.5 shrink-0">
-                {/* ── Points badge ── */}
-                <div className="flex items-center gap-1.5 bg-gold-light border border-gold/30 px-3 py-1.5 rounded-full">
-                  <Coins size={13} className="text-gold" />
-                  <span className="text-sm font-bold text-gold">
-                    {profile === null ? (
-                      <span className="inline-block h-4 w-16 bg-gold/20 rounded animate-pulse" />
-                    ) : (
-                      `${(profile.points ?? 0).toLocaleString()} pts`
-                    )}
-                  </span>
-                </div>
-                {/* ── Level badge ── */}
-                <div className="flex items-center gap-1.5 bg-brand-faint border border-brand/40 px-3 py-1.5 rounded-full">
-                  <Star size={13} className="text-brand-dark" />
-                  <span className="text-sm font-semibold text-ink">
-                    {profile === null ? (
-                      <span className="inline-block h-4 w-12 bg-brand/20 rounded animate-pulse" />
-                    ) : (
-                      `Level ${profile.level ?? 1}`
-                    )}
-                  </span>
-                </div>
-              </div>
+          <div className="flex flex-row sm:flex-col items-center sm:items-end gap-1.5 shrink-0">
+            {/* ── Points badge ── */}
+            <div className="flex items-center gap-1.5 bg-gold-light border border-gold/30 px-3 py-1.5 rounded-full">
+              <Coins size={13} className="text-gold" />
+              <span className="text-sm font-bold text-gold">
+                {profile === null ? (
+                  <span className="inline-block h-4 w-16 bg-gold/20 rounded animate-pulse" />
+                ) : (
+                  `${(profile.points ?? 0).toLocaleString()} pts`
+                )}
+              </span>
+            </div>
+            {/* ── Level badge ── */}
+            <div className="flex items-center gap-1.5 bg-brand-faint border border-brand/40 px-3 py-1.5 rounded-full">
+              <Star size={13} className="text-brand-dark" />
+              <span className="text-sm font-semibold text-ink">
+                {profile === null ? (
+                  <span className="inline-block h-4 w-12 bg-brand/20 rounded animate-pulse" />
+                ) : (
+                  `Level ${profile.level ?? 1}`
+                )}
+              </span>
             </div>
           </div>
         </motion.div>

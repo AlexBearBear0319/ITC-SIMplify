@@ -471,7 +471,7 @@ export default function ProfilePage() {
   if (loading || !profile) {
     return (
       <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
-        <div className="max-w-2xl mx-auto space-y-6">
+        <div className="max-w-6xl mx-auto space-y-6">
           <div className="h-36 rounded-2xl bg-surface border border-border animate-pulse" />
           <div className="h-52 rounded-2xl bg-surface border border-border animate-pulse" />
           <div className="grid grid-cols-3 gap-3">
@@ -508,7 +508,7 @@ export default function ProfilePage() {
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
 
         {/* ── Hero card ── */}
         <motion.div

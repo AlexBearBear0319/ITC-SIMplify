@@ -168,7 +168,7 @@ function KPICard({ kpi }: { kpi: KPI }) {
 export default function StatisticsPage() {
   return (
     <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div className="max-w-6xl mx-auto space-y-8">
 
         {/* ── Header ── */}
         <div>

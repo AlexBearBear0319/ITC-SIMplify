@@ -499,8 +499,8 @@ export default function RewardsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
-        <div className="max-w-4xl mx-auto space-y-8">
+      <div className="min-h-full bg-canvas px-3 py-3 md:px-4 md:py-4 lg:px-5 lg:py-5">
+        <div className="max-w-6xl mx-auto space-y-8">
           <div>
             <h1 className="text-2xl font-extrabold text-ink">Rewards Store</h1>
             <p className="text-sm text-ink-muted mt-1">Spend your points on exclusive perks ✨</p>
@@ -525,8 +525,8 @@ export default function RewardsPage() {
   }
 
   return (
-    <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
-      <div className="max-w-4xl mx-auto space-y-8">
+    <div className="min-h-full bg-canvas px-3 py-3 md:px-4 md:py-4 lg:px-5 lg:py-5">
+      <div className="max-w-6xl mx-auto space-y-8">
 
         {/* Page header */}
         <div>

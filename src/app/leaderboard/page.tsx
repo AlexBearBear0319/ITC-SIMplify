@@ -176,7 +176,7 @@ export default function LeaderboardPage() {
   if (loading) {
     return (
       <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
-        <div className="max-w-2xl mx-auto space-y-8">
+        <div className="max-w-6xl mx-auto space-y-8">
           <div>
             <h1 className="text-2xl font-extrabold text-ink">Campus Leaderboard</h1>
             <p className="text-sm text-ink-muted mt-1">Top contributors keeping SIMplify updated.</p>
@@ -198,7 +198,7 @@ export default function LeaderboardPage() {
 
   return (
     <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
-      <div className="max-w-2xl mx-auto space-y-8">
+      <div className="max-w-6xl mx-auto space-y-8">
 
         {/* ── Page header ── */}
         <div>
