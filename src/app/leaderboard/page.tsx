@@ -17,12 +17,15 @@ import { getLevelEmoji } from "@/lib/levels";
 
 type LeaderboardEntry = {
   id: string;
-  full_name: string;
-  username: string;
+  full_name: string | null;
+  username: string | null;
   avatar_url: string | null;
   points: number;
   is_current_user?: boolean;
 };
+
+const getDisplayName = (entry: LeaderboardEntry) =>
+  entry.full_name?.trim() || entry.username?.trim() || "Student";
 
 // ── Podium config (visual treatment per rank) ──
 
@@ -109,6 +112,8 @@ function Avatar({
   sizeClass: string;
   extraClass?: string;
 }) {
+  const displayName = getDisplayName(entry);
+
   return (
     <div
       className={`rounded-full flex items-center justify-center font-bold select-none ${sizeClass} ${extraClass}`}
@@ -117,11 +122,11 @@ function Avatar({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={entry.avatar_url}
-          alt={entry.full_name}
+          alt={displayName}
           className="w-full h-full rounded-full object-cover"
         />
       ) : (
-        entry.full_name.charAt(0)
+        displayName.charAt(0).toUpperCase()
       )}
     </div>
   );
@@ -274,7 +279,7 @@ export default function LeaderboardPage() {
 
                   <div className="w-full">
                     <p className="text-sm font-bold text-ink leading-tight truncate">
-                      {entry.full_name}
+                      {getDisplayName(entry)}
                     </p>
                     {entry.is_current_user && (
                       <span className="text-[10px] font-medium text-ink-muted">(you)</span>
@@ -346,7 +351,7 @@ export default function LeaderboardPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="text-sm font-semibold text-ink leading-tight truncate">
-                        {entry.full_name}
+                        {getDisplayName(entry)}
                       </p>
                       <span className="text-sm leading-none">{levelEmoji}</span>
                       {isCurrent && (
@@ -355,7 +360,7 @@ export default function LeaderboardPage() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-ink-faint">@{entry.username}</p>
+                    <p className="text-xs text-ink-faint">@{entry.username ?? "anonymous"}</p>
                   </div>
 
                   {/* Points */}
