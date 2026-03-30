@@ -117,7 +117,7 @@ const FILTER_OPTIONS: {
   },
   {
     value: "empty",
-    label: "🟢 Open",
+    label: "🟢 Empty",
     active:   "bg-success text-ink border-success",
     inactive: "bg-surface text-ink-muted border-border hover:bg-success-light hover:text-ink",
   },
