@@ -4,9 +4,11 @@ import { Suspense } from "react";
 import { useActionState, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Eye, EyeOff, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, CheckCircle2, AlertCircle, Sun, Moon } from "lucide-react";
 import { loginAction, signUpAction } from "@/app/auth/actions";
+import { useThemeMode } from "@/components/providers/ThemeProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -246,6 +248,7 @@ function LoginPageContent() {
   const linkError = searchParams.get("error");
   const [mode, setMode] = useState<FormMode>("login");
   const [signupSuccess, setSignupSuccess] = useState<string | null>(null);
+  const { resolvedTheme, setMode: setThemeMode } = useThemeMode();
 
   function switchMode(next: FormMode) {
     setMode(next);
@@ -258,6 +261,36 @@ function LoginPageContent() {
       <div className="pointer-events-none fixed top-0 left-0 w-[500px] h-[500px] rounded-full bg-brand opacity-20 blur-3xl -translate-x-1/2 -translate-y-1/2" />
       <div className="pointer-events-none fixed bottom-0 right-0 w-96 h-96 rounded-full bg-gold opacity-10 blur-3xl translate-x-1/4 translate-y-1/4" />
 
+      {/* Theme switch */}
+      <div className="fixed top-4 right-4 z-10 inline-flex items-center gap-1 rounded-full border border-border bg-surface/90 backdrop-blur px-1.5 py-1 shadow-sm">
+        <button
+          type="button"
+          aria-label="Use light mode"
+          onClick={() => setThemeMode("light")}
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+            resolvedTheme === "light"
+              ? "bg-brand text-ink"
+              : "text-ink-muted hover:text-ink hover:bg-brand-faint"
+          }`}
+        >
+          <Sun size={14} />
+          Light
+        </button>
+        <button
+          type="button"
+          aria-label="Use dark mode"
+          onClick={() => setThemeMode("dark")}
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+            resolvedTheme === "dark"
+              ? "bg-brand text-ink"
+              : "text-ink-muted hover:text-ink hover:bg-brand-faint"
+          }`}
+        >
+          <Moon size={14} />
+          Dark
+        </button>
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 28 }}
         animate={{ opacity: 1, y: 0 }}
@@ -266,8 +299,23 @@ function LoginPageContent() {
       >
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-brand flex items-center justify-center shadow-md mb-4">
-            <Sparkles size={26} className="text-ink" strokeWidth={2.2} />
+          <div className="w-14 h-14 rounded-2xl bg-surface border border-border flex items-center justify-center shadow-md mb-4 overflow-hidden">
+            <Image
+              src="/SIMplify_logo.svg?v=20260330-1"
+              alt="SIMplify logo light"
+              width={40}
+              height={40}
+              className="w-10 h-10 object-contain dark:hidden"
+              priority
+            />
+            <Image
+              src="/SIMplify_logo_dark.svg?v=20260330-1"
+              alt="SIMplify logo dark"
+              width={40}
+              height={40}
+              className="hidden w-10 h-10 object-contain dark:block"
+              priority
+            />
           </div>
           <AnimatePresence mode="wait">
             <motion.div
