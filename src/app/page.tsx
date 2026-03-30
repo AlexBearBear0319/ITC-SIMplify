@@ -80,6 +80,7 @@ type ActiveSession = {
   module: string;
   duration_minutes: number;
   endsAt: Date;
+  needs_power?: boolean;
 };
 
 type Review = {
@@ -116,7 +117,7 @@ const FILTER_OPTIONS: {
   },
   {
     value: "empty",
-    label: "🟢 Open",
+    label: "🟢 Empty",
     active:   "bg-success text-ink border-success",
     inactive: "bg-surface text-ink-muted border-border hover:bg-success-light hover:text-ink",
   },
@@ -135,9 +136,9 @@ const FILTER_OPTIONS: {
 ];
 
 const STATUS_CONFIG: Record<LocationStatus, { label: string; dot: string; text: string; bg: string }> = {
-  empty: { label: "Open", dot: "bg-success", text: "text-success", bg: "bg-success-light" },
-  busy:  { label: "Busy", dot: "bg-gold",    text: "text-gold",    bg: "bg-gold-light"    },
-  full:  { label: "Full", dot: "bg-alert",   text: "text-alert",   bg: "bg-alert-light"   },
+  empty: { label: "Empty", dot: "bg-success", text: "text-success", bg: "bg-success-light" },
+  busy:  { label: "Busy",  dot: "bg-gold",    text: "text-gold",    bg: "bg-gold-light"    },
+  full:  { label: "Full",  dot: "bg-alert",   text: "text-alert",   bg: "bg-alert-light"   },
 };
 
 const RANK_STYLE: Record<number, { ring: string; badge: string; label: string }> = {
@@ -402,7 +403,9 @@ function LocationDrawer({
                 ) : (
                   <button
                     onClick={onCheckIn}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
+                    disabled={!!activeSession}
+                    title={activeSession ? "End your current session first" : undefined}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand disabled:active:scale-100"
                   >
                     <LogIn size={15} />
                     Scan QR to Enter
@@ -469,6 +472,9 @@ export default function DashboardPage() {
   // Floating +pts animation
   const [pointsDelta, setPointsDelta] = useState<number | null>(null);
 
+  // Badge unlock notification
+  const [newBadgeName, setNewBadgeName] = useState<string | null>(null);
+
   // Error toast for optimistic rollbacks
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const showErrorToast = (msg: string) => {
@@ -498,6 +504,31 @@ export default function DashboardPage() {
     const id = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  // Ticks every second — drives the session countdown display
+  const [countdownNow, setCountdownNow] = useState(() => new Date());
+  const [sessionExpiryToastShown, setSessionExpiryToastShown] = useState(false);
+  useEffect(() => {
+    const id = setInterval(() => setCountdownNow(new Date()), 1_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Show a "1 minute left" warning once
+  useEffect(() => {
+    if (!activeSession) { setSessionExpiryToastShown(false); return; }
+    const msLeft = activeSession.endsAt.getTime() - countdownNow.getTime();
+    if (msLeft <= 60_000 && msLeft > 0 && !sessionExpiryToastShown) {
+      setSessionExpiryToastShown(true);
+      showErrorToast("⏰ 1 minute left — please wrap up and leave your spot.");
+    }
+    // Auto-clear session when expired (grace: 0ms)
+    if (msLeft <= 0 && activeSession) {
+      setActiveSession(null);
+      setActiveSessionId(null);
+      setSessionExpiryToastShown(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdownNow, activeSession]);
 
   // Leaderboard snippet (top 3)
   const [topEntries, setTopEntries] = useState<LeaderboardEntry[]>([]);
@@ -849,6 +880,7 @@ export default function DashboardPage() {
         module:           data.module || null,
         duration_minutes: data.duration_minutes,
         seats_taken:      data.seats_needed,
+        needs_power:      data.needs_power,
         is_active:        true,
       })
       .select("id")
@@ -885,6 +917,41 @@ export default function DashboardPage() {
     if (new Date().getHours() < 9) {
       trackMissionProgress(supabase, userId, POINT_ACTIONS.CHECK_IN_EARLY);
     }
+
+    // Update streak and check achievements
+    const { data: newStreak } = await supabase.rpc("update_streak", { p_user_id: userId });
+    if (typeof newStreak === "number") {
+      setProfile((prev) => prev ? { ...prev, streak_days: newStreak } : prev);
+    }
+
+    // Check for newly unlocked achievements
+    const { data: before } = await supabase
+      .from("user_achievements")
+      .select("achievement_id")
+      .eq("user_id", userId);
+    const beforeIds = new Set((before ?? []).map((r: { achievement_id: number }) => r.achievement_id));
+
+    await supabase.rpc("check_and_unlock_achievements", { p_user_id: userId });
+
+    const { data: after } = await supabase
+      .from("user_achievements")
+      .select("achievement_id, achievements(name)")
+      .eq("user_id", userId);
+    const newlyUnlocked = (after ?? []).filter(
+      (r: { achievement_id: number }) => !beforeIds.has(r.achievement_id)
+    );
+    if (newlyUnlocked.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const badgeName = (newlyUnlocked[0] as any).achievements?.name ?? "Badge";
+      setNewBadgeName(badgeName);
+    }
+
+    // Activity log
+    supabase.from("activity_log").insert({
+      user_id:     userId,
+      type:        "checkin",
+      description: `Checked in at ${selectedLocation.name}`,
+    });
 
     // Recalculate the location's live status based on total seats now occupied
     const { data: activeSessions } = await supabase
@@ -963,6 +1030,7 @@ export default function DashboardPage() {
         module:           data.topic || null,
         duration_minutes: 120,
         seats_taken:      1,
+        needs_power:      data.needs_power,
         is_active:        true,
       })
       .select("id")
@@ -1121,6 +1189,24 @@ export default function DashboardPage() {
           >
             <Coins size={16} />
             +{pointsDelta} pts
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Badge unlock toast ── */}
+      <AnimatePresence>
+        {newBadgeName && (
+          <motion.div
+            key="badge-toast"
+            initial={{ opacity: 0, y: -24, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0,   scale: 1    }}
+            exit={{    opacity: 0, y: -16, scale: 0.95 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            onAnimationComplete={() => setTimeout(() => setNewBadgeName(null), 3000)}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 bg-gold text-ink text-sm font-bold px-5 py-3 rounded-full shadow-xl pointer-events-none"
+          >
+            <Trophy size={16} />
+            Badge unlocked: {newBadgeName}!
           </motion.div>
         )}
       </AnimatePresence>
@@ -1285,40 +1371,50 @@ export default function DashboardPage() {
 
         {/* Layout update: keep the live map near the welcome message for quicker access. */}
         {/* Check-in notifications are separate cards above the map (not inside the map wrapper). */}
-        {activeSession && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            variants={cardVariants}
-          >
-            <div className="flex items-center gap-2.5 px-4 py-2.5 bg-success-light border border-success/30 rounded-2xl">
-              <CheckCircle2 size={16} className="text-success shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-ink truncate">
-                  Checked in at{" "}
-                  <span className="text-success">{activeSession.locationName}</span>
-                </p>
-                <p className="text-xs text-ink-muted">
-                  {activeSession.activity === "study"
-                    ? `Studying${activeSession.module ? ` · ${activeSession.module}` : ""}`
-                    : "Eating"}
-                  {" · "}
-                  {activeSession.seats_needed} seat{activeSession.seats_needed !== 1 ? "s" : ""} reserved
-                </p>
+        {activeSession && (() => {
+          const msLeft  = Math.max(0, activeSession.endsAt.getTime() - countdownNow.getTime());
+          const minsLeft = Math.floor(msLeft / 60_000);
+          const secsLeft = Math.floor((msLeft % 60_000) / 1_000);
+          const isWarning = msLeft <= 5 * 60_000; // last 5 mins
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              variants={cardVariants}
+            >
+              <div className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl border ${
+                isWarning ? "bg-gold-light border-gold/30" : "bg-success-light border-success/30"
+              }`}>
+                <Clock size={16} className={isWarning ? "text-gold shrink-0" : "text-success shrink-0"} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-ink truncate">
+                    Checked in at{" "}
+                    <span className={isWarning ? "text-gold" : "text-success"}>{activeSession.locationName}</span>
+                  </p>
+                  <p className="text-xs text-ink-muted">
+                    {activeSession.activity === "study"
+                      ? `Studying${activeSession.module ? ` · ${activeSession.module}` : ""}`
+                      : "Eating"}
+                    {" · "}
+                    <span className={`font-semibold ${isWarning ? "text-gold" : "text-ink"}`}>
+                      {minsLeft}:{String(secsLeft).padStart(2, "0")} left
+                    </span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    const loc = locations.find((l) => l.id === activeSession.locationId);
+                    if (loc) { setSelectedLocation(loc); setFeedbackOpen(true); }
+                  }}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors"
+                >
+                  <LogOut size={12} /> Leave
+                </button>
               </div>
-              <button
-                onClick={() => {
-                  const loc = locations.find((l) => l.id === activeSession.locationId);
-                  if (loc) { setSelectedLocation(loc); setFeedbackOpen(true); }
-                }}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors"
-              >
-                <LogOut size={12} /> Leave
-              </button>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          );
+        })()}
 
         {alertVisible && busiestLocation && (
           <motion.div variants={cardVariants}>

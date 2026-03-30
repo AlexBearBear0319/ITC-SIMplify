@@ -3,7 +3,7 @@
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Minus, Plus, BookOpen, Coffee, CheckCircle2, Coins, ChevronLeft } from "lucide-react";
+import { X, Minus, Plus, BookOpen, Coffee, CheckCircle2, Coins, ChevronLeft, Zap } from "lucide-react";
 
 // ─────────────────────────────────────────────
 // Types
@@ -16,6 +16,7 @@ export type CheckInData = {
   activity: Activity;
   module: string;
   duration_minutes: number;
+  needs_power: boolean;   // false = non-power seat, true = each person needs ~2 power outlets
 };
 
 type Props = {
@@ -48,6 +49,7 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
   const [activity,    setActivity]    = useState<Activity>(defaultValues?.activity ?? "study");
   const [module,      setModule]      = useState(defaultValues?.module ?? "");
   const [duration,    setDuration]    = useState(defaultValues?.duration_minutes ?? 60);
+  const [needsPower,  setNeedsPower]  = useState(defaultValues?.needs_power ?? true);
   const [submitting,  setSubmitting]  = useState(false);
   const [success,     setSuccess]     = useState(false);
 
@@ -56,6 +58,7 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
     setActivity("study");
     setModule("");
     setDuration(60);
+    setNeedsPower(true);
     setSuccess(false);
   };
 
@@ -77,7 +80,7 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
   const handleSubmit = async () => {
     if (submitting) return;
     setSubmitting(true);
-    await onSubmit({ seats_needed: seatsNeeded, activity, module, duration_minutes: duration });
+    await onSubmit({ seats_needed: seatsNeeded, activity, module, duration_minutes: duration, needs_power: needsPower });
     setSuccess(true);
     setSubmitting(false);
     setTimeout(() => handleOpenChange(false), 1500);
@@ -242,6 +245,29 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Power seat toggle */}
+                  <div className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-canvas">
+                    <div className="flex items-center gap-2">
+                      <Zap size={15} className={needsPower ? "text-gold" : "text-ink-faint"} />
+                      <div>
+                        <p className="text-xs font-semibold text-ink leading-tight">Power seat needed?</p>
+                        <p className="text-[10px] text-ink-faint mt-0.5">
+                          {needsPower
+                            ? `~${seatsNeeded * 2} outlet${seatsNeeded * 2 !== 1 ? "s" : ""} reserved`
+                            : "No outlets reserved"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNeedsPower((v) => !v)}
+                      className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${needsPower ? "bg-gold" : "bg-border"}`}
+                      aria-pressed={needsPower}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-surface shadow transition-transform duration-200 ${needsPower ? "translate-x-4" : "translate-x-0"}`} />
+                    </button>
                   </div>
                 </div>
 

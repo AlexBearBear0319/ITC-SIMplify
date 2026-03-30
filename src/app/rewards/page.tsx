@@ -21,6 +21,7 @@ import {
   Star,
   Zap,
   CheckCircle2,
+  Clock,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -47,6 +48,13 @@ type UserRewards = {
   username: string;
   avatar_url: string | null;
   points: number;  // DB column name is "points" (not "points_balance")
+};
+
+type UserRedemption = {
+  id: number;
+  redeemed_at: string;
+  status: string;
+  redemption_items: { name: string };
 };
 
 // ─────────────────────────────────────────────
@@ -400,6 +408,143 @@ function CheckoutDialog({
 }
 
 // ─────────────────────────────────────────────
+// RedemptionConfirmModal
+// ─────────────────────────────────────────────
+
+function RedemptionConfirmModal({
+  redemption,
+  open,
+  onClose,
+  onConfirm,
+}: {
+  redemption: UserRedemption | null;
+  open: boolean;
+  onClose: () => void;
+  onConfirm: (redemptionId: number) => void;
+}) {
+  const [step, setStep] = useState<"confirm" | "success">("confirm");
+
+  function handleConfirm() {
+    if (!redemption) return;
+    setStep("success");
+    onConfirm(redemption.id);
+    setTimeout(() => {
+      onClose();
+      setStep("confirm");
+    }, 1600);
+  }
+
+  if (!redemption) return null;
+
+  return (
+    <Dialog.Root open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content
+          aria-describedby={undefined}
+          className="fixed z-50 inset-0 flex items-center justify-center p-4"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{
+              duration: 0.2,
+              ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
+            }}
+            className="bg-surface rounded-2xl shadow-xl w-full max-w-sm p-6 relative"
+          >
+            {step === "confirm" && (
+              <button
+                onClick={onClose}
+                className="absolute top-4 right-4 p-1.5 rounded-full text-ink-muted hover:bg-canvas transition-colors"
+              >
+                <X size={16} />
+              </button>
+            )}
+
+            <AnimatePresence mode="wait">
+              {step === "confirm" ? (
+                <motion.div
+                  key="confirm"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col gap-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-gold-light flex items-center justify-center text-gold shrink-0">
+                      <Gift size={22} />
+                    </div>
+                    <div>
+                      <Dialog.Title className="font-semibold text-ink leading-snug">
+                        {redemption.redemption_items?.name ?? "Unknown item"}
+                      </Dialog.Title>
+                      <p className="text-xs text-ink-muted mt-0.5">
+                        Redeem this item for the student?
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-canvas p-4 text-sm">
+                    <p className="text-ink-muted">
+                      Redeemed on:{" "}
+                      <span className="font-semibold text-ink">
+                        {new Date(redemption.redeemed_at).toLocaleDateString("en-SG", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleConfirm}
+                    className="w-full py-3 rounded-full bg-gold text-ink font-semibold hover:bg-gold/80 active:scale-95 transition-all duration-150"
+                  >
+                    Confirm & Mark Redeemed
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="w-full py-2 text-sm text-ink-muted hover:text-ink transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="success"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex flex-col items-center gap-4 py-4 text-center"
+                >
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                    className="w-16 h-16 rounded-full bg-success-light flex items-center justify-center text-success"
+                  >
+                    <CheckCircle2 size={32} />
+                  </motion.div>
+                  <div>
+                    <p className="font-bold text-ink text-lg">Item Redeemed!</p>
+                    <p className="text-sm text-ink-muted mt-1">
+                      Status updated to <span className="font-semibold text-success">claimed</span>.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+// ─────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────
 
@@ -412,6 +557,9 @@ export default function RewardsPage() {
   const [activeCategory, setActiveCategory] = useState<ItemCategory | "all">("all");
   const [selectedItem, setSelectedItem]     = useState<RedemptionItem | null>(null);
   const [dialogOpen, setDialogOpen]         = useState(false);
+  const [redemptions, setRedemptions]       = useState<UserRedemption[]>([]);
+  const [selectedRedemption, setSelectedRedemption] = useState<UserRedemption | null>(null);
+  const [redemptionModalOpen, setRedemptionModalOpen] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -429,12 +577,19 @@ export default function RewardsPage() {
           .select("*")
           .eq("is_active", true)
           .order("cost"),
-      ]).then(([{ data: profile }, { data: itemsData }]) => {
+        supabase
+          .from("user_redemptions")
+          .select("id, redeemed_at, status, redemption_items(name)")
+          .eq("user_id", authUser.id)
+          .order("redeemed_at", { ascending: false })
+          .limit(10),
+      ]).then(([{ data: profile }, { data: itemsData }, { data: redemptionData }]) => {
         if (profile) {
           setUser(profile as UserRewards);
           setPoints((profile as UserRewards).points ?? 0);
         }
         if (itemsData) setItems(itemsData as RedemptionItem[]);
+        if (redemptionData) setRedemptions(redemptionData as unknown as UserRedemption[]);
         setLoading(false);
       });
     });
@@ -478,23 +633,47 @@ export default function RewardsPage() {
       return;
     }
 
-    // 2. Decrement stock on the item
-    await supabase
-      .from("redemption_items")
-      .update({ stock: selectedItem.stock - 1 })
-      .eq("id", selectedItem.id);
+    // 2. Atomically decrement stock (prevents negative stock under concurrent redemptions)
+    await supabase.rpc("decrement_item_stock", { p_item_id: selectedItem.id });
 
     // 3. Record the redemption for admin tracking
-    await supabase.from("user_redemptions").insert({
-      user_id: userId,
-      item_id: selectedItem.id,
-      status:  "pending",
+    const { data: newRedemption } = await supabase
+      .from("user_redemptions")
+      .insert({ user_id: userId, item_id: selectedItem.id, status: "pending" })
+      .select("id, redeemed_at, status, redemption_items(name)")
+      .single();
+
+    if (newRedemption) {
+      setRedemptions((prev) => [newRedemption as unknown as UserRedemption, ...prev]);
+    }
+
+    // 4. Write activity log (fire-and-forget)
+    supabase.from("activity_log").insert({
+      user_id:     userId,
+      type:        "redemption",
+      description: `Redeemed "${selectedItem.name}"`,
     });
   }
 
   function handleClose() {
     setDialogOpen(false);
     setTimeout(() => setSelectedItem(null), 200);
+  }
+
+  async function handleRedemptionConfirm(redemptionId: number) {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("user_redemptions")
+      .update({ status: "claimed" })
+      .eq("id", redemptionId);
+
+    if (!error) {
+      setRedemptions((prev) =>
+        prev.map((r) => r.id === redemptionId ? { ...r, status: "claimed" } : r)
+      );
+    }
+    setRedemptionModalOpen(false);
+    setTimeout(() => setSelectedRedemption(null), 200);
   }
 
   if (loading) {
@@ -587,6 +766,68 @@ export default function RewardsPage() {
             <p className="font-medium">No items in this category yet.</p>
           </div>
         )}
+
+        {/* ── My Redemptions ── */}
+        {redemptions.length > 0 && (
+          <section>
+            <h2 className="text-base font-bold text-ink mb-3">My Redemptions</h2>
+            <div className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden">
+              {redemptions.map((r, idx) => {
+                const isPending   = r.status === "pending";
+                const isClaimed   = r.status === "claimed";
+                const isCancelled = r.status === "cancelled";
+                return (
+                  <div
+                    key={r.id}
+                    className={`flex items-center gap-3 px-4 py-3.5 ${idx < redemptions.length - 1 ? "border-b border-border" : ""}`}
+                  >
+                    <div className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center ${
+                      isClaimed ? "bg-success-light" : isCancelled ? "bg-alert-light" : "bg-gold-light"
+                    }`}>
+                      {isClaimed ? (
+                        <CheckCircle2 size={14} className="text-success" />
+                      ) : isCancelled ? (
+                        <X size={14} className="text-alert" />
+                      ) : (
+                        <Clock size={14} className="text-gold" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-ink truncate">
+                        {r.redemption_items?.name ?? "Unknown item"}
+                      </p>
+                      <p className="text-xs text-ink-faint">
+                        {new Date(r.redeemed_at).toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric" })}
+                      </p>
+                    </div>
+                    {isPending ? (
+                      <button
+                        onClick={() => {
+                          setSelectedRedemption(r);
+                          setRedemptionModalOpen(true);
+                        }}
+                        className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-gold-light text-gold hover:bg-gold hover:text-surface transition-colors"
+                      >
+                        Redeem
+                      </button>
+                    ) : (
+                      <span className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                        isClaimed   ? "bg-success-light text-success" :
+                        isCancelled ? "bg-alert-light text-alert"     :
+                                      "bg-gold-light text-gold"
+                      }`}>
+                        {isClaimed ? "Claimed" : isCancelled ? "Cancelled" : "Pending"}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-ink-faint mt-2 px-1">
+              Pending redemptions are fulfilled by an IT Club admin. Show this screen when collecting your reward.
+            </p>
+          </section>
+        )}
       </div>
 
       {/* Checkout dialog */}
@@ -596,6 +837,14 @@ export default function RewardsPage() {
         userPoints={points}
         onClose={handleClose}
         onConfirm={handleConfirm}
+      />
+
+      {/* Redemption confirm modal */}
+      <RedemptionConfirmModal
+        redemption={selectedRedemption}
+        open={redemptionModalOpen}
+        onClose={() => setRedemptionModalOpen(false)}
+        onConfirm={handleRedemptionConfirm}
       />
     </div>
   );

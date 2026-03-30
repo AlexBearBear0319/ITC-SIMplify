@@ -23,6 +23,7 @@ import {
   Plus,
   LogOut,
   AlertCircle,
+  Zap,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -41,6 +42,7 @@ type LocationDetail = {
   coordinates_y: number | null;
   description: string | null;
   total_seats: number | null;
+  power_outlets: number | null;
   location_text: string | null;
 };
 
@@ -167,6 +169,9 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [studyGroups,    setStudyGroups]    = useState<StudyGroup[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [activeStatus,   setActiveStatus]   = useState<LocationStatus>("empty");
+  // Real occupancy from active_sessions (0 when unknown)
+  const [seatsOccupied,  setSeatsOccupied]  = useState(0);
+  const [powerOutletsUsed, setPowerOutletsUsed] = useState(0);
   const [qrOpen,             setQrOpen]             = useState(false);
   const [actionChoiceOpen,   setActionChoiceOpen]   = useState(false);
   const [studyBuddyOpen,     setStudyBuddyOpen]     = useState(false);
@@ -180,6 +185,14 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [existingGroupId,  setExistingGroupId]  = useState<number | null>(null);   // study group
   const [alreadyEarnedToday, setAlreadyEarnedToday] = useState(false);
   const [endingSession,    setEndingSession]    = useState(false);
+  const [newBadgeName,     setNewBadgeName]     = useState<string | null>(null);
+
+  // Auto-dismiss badge toast after 3 s
+  useEffect(() => {
+    if (!newBadgeName) return;
+    const t = setTimeout(() => setNewBadgeName(null), 3000);
+    return () => clearTimeout(t);
+  }, [newBadgeName]);
 
   // ── Load everything ──────────────────────────────────────
   useEffect(() => {
@@ -188,17 +201,43 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       const userId = user?.id ?? null;
       if (userId) setCurrentUserId(userId);
 
-      const [locRes, logsRes, revsRes, groupsRes] = await Promise.all([
-        supabase.from("locations").select("id, name, category, current_status, image_url, coordinates_x, coordinates_y, description, total_seats, location_text").eq("id", locationId).single(),
+      const [locRes, logsRes, revsRes, groupsRes, sessionsRes] = await Promise.all([
+        supabase.from("locations").select("id, name, category, current_status, image_url, coordinates_x, coordinates_y, description, total_seats, power_outlets, location_text").eq("id", locationId).single(),
         supabase.from("status_logs").select("id, status, created_at, profiles(username)").eq("location_id", locationId).order("created_at", { ascending: false }).limit(10),
         supabase.from("reviews").select("id, rating, comment, created_at, profiles(username, avatar_url)").eq("location_id", locationId).order("created_at", { ascending: false }),
         supabase.from("study_groups").select("id, subject, current_members, max_members, is_active, created_at, profiles(username)").eq("location_id", locationId).eq("is_active", true).order("created_at", { ascending: false }),
+        supabase.from("active_sessions").select("seats_taken, needs_power").eq("location_id", locationId).eq("is_active", true),
       ]);
 
       if (locRes.data) {
         const loc = locRes.data as LocationDetail;
+
+        // Compute real occupancy from active_sessions
+        const occupied = (sessionsRes.data ?? []).reduce(
+          (sum: number, s: { seats_taken: number | null }) => sum + (s.seats_taken ?? 1), 0
+        );
+        setSeatsOccupied(occupied);
+
+        // Compute power outlets used (each person with needs_power uses ~2 outlets)
+        const powerUsed = (sessionsRes.data ?? []).reduce((sum: number, s: any) => {
+          const seatsForSession = s.seats_taken ?? 1;
+          return sum + (s.needs_power ? seatsForSession * 2 : 0);
+        }, 0);
+        setPowerOutletsUsed(powerUsed);
+
+        // Auto-derive status from actual fill %
+        const totalSeats = loc.total_seats ?? 0;
+        const fillPct    = totalSeats > 0 ? (occupied / totalSeats) * 100 : 0;
+        const derivedStatus: LocationStatus =
+          fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+
         setLocation(loc);
-        setActiveStatus((loc.current_status ?? "empty") as LocationStatus);
+        setActiveStatus(derivedStatus);
+
+        // Keep DB in sync if derived differs from stored
+        if (derivedStatus !== (loc.current_status ?? "empty")) {
+          supabase.from("locations").update({ current_status: derivedStatus }).eq("id", locationId);
+        }
       }
       setStatusLogs((logsRes.data ?? []) as unknown as StatusLog[]);
       setReviews((revsRes.data ?? []) as unknown as Review[]);
@@ -252,7 +291,52 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
     load();
   }, [locationId, supabase]);
 
-  // ── End solo session ──────────────────────────────────────
+  // ── Real-time subscription to active_sessions changes ──────────
+  useEffect(() => {
+    const channel = supabase
+      .channel(`active_sessions:location_id=eq.${locationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "active_sessions",
+          filter: `location_id=eq.${locationId}`,
+        },
+        async (payload) => {
+          console.log("[Realtime Update] Active sessions changed:", payload);
+          // Refetch active sessions to recalculate occupancy
+          const { data: sessions } = await supabase
+            .from("active_sessions")
+            .select("seats_taken, needs_power")
+            .eq("location_id", locationId)
+            .eq("is_active", true);
+
+          if (sessions) {
+            const occupied = sessions.reduce(
+              (sum: number, s: any) => sum + (s.seats_taken ?? 1),
+              0
+            );
+            console.log("[Realtime Update] New seats occupied:", occupied);
+            setSeatsOccupied(occupied);
+
+            const powerUsed = sessions.reduce((sum: number, s: any) => {
+              const seatsForSession = s.seats_taken ?? 1;
+              return sum + (s.needs_power ? seatsForSession * 2 : 0);
+            }, 0);
+            console.log("[Realtime Update] New power outlets used:", powerUsed);
+            setPowerOutletsUsed(powerUsed);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("[Realtime] Subscription status:", status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [locationId, supabase]);
   const handleEndSession = useCallback(async () => {
     if (!existingSession) return;
     setEndingSession(true);
@@ -297,6 +381,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       module:           data.topic || null,
       duration_minutes: 120,
       seats_taken:      1,
+      needs_power:      data.needs_power,
       is_active:        true,
     });
 
@@ -315,12 +400,32 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
 
       await awardPoints(supabase, currentUserId, POINT_ACTIONS.CREATE_STUDY_GROUP);
       trackMissionProgress(supabase, currentUserId, POINT_ACTIONS.CREATE_STUDY_GROUP);
+
+      // Update streak + unlock achievements + log activity
+      await supabase.rpc("update_streak", { p_user_id: currentUserId });
+      const { data: gBefore } = await supabase
+        .from("user_achievements").select("achievement_id").eq("user_id", currentUserId);
+      const gBeforeIds = new Set((gBefore ?? []).map((r: { achievement_id: number }) => r.achievement_id));
+      await supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUserId });
+      const { data: gAfter } = await supabase
+        .from("user_achievements").select("achievement_id, achievements(name)").eq("user_id", currentUserId);
+      const gNewlyUnlocked = (gAfter ?? []).filter((r: { achievement_id: number }) => !gBeforeIds.has(r.achievement_id));
+      if (gNewlyUnlocked.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setNewBadgeName((gNewlyUnlocked[0] as any).achievements?.name ?? "Badge");
+      }
+      supabase.from("activity_log").insert({
+        user_id:     currentUserId,
+        type:        "group",
+        description: `Created a study group at ${location?.name ?? "a study spot"}`,
+      });
+
       setPointsDelta(pts);
       setTimeout(() => setPointsDelta(null), 2500);
       setAlreadyEarnedToday(true);
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
-  }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday]);
+  }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday, location]);
 
   // ── Status update ─────────────────────────────────────────
   const handleStatusUpdate = async (newStatus: LocationStatus) => {
@@ -354,6 +459,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       seats_taken:      1,
       activity:         "solo_study",
       duration_minutes: 60,
+      needs_power:      false,
       is_active:        true,
     });
 
@@ -361,7 +467,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
     setCheckInDone(true);
     setExistingSession({ id: -1, location_id: locationId, check_in_time: new Date().toISOString(), duration_minutes: 60, activity: "solo_study" });
 
-    // Daily cooldown: only award points once per day
+    // Daily cooldown: only award points + update streak once per day
     if (!alreadyEarnedToday) {
       const { data: rule } = await supabase
         .from("point_rules")
@@ -374,6 +480,29 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       await awardPoints(supabase, currentUserId, POINT_ACTIONS.CHECK_IN);
       trackMissionProgress(supabase, currentUserId, POINT_ACTIONS.CHECK_IN);
 
+      // Update streak (RPC handles consecutive-day logic and duplicate-day guard)
+      await supabase.rpc("update_streak", { p_user_id: currentUserId });
+
+      // Detect newly unlocked achievements
+      const { data: before } = await supabase
+        .from("user_achievements").select("achievement_id").eq("user_id", currentUserId);
+      const beforeIds = new Set((before ?? []).map((r: { achievement_id: number }) => r.achievement_id));
+      await supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUserId });
+      const { data: after } = await supabase
+        .from("user_achievements").select("achievement_id, achievements(name)").eq("user_id", currentUserId);
+      const newlyUnlocked = (after ?? []).filter((r: { achievement_id: number }) => !beforeIds.has(r.achievement_id));
+      if (newlyUnlocked.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setNewBadgeName((newlyUnlocked[0] as any).achievements?.name ?? "Badge");
+      }
+
+      // Write activity log (fire-and-forget)
+      supabase.from("activity_log").insert({
+        user_id:     currentUserId,
+        type:        "checkin",
+        description: `Checked in at ${location?.name ?? "a study spot"}`,
+      });
+
       setPointsDelta(pts);
       setTimeout(() => setPointsDelta(null), 2500);
       setAlreadyEarnedToday(true);
@@ -381,7 +510,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       // Signal profile page to refresh its points counter
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
-  }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday]);
+  }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday, location]);
 
   if (loading || !location) {
     return (
@@ -422,6 +551,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         onClose={() => setActionChoiceOpen(false)}
         onCheckIn={() => { setActionChoiceOpen(false); handleCheckIn(locationId); }}
         onStudyBuddy={() => { setActionChoiceOpen(false); setStudyBuddyOpen(true); }}
+        isUserCheckedIn={!!existingSession}
       />
 
       <StudyBuddyModal
@@ -430,6 +560,21 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         onOpenChange={(open) => { if (!open) setStudyBuddyOpen(false); }}
         onSubmit={handleStudyBuddyCreate}
       />
+
+      {/* Badge unlock toast — auto-dismisses after 3 s */}
+      <AnimatePresence>
+        {newBadgeName && (
+          <motion.div
+            key="badge-toast"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-gold text-ink font-semibold text-sm rounded-full shadow-lg pointer-events-none whitespace-nowrap"
+          >
+            🏅 Badge unlocked: {newBadgeName}!
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Floating +pts animation */}
       <AnimatePresence>
@@ -481,6 +626,35 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             </div>
           </div>
         </motion.div>
+
+        {/* ── Availability Summary (Always Visible) ── */}
+        {(location.total_seats || location.power_outlets) && (
+          <motion.div variants={cardVariants} className="grid grid-cols-2 gap-3 px-4 md:px-6 mb-4">
+            {location.total_seats && (
+              <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm">
+                <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2">Study Seats</p>
+                <p className="text-xl font-bold text-ink">
+                  {location.total_seats - seatsOccupied}
+                  <span className="text-xs text-ink-muted font-normal">/{location.total_seats}</span>
+                </p>
+                <p className="text-[10px] text-ink-muted mt-1">left available</p>
+              </div>
+            )}
+            {location.power_outlets && location.power_outlets > 0 && (
+              <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm">
+                <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <Zap size={10} />
+                  Power Outlets
+                </p>
+                <p className="text-xl font-bold text-ink">
+                  {location.power_outlets - powerOutletsUsed}
+                  <span className="text-xs text-ink-muted font-normal">/{location.power_outlets}</span>
+                </p>
+                <p className="text-[10px] text-ink-muted mt-1">left available</p>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* ── Sticky Action Bar ── */}
         <div className="sticky top-16 z-10 bg-surface/80 backdrop-blur-md border-b border-border">
@@ -613,17 +787,113 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               <Tabs.Content value="live-status" className="space-y-5 outline-none">
                 <div className={`bg-surface rounded-2xl border ${s.border} p-5 shadow-sm`}>
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest">Current Status</p>
+                    <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest">Current Occupancy</p>
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${s.bg} ${s.text}`}>● {s.label}</span>
                   </div>
-                  <div className="h-3 bg-canvas rounded-full overflow-hidden border border-border">
-                    <div className={`h-full rounded-full transition-all duration-700 ${s.dot} ${s.barWidth}`} />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-ink-faint mt-1.5">
-                    <span>Empty</span>
-                    <span>Full{location.total_seats ? ` (${location.total_seats} seats)` : ""}</span>
-                  </div>
+                  {/* Real occupancy bar based on active_sessions vs total_seats */}
+                  {location.total_seats ? (
+                    <>
+                      <div className="h-3 bg-canvas rounded-full overflow-hidden border border-border">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${s.dot}`}
+                          style={{ width: `${Math.min(100, Math.round((seatsOccupied / location.total_seats) * 100))}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-ink-faint mt-1.5 mb-2">
+                        <span>{seatsOccupied} occupied</span>
+                        <span>{location.total_seats} total</span>
+                      </div>
+                      <div className="px-3 py-2 rounded-lg bg-canvas border border-border">
+                        <p className="text-xs font-semibold text-ink">
+                          Seats left: <span className="text-success font-bold">{location.total_seats - seatsOccupied}/{location.total_seats}</span>
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-3 bg-canvas rounded-full overflow-hidden border border-border">
+                        <div className={`h-full rounded-full transition-all duration-700 ${s.dot} ${s.barWidth}`} />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-ink-faint mt-1.5">
+                        <span>Empty</span><span>Full</span>
+                      </div>
+                    </>
+                  )}
+                  {seatsOccupied > 0 && (
+                    <p className="text-[11px] text-ink-muted mt-2">
+                      {activeStatus === "full"
+                        ? "No seats available — try another spot."
+                        : activeStatus === "busy"
+                        ? "Some seats left but getting busy."
+                        : "Plenty of seats available."}
+                    </p>
+                  )}
                 </div>
+
+                {/* Power outlets info */}
+                {location.power_outlets && location.power_outlets > 0 && (
+                  <div className="bg-surface rounded-2xl border border-border p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest flex items-center gap-1.5">
+                        <Zap size={12} className="text-gold" />
+                        Power Outlets
+                      </p>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                        (location.power_outlets - powerOutletsUsed) <= 0
+                          ? "bg-alert-light text-alert"
+                          : (location.power_outlets - powerOutletsUsed) <= (location.power_outlets * 0.3)
+                          ? "bg-gold-light text-gold"
+                          : "bg-success-light text-success"
+                      }`}>
+                        {location.power_outlets - powerOutletsUsed} available
+                      </span>
+                    </div>
+                    <div className="h-3 bg-canvas rounded-full overflow-hidden border border-border">
+                      <div
+                        className="h-full rounded-full transition-all duration-700 bg-gold"
+                        style={{ width: `${Math.min(100, Math.round((powerOutletsUsed / location.power_outlets) * 100))}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-ink-faint mt-1.5 mb-2">
+                      <span>{powerOutletsUsed} in use</span>
+                      <span>{location.power_outlets} total</span>
+                    </div>
+                    <div className="px-3 py-2 rounded-lg bg-canvas border border-border">
+                      <p className="text-xs font-semibold text-ink">
+                        Power outlet left: <span className="text-gold font-bold">{location.power_outlets - powerOutletsUsed}/{location.power_outlets}</span>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Availability Summary */}
+                {(location.total_seats || location.power_outlets) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {location.total_seats && (
+                      <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm">
+                        <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2">Study Seats</p>
+                        <p className="text-xl font-bold text-ink">
+                          {location.total_seats - seatsOccupied}
+                          <span className="text-xs text-ink-muted font-normal">/{location.total_seats}</span>
+                        </p>
+                        <p className="text-[10px] text-ink-muted mt-1">left available</p>
+                      </div>
+                    )}
+                    {location.power_outlets && location.power_outlets > 0 && (
+                      <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm">
+                        <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2 flex items-center gap-1">
+                          <Zap size={10} />
+                          Power Outlets
+                        </p>
+                        <p className="text-xl font-bold text-ink">
+                          {location.power_outlets - powerOutletsUsed}
+                          <span className="text-xs text-ink-muted font-normal">/{location.power_outlets}</span>
+                        </p>
+                        <p className="text-[10px] text-ink-muted mt-1">left available</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <p className="text-xs font-semibold text-ink-muted mb-3 flex items-center gap-1.5">
