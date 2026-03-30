@@ -167,6 +167,8 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [studyGroups,    setStudyGroups]    = useState<StudyGroup[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [activeStatus,   setActiveStatus]   = useState<LocationStatus>("empty");
+  // Real occupancy from active_sessions (0 when unknown)
+  const [seatsOccupied,  setSeatsOccupied]  = useState(0);
   const [qrOpen,             setQrOpen]             = useState(false);
   const [actionChoiceOpen,   setActionChoiceOpen]   = useState(false);
   const [studyBuddyOpen,     setStudyBuddyOpen]     = useState(false);
@@ -188,17 +190,36 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       const userId = user?.id ?? null;
       if (userId) setCurrentUserId(userId);
 
-      const [locRes, logsRes, revsRes, groupsRes] = await Promise.all([
+      const [locRes, logsRes, revsRes, groupsRes, sessionsRes] = await Promise.all([
         supabase.from("locations").select("id, name, category, current_status, image_url, coordinates_x, coordinates_y, description, total_seats, location_text").eq("id", locationId).single(),
         supabase.from("status_logs").select("id, status, created_at, profiles(username)").eq("location_id", locationId).order("created_at", { ascending: false }).limit(10),
         supabase.from("reviews").select("id, rating, comment, created_at, profiles(username, avatar_url)").eq("location_id", locationId).order("created_at", { ascending: false }),
         supabase.from("study_groups").select("id, subject, current_members, max_members, is_active, created_at, profiles(username)").eq("location_id", locationId).eq("is_active", true).order("created_at", { ascending: false }),
+        supabase.from("active_sessions").select("seats_taken").eq("location_id", locationId).eq("is_active", true),
       ]);
 
       if (locRes.data) {
         const loc = locRes.data as LocationDetail;
+
+        // Compute real occupancy from active_sessions
+        const occupied = (sessionsRes.data ?? []).reduce(
+          (sum: number, s: { seats_taken: number | null }) => sum + (s.seats_taken ?? 1), 0
+        );
+        setSeatsOccupied(occupied);
+
+        // Auto-derive status from actual fill %
+        const totalSeats = loc.total_seats ?? 0;
+        const fillPct    = totalSeats > 0 ? (occupied / totalSeats) * 100 : 0;
+        const derivedStatus: LocationStatus =
+          fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+
         setLocation(loc);
-        setActiveStatus((loc.current_status ?? "empty") as LocationStatus);
+        setActiveStatus(derivedStatus);
+
+        // Keep DB in sync if derived differs from stored
+        if (derivedStatus !== (loc.current_status ?? "empty")) {
+          supabase.from("locations").update({ current_status: derivedStatus }).eq("id", locationId);
+        }
       }
       setStatusLogs((logsRes.data ?? []) as unknown as StatusLog[]);
       setReviews((revsRes.data ?? []) as unknown as Review[]);
@@ -636,16 +657,42 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               <Tabs.Content value="live-status" className="space-y-5 outline-none">
                 <div className={`bg-surface rounded-2xl border ${s.border} p-5 shadow-sm`}>
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest">Current Status</p>
+                    <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest">Current Occupancy</p>
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${s.bg} ${s.text}`}>● {s.label}</span>
                   </div>
-                  <div className="h-3 bg-canvas rounded-full overflow-hidden border border-border">
-                    <div className={`h-full rounded-full transition-all duration-700 ${s.dot} ${s.barWidth}`} />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-ink-faint mt-1.5">
-                    <span>Empty</span>
-                    <span>Full{location.total_seats ? ` (${location.total_seats} seats)` : ""}</span>
-                  </div>
+                  {/* Real occupancy bar based on active_sessions vs total_seats */}
+                  {location.total_seats ? (
+                    <>
+                      <div className="h-3 bg-canvas rounded-full overflow-hidden border border-border">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${s.dot}`}
+                          style={{ width: `${Math.min(100, Math.round((seatsOccupied / location.total_seats) * 100))}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-ink-faint mt-1.5">
+                        <span>{seatsOccupied} seat{seatsOccupied !== 1 ? "s" : ""} occupied</span>
+                        <span>{location.total_seats} total</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-3 bg-canvas rounded-full overflow-hidden border border-border">
+                        <div className={`h-full rounded-full transition-all duration-700 ${s.dot} ${s.barWidth}`} />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-ink-faint mt-1.5">
+                        <span>Empty</span><span>Full</span>
+                      </div>
+                    </>
+                  )}
+                  {seatsOccupied > 0 && (
+                    <p className="text-[11px] text-ink-muted mt-2">
+                      {activeStatus === "full"
+                        ? "No seats available — try another spot."
+                        : activeStatus === "busy"
+                        ? "Some seats left but getting busy."
+                        : "Plenty of seats available."}
+                    </p>
+                  )}
                 </div>
 
                 <div>

@@ -49,29 +49,7 @@ type CalendarEvent = {
 
 type SuggestionMood = "neutral" | "warning" | "danger";
 
-// ─────────────────────────────────────────────
-// Location ID → name mapping
-// ─────────────────────────────────────────────
-
-const LOCATIONS_MAP: Record<number, string> = {
-  1: "Main IT Lab",
-  2: "Library Level 3",
-  3: "Study Corner A",
-  4: "Canteen Terrace",
-  5: "PC Lab 2",
-  6: "Reading Room",
-};
-
 type SuggestionSpot = { name: string; highlight: string; locationId: number };
-
-// Quiet-to-active tiers for smart suggestions
-const SUGGESTION_SPOTS: SuggestionSpot[] = [
-  { name: "Library Level 3",  highlight: "Quietest spot on campus",       locationId: 2 },
-  { name: "Reading Room",     highlight: "Minimal foot traffic",           locationId: 6 },
-  { name: "Study Corner A",   highlight: "Comfortable, uncrowded seating", locationId: 3 },
-  { name: "PC Lab 2",         highlight: "Computers + great WiFi",         locationId: 5 },
-  { name: "Main IT Lab",      highlight: "Best for coding sessions",       locationId: 1 },
-];
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -123,10 +101,11 @@ function getEventMood(events: CalendarEvent[]): SuggestionMood {
   return "neutral";
 }
 
-function getQuickSpots(mood: SuggestionMood) {
-  if (mood === "danger")  return SUGGESTION_SPOTS.slice(0, 2);
-  if (mood === "warning") return SUGGESTION_SPOTS.slice(1, 3);
-  return SUGGESTION_SPOTS.slice(0, 3);
+function getQuickSpots(mood: SuggestionMood, spots: SuggestionSpot[]) {
+  if (spots.length === 0) return [];
+  if (mood === "danger")  return spots.slice(0, Math.min(2, spots.length));
+  if (mood === "warning") return spots.slice(Math.min(1, spots.length - 1), Math.min(3, spots.length));
+  return spots.slice(0, Math.min(3, spots.length));
 }
 
 // ─────────────────────────────────────────────
@@ -223,9 +202,8 @@ function CustomDayButton({ day: _day, modifiers, className, children, ...rest }:
 // EventCard
 // ─────────────────────────────────────────────
 
-function EventCard({ event }: { event: CalendarEvent }) {
+function EventCard({ event, locationName }: { event: CalendarEvent; locationName: string | null }) {
   const { Icon, bg, border, iconBg, iconColor } = getEventStyle(event);
-  const locationName = event.location_id ? LOCATIONS_MAP[event.location_id] : null;
   const timeStr = format(parseISO(event.event_date), "h:mm a");
 
   return (
@@ -293,7 +271,13 @@ const MOOD_CONFIG: Record<SuggestionMood, {
 // Keyed by date so it remounts (fresh chat) each time the selected date changes.
 // ─────────────────────────────────────────────
 
-function AISuggestionCard({ dayEvents }: { dayEvents: CalendarEvent[] }) {
+function AISuggestionCard({
+  dayEvents,
+  allSpots,
+}: {
+  dayEvents: CalendarEvent[];
+  allSpots: SuggestionSpot[];
+}) {
   const { messages, sendMessage, status } = useChat();
   const sentRef = useRef(false);
 
@@ -318,7 +302,7 @@ function AISuggestionCard({ dayEvents }: { dayEvents: CalendarEvent[] }) {
 
   const mood  = getEventMood(dayEvents);
   const c     = MOOD_CONFIG[mood];
-  const spots = getQuickSpots(mood);
+  const spots = getQuickSpots(mood, allSpots);
 
   return (
     <div className={`rounded-2xl border p-4 ${c.bg} ${c.border}`}>
@@ -374,6 +358,25 @@ export default function EventsPage() {
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [events, setEvents]             = useState<CalendarEvent[]>([]);
   const [loading, setLoading]           = useState(true);
+  const [suggestionSpots, setSuggestionSpots] = useState<SuggestionSpot[]>([]);
+
+  // Fetch available study locations once on mount (for suggestion chip buttons)
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("locations")
+      .select("id, name, current_status, description")
+      .order("name")
+      .then(({ data }) => {
+        if (!data) return;
+        const spots: SuggestionSpot[] = data.map((loc) => ({
+          locationId: loc.id,
+          name:       loc.name,
+          highlight:  loc.description ?? loc.current_status ?? "Study spot",
+        }));
+        setSuggestionSpots(spots);
+      });
+  }, []);
 
   // Fetch events whenever the displayed month changes
   useEffect(() => {
@@ -522,9 +525,18 @@ export default function EventsPage() {
               >
                 {dayEvents.length > 0 ? (
                   <>
-                    {dayEvents.map((event) => (
-                      <EventCard key={event.id} event={event} />
-                    ))}
+                    {dayEvents.map((event) => {
+                      const loc = event.location_id
+                        ? suggestionSpots.find((s) => s.locationId === event.location_id)
+                        : null;
+                      return (
+                        <EventCard
+                          key={event.id}
+                          event={event}
+                          locationName={loc?.name ?? null}
+                        />
+                      );
+                    })}
                   </>
                 ) : (
                   /* Empty state */
@@ -543,6 +555,7 @@ export default function EventsPage() {
                 <AISuggestionCard
                   key={selectedDate.toDateString()}
                   dayEvents={dayEvents}
+                  allSpots={suggestionSpots}
                 />
               </motion.div>
             )}
