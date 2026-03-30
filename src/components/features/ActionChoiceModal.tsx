@@ -13,6 +13,7 @@ type Props = {
   onClose: () => void;
   onCheckIn: () => void;
   onStudyBuddy: () => void;
+  isUserCheckedIn?: boolean;
 };
 
 // ─────────────────────────────────────────────
@@ -25,6 +26,7 @@ export default function ActionChoiceModal({
   onClose,
   onCheckIn,
   onStudyBuddy,
+  isUserCheckedIn = false,
 }: Props) {
   if (!open) return null;
 
@@ -87,14 +89,21 @@ export default function ActionChoiceModal({
           {/* Find Study Buddy */}
           <button
             onClick={onStudyBuddy}
-            className="w-full flex items-center gap-4 px-5 py-4 bg-canvas border border-border hover:bg-brand-faint hover:border-brand text-ink rounded-2xl transition-all duration-200 active:scale-[0.98]"
+            disabled={isUserCheckedIn}
+            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-200 active:scale-[0.98] ${
+              isUserCheckedIn
+                ? "bg-canvas border border-border text-ink-faint cursor-not-allowed opacity-50"
+                : "bg-canvas border border-border hover:bg-brand-faint hover:border-brand text-ink"
+            }`}
           >
-            <div className="w-11 h-11 rounded-xl bg-brand/10 flex items-center justify-center shrink-0">
-              <Users size={22} className="text-brand-dark" />
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${isUserCheckedIn ? "bg-ink-faint/10" : "bg-brand/10"}`}>
+              <Users size={22} className={isUserCheckedIn ? "text-ink-faint" : "text-brand-dark"} />
             </div>
             <div className="text-left">
-              <p className="font-bold text-sm text-ink">Find Study Buddy</p>
-              <p className="text-xs text-ink-muted mt-0.5">Create a group · Study together</p>
+              <p className={`font-bold text-sm ${isUserCheckedIn ? "text-ink-faint" : "text-ink"}`}>Find Study Buddy</p>
+              <p className={`text-xs mt-0.5 ${isUserCheckedIn ? "text-ink-faint" : "text-ink-muted"}`}>
+                {isUserCheckedIn ? "Check out first to start a study group" : "Create a group · Study together"}
+              </p>
             </div>
           </button>
         </div>

@@ -408,6 +408,143 @@ function CheckoutDialog({
 }
 
 // ─────────────────────────────────────────────
+// RedemptionConfirmModal
+// ─────────────────────────────────────────────
+
+function RedemptionConfirmModal({
+  redemption,
+  open,
+  onClose,
+  onConfirm,
+}: {
+  redemption: UserRedemption | null;
+  open: boolean;
+  onClose: () => void;
+  onConfirm: (redemptionId: number) => void;
+}) {
+  const [step, setStep] = useState<"confirm" | "success">("confirm");
+
+  function handleConfirm() {
+    if (!redemption) return;
+    setStep("success");
+    onConfirm(redemption.id);
+    setTimeout(() => {
+      onClose();
+      setStep("confirm");
+    }, 1600);
+  }
+
+  if (!redemption) return null;
+
+  return (
+    <Dialog.Root open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content
+          aria-describedby={undefined}
+          className="fixed z-50 inset-0 flex items-center justify-center p-4"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{
+              duration: 0.2,
+              ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
+            }}
+            className="bg-surface rounded-2xl shadow-xl w-full max-w-sm p-6 relative"
+          >
+            {step === "confirm" && (
+              <button
+                onClick={onClose}
+                className="absolute top-4 right-4 p-1.5 rounded-full text-ink-muted hover:bg-canvas transition-colors"
+              >
+                <X size={16} />
+              </button>
+            )}
+
+            <AnimatePresence mode="wait">
+              {step === "confirm" ? (
+                <motion.div
+                  key="confirm"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col gap-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-gold-light flex items-center justify-center text-gold shrink-0">
+                      <Gift size={22} />
+                    </div>
+                    <div>
+                      <Dialog.Title className="font-semibold text-ink leading-snug">
+                        {redemption.redemption_items?.name ?? "Unknown item"}
+                      </Dialog.Title>
+                      <p className="text-xs text-ink-muted mt-0.5">
+                        Redeem this item for the student?
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-canvas p-4 text-sm">
+                    <p className="text-ink-muted">
+                      Redeemed on:{" "}
+                      <span className="font-semibold text-ink">
+                        {new Date(redemption.redeemed_at).toLocaleDateString("en-SG", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleConfirm}
+                    className="w-full py-3 rounded-full bg-gold text-ink font-semibold hover:bg-gold/80 active:scale-95 transition-all duration-150"
+                  >
+                    Confirm & Mark Redeemed
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="w-full py-2 text-sm text-ink-muted hover:text-ink transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="success"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex flex-col items-center gap-4 py-4 text-center"
+                >
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                    className="w-16 h-16 rounded-full bg-success-light flex items-center justify-center text-success"
+                  >
+                    <CheckCircle2 size={32} />
+                  </motion.div>
+                  <div>
+                    <p className="font-bold text-ink text-lg">Item Redeemed!</p>
+                    <p className="text-sm text-ink-muted mt-1">
+                      Status updated to <span className="font-semibold text-success">claimed</span>.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+// ─────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────
 
@@ -421,6 +558,8 @@ export default function RewardsPage() {
   const [selectedItem, setSelectedItem]     = useState<RedemptionItem | null>(null);
   const [dialogOpen, setDialogOpen]         = useState(false);
   const [redemptions, setRedemptions]       = useState<UserRedemption[]>([]);
+  const [selectedRedemption, setSelectedRedemption] = useState<UserRedemption | null>(null);
+  const [redemptionModalOpen, setRedemptionModalOpen] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -519,6 +658,22 @@ export default function RewardsPage() {
   function handleClose() {
     setDialogOpen(false);
     setTimeout(() => setSelectedItem(null), 200);
+  }
+
+  async function handleRedemptionConfirm(redemptionId: number) {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("user_redemptions")
+      .update({ status: "claimed" })
+      .eq("id", redemptionId);
+
+    if (!error) {
+      setRedemptions((prev) =>
+        prev.map((r) => r.id === redemptionId ? { ...r, status: "claimed" } : r)
+      );
+    }
+    setRedemptionModalOpen(false);
+    setTimeout(() => setSelectedRedemption(null), 200);
   }
 
   if (loading) {
@@ -645,13 +800,25 @@ export default function RewardsPage() {
                         {new Date(r.redeemed_at).toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric" })}
                       </p>
                     </div>
-                    <span className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                      isClaimed   ? "bg-success-light text-success" :
-                      isCancelled ? "bg-alert-light text-alert"     :
-                                    "bg-gold-light text-gold"
-                    }`}>
-                      {isClaimed ? "Claimed" : isCancelled ? "Cancelled" : "Pending"}
-                    </span>
+                    {isPending ? (
+                      <button
+                        onClick={() => {
+                          setSelectedRedemption(r);
+                          setRedemptionModalOpen(true);
+                        }}
+                        className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-gold-light text-gold hover:bg-gold hover:text-surface transition-colors"
+                      >
+                        Redeem
+                      </button>
+                    ) : (
+                      <span className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                        isClaimed   ? "bg-success-light text-success" :
+                        isCancelled ? "bg-alert-light text-alert"     :
+                                      "bg-gold-light text-gold"
+                      }`}>
+                        {isClaimed ? "Claimed" : isCancelled ? "Cancelled" : "Pending"}
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -670,6 +837,14 @@ export default function RewardsPage() {
         userPoints={points}
         onClose={handleClose}
         onConfirm={handleConfirm}
+      />
+
+      {/* Redemption confirm modal */}
+      <RedemptionConfirmModal
+        redemption={selectedRedemption}
+        open={redemptionModalOpen}
+        onClose={() => setRedemptionModalOpen(false)}
+        onConfirm={handleRedemptionConfirm}
       />
     </div>
   );

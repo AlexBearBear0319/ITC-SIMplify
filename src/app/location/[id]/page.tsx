@@ -41,6 +41,7 @@ type LocationDetail = {
   coordinates_y: number | null;
   description: string | null;
   total_seats: number | null;
+  power_outlets: number | null;
   location_text: string | null;
 };
 
@@ -169,6 +170,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [activeStatus,   setActiveStatus]   = useState<LocationStatus>("empty");
   // Real occupancy from active_sessions (0 when unknown)
   const [seatsOccupied,  setSeatsOccupied]  = useState(0);
+  const [powerOutletsUsed, setPowerOutletsUsed] = useState(0);
   const [qrOpen,             setQrOpen]             = useState(false);
   const [actionChoiceOpen,   setActionChoiceOpen]   = useState(false);
   const [studyBuddyOpen,     setStudyBuddyOpen]     = useState(false);
@@ -199,11 +201,11 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       if (userId) setCurrentUserId(userId);
 
       const [locRes, logsRes, revsRes, groupsRes, sessionsRes] = await Promise.all([
-        supabase.from("locations").select("id, name, category, current_status, image_url, coordinates_x, coordinates_y, description, total_seats, location_text").eq("id", locationId).single(),
+        supabase.from("locations").select("id, name, category, current_status, image_url, coordinates_x, coordinates_y, description, total_seats, power_outlets, location_text").eq("id", locationId).single(),
         supabase.from("status_logs").select("id, status, created_at, profiles(username)").eq("location_id", locationId).order("created_at", { ascending: false }).limit(10),
         supabase.from("reviews").select("id, rating, comment, created_at, profiles(username, avatar_url)").eq("location_id", locationId).order("created_at", { ascending: false }),
         supabase.from("study_groups").select("id, subject, current_members, max_members, is_active, created_at, profiles(username)").eq("location_id", locationId).eq("is_active", true).order("created_at", { ascending: false }),
-        supabase.from("active_sessions").select("seats_taken").eq("location_id", locationId).eq("is_active", true),
+        supabase.from("active_sessions").select("seats_taken, needs_power").eq("location_id", locationId).eq("is_active", true),
       ]);
 
       if (locRes.data) {
@@ -214,6 +216,13 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
           (sum: number, s: { seats_taken: number | null }) => sum + (s.seats_taken ?? 1), 0
         );
         setSeatsOccupied(occupied);
+
+        // Compute power outlets used (each person with needs_power uses ~2 outlets)
+        const powerUsed = (sessionsRes.data ?? []).reduce((sum: number, s: any) => {
+          const seatsForSession = s.seats_taken ?? 1;
+          return sum + (s.needs_power ? seatsForSession * 2 : 0);
+        }, 0);
+        setPowerOutletsUsed(powerUsed);
 
         // Auto-derive status from actual fill %
         const totalSeats = loc.total_seats ?? 0;
@@ -496,6 +505,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         onClose={() => setActionChoiceOpen(false)}
         onCheckIn={() => { setActionChoiceOpen(false); handleCheckIn(locationId); }}
         onStudyBuddy={() => { setActionChoiceOpen(false); setStudyBuddyOpen(true); }}
+        isUserCheckedIn={!!existingSession}
       />
 
       <StudyBuddyModal
@@ -739,6 +749,37 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                     </p>
                   )}
                 </div>
+
+                {/* Power outlets info */}
+                {location.power_outlets && location.power_outlets > 0 && (
+                  <div className="bg-surface rounded-2xl border border-border p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest flex items-center gap-1.5">
+                        <Zap size={12} className="text-gold" />
+                        Power Outlets
+                      </p>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                        (location.power_outlets - powerOutletsUsed) <= 0
+                          ? "bg-alert-light text-alert"
+                          : (location.power_outlets - powerOutletsUsed) <= (location.power_outlets * 0.3)
+                          ? "bg-gold-light text-gold"
+                          : "bg-success-light text-success"
+                      }`}>
+                        {location.power_outlets - powerOutletsUsed} available
+                      </span>
+                    </div>
+                    <div className="h-3 bg-canvas rounded-full overflow-hidden border border-border">
+                      <div
+                        className="h-full rounded-full transition-all duration-700 bg-gold"
+                        style={{ width: `${Math.min(100, Math.round((powerOutletsUsed / location.power_outlets) * 100))}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-ink-faint mt-1.5">
+                      <span>{powerOutletsUsed} outlet{powerOutletsUsed !== 1 ? "s" : ""} in use</span>
+                      <span>{location.power_outlets} total</span>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <p className="text-xs font-semibold text-ink-muted mb-3 flex items-center gap-1.5">
