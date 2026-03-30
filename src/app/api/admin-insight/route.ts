@@ -56,7 +56,7 @@ export async function POST(req: Request) {
       );
     if (snapshot.topCategory != null)
       lines.push(
-        `• Top category this week: ${snapshot.topCategory} (${snapshot.topCategoryPct}%)`,
+        `• Most used library area this week: ${snapshot.topCategory} (${snapshot.topCategoryPct}% of check-ins)`,
       );
     const userMessage = lines.join("\n");
 

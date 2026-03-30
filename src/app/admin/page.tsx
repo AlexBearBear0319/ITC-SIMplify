@@ -308,7 +308,7 @@ function OverviewTab() {
         .select("id", { count: "exact", head: true })
         .gte("check_in_time", sevenDaysAgo.toISOString()),
       supabase.from("active_sessions")
-        .select("locations(category)")
+        .select("locations(name)")
         .gte("check_in_time", sevenDaysAgo.toISOString()),
       supabase.from("active_sessions")
         .select("check_in_time")
@@ -323,12 +323,12 @@ function OverviewTab() {
       };
       const wTotal = w.count ?? 0;
 
-      // Build category slices from live data
+      // Build area slices from live data
       const catMap: Record<string, number> = {};
       for (const s of cat.data ?? []) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const category = (s as any).locations?.category ?? "Other";
-        catMap[category] = (catMap[category] ?? 0) + 1;
+        const area = (s as any).locations?.name ?? "Unknown";
+        catMap[area] = (catMap[area] ?? 0) + 1;
       }
       const catTotal = Object.values(catMap).reduce((a, b) => a + b, 0);
       const slices = Object.entries(catMap)
@@ -426,8 +426,8 @@ function OverviewTab() {
 
         {/* Category donut */}
         <div className="lg:col-span-2 bg-surface rounded-2xl border border-border shadow-sm p-5">
-          <h3 className="text-sm font-bold text-ink mb-0.5">Popular Categories</h3>
-          <p className="text-xs text-ink-muted mb-4">Check-in breakdown · last 7 days</p>
+          <h3 className="text-sm font-bold text-ink mb-0.5">Popular Areas</h3>
+          <p className="text-xs text-ink-muted mb-4">Check-in breakdown by library area · last 7 days</p>
           <div className="relative h-40">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>

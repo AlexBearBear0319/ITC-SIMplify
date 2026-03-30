@@ -173,10 +173,10 @@ export default function StatisticsPage() {
           .gte("check_in_time", todayStart.toISOString())
           .not("check_in_time", "is", null),
 
-        // 6. Last 7 days sessions for category breakdown
+        // 6. Last 7 days sessions for area breakdown
         supabase
           .from("active_sessions")
-          .select("locations(category)")
+          .select("locations(name)")
           .gte("check_in_time", sevenDaysAgo.toISOString()),
       ]);
 
@@ -218,11 +218,11 @@ export default function StatisticsPage() {
         density: Math.round(((buckets[h] ?? 0) / maxCount) * 100),
       }));
 
-      // ── Category breakdown ──
+      // ── Area breakdown ──
       const catMap: Record<string, number> = {};
       for (const s of catSessions ?? []) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const cat = (s as any).locations?.category ?? "Other";
+        const cat = (s as any).locations?.name ?? "Unknown";
         catMap[cat] = (catMap[cat] ?? 0) + 1;
       }
       const weeklyTotal = Object.values(catMap).reduce((a, b) => a + b, 0);
@@ -435,10 +435,10 @@ export default function StatisticsPage() {
             className="lg:col-span-2 bg-surface rounded-2xl border border-border shadow-sm p-5"
           >
             <div className="mb-1">
-              <h2 className="text-sm font-bold text-ink">Most Popular Categories</h2>
+              <h2 className="text-sm font-bold text-ink">Most Popular Areas</h2>
               <p className="text-xs text-ink-muted mt-0.5">
-                Where students study most — last 7 days.
-                Helps identify which facility types need more capacity or promotion.
+                Which library areas students use most — last 7 days.
+                Helps identify high-demand spots that may need more capacity.
               </p>
             </div>
 
