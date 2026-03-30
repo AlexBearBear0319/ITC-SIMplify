@@ -27,6 +27,10 @@ import {
   XCircle,
   Camera,
   Loader2,
+  Zap,
+  Shield,
+  Compass,
+  Award,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { uploadAvatar } from "./actions";
@@ -50,6 +54,7 @@ type UserProfile = {
   major_id: number | null;
   education_level: string | null;
   semester_term: string | null;
+  equipped_badge_id: number | null;
 };
 
 type EditForm = {
@@ -65,7 +70,7 @@ type EditForm = {
 type School = { id: number; name: string; abbr: string };
 type Major  = { id: number; name: string };
 
-type AchievementRarity = "common" | "rare" | "epic";
+type AchievementRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
 
 type Achievement = {
   id: number;
@@ -92,9 +97,11 @@ type ActivityItem = {
 // ─────────────────────────────────────────────
 
 const RARITY_CONFIG: Record<AchievementRarity, { bg: string; iconClass: string; label: string }> = {
-  common: { bg: "bg-brand-faint",  iconClass: "text-brand-dark", label: "Common" },
-  rare:   { bg: "bg-gold-light",   iconClass: "text-gold",       label: "Rare"   },
-  epic:   { bg: "bg-alert-light",  iconClass: "text-alert",      label: "Epic"   },
+  common:    { bg: "bg-brand-faint",   iconClass: "text-brand-dark", label: "Common"    },
+  uncommon:  { bg: "bg-success-light", iconClass: "text-success",    label: "Uncommon"  },
+  rare:      { bg: "bg-gold-light",    iconClass: "text-gold",       label: "Rare"      },
+  epic:      { bg: "bg-alert-light",   iconClass: "text-alert",      label: "Epic"      },
+  legendary: { bg: "bg-brand-light",   iconClass: "text-brand",      label: "Legendary" },
 };
 
 const ACTIVITY_CONFIG: Record<ActivityType, { icon: LucideIcon; bg: string; iconClass: string }> = {
@@ -106,8 +113,10 @@ const ACTIVITY_CONFIG: Record<ActivityType, { icon: LucideIcon; bg: string; icon
 };
 
 const ICON_MAP: Record<string, LucideIcon> = {
+  // underscored variants
   book_open:     BookOpen,
   map_pin:       MapPin,
+  check_circle:  CheckCircle2,
   users:         Users,
   calendar_days: CalendarDays,
   coins:         Coins,
@@ -115,6 +124,15 @@ const ICON_MAP: Record<string, LucideIcon> = {
   star:          Star,
   trophy:        Trophy,
   crown:         Crown,
+  zap:           Zap,
+  shield:        Shield,
+  compass:       Compass,
+  award:         Award,
+  // hyphenated variants (used in seed SQL)
+  "book-open":     BookOpen,
+  "map-pin":       MapPin,
+  "check-circle":  CheckCircle2,
+  "calendar-days": CalendarDays,
 };
 
 // ─────────────────────────────────────────────
@@ -210,6 +228,22 @@ export default function ProfilePage() {
   const [saveState,       setSaveState]       = useState<SaveState>("idle");
   const [saveError,       setSaveError]       = useState<string | null>(null);
 
+  // Equipped badge
+  const [equippingBadgeId, setEquippingBadgeId] = useState<number | null>(null);
+
+  async function handleEquipBadge(achievementId: number) {
+    if (!profile) return;
+    // Tapping an already-equipped badge un-equips it
+    const next = profile.equipped_badge_id === achievementId ? null : achievementId;
+    setEquippingBadgeId(achievementId);
+    setProfile((p) => p ? { ...p, equipped_badge_id: next } : p);
+    await supabase
+      .from("profiles")
+      .update({ equipped_badge_id: next })
+      .eq("id", profile.id);
+    setEquippingBadgeId(null);
+  }
+
   // Avatar upload
   const avatarInputRef                        = useRef<HTMLInputElement>(null);
   const [avatarPreview,   setAvatarPreview]   = useState<string | null>(null);
@@ -226,19 +260,24 @@ export default function ProfilePage() {
       const [
         { data: prof },
         { count },
+        { count: groupCount },
         { data: allAchievements },
         { data: userAchievements },
         { data: activityData },
       ] = await Promise.all([
         supabase
           .from("profiles")
-          .select("id, full_name, username, avatar_url, points, streak_days, age, school_id, major_id, education_level, semester_term")
+          .select("id, full_name, username, avatar_url, points, streak_days, age, school_id, major_id, education_level, semester_term, equipped_badge_id")
           .eq("id", user.id)
           .single(),
         supabase
           .from("active_sessions")
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id),
+        supabase
+          .from("study_groups")
+          .select("id", { count: "exact", head: true })
+          .eq("host_id", user.id),
         supabase
           .from("achievements")
           .select("*")
@@ -271,8 +310,9 @@ export default function ProfilePage() {
           age:            prof.age            ?? null,
           school_id:      prof.school_id      ?? null,
           major_id:       prof.major_id       ?? null,
-          education_level: prof.education_level ?? null,
-          semester_term:  prof.semester_term  ?? null,
+          education_level:   prof.education_level   ?? null,
+          semester_term:     prof.semester_term     ?? null,
+          equipped_badge_id: prof.equipped_badge_id ?? null,
         };
         setProfile(loaded);
         prevPointsRef.current = pts;
@@ -304,6 +344,8 @@ export default function ProfilePage() {
               progress = `${pts.toLocaleString()} / ${a.unlock_threshold.toLocaleString()} pts`;
             else if (a.unlock_type === "checkins")
               progress = `${count ?? 0} / ${a.unlock_threshold} check-ins`;
+            else if (a.unlock_type === "groups")
+              progress = `${groupCount ?? 0} / ${a.unlock_threshold} group${a.unlock_threshold !== 1 ? "s" : ""} created`;
           }
 
           return {
@@ -627,6 +669,18 @@ export default function ProfilePage() {
                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${level.badgeClass}`}>
                   {level.emoji} {level.name}
                 </span>
+                {profile.equipped_badge_id && (() => {
+                  const b = achievements.find((a) => a.id === profile.equipped_badge_id);
+                  if (!b) return null;
+                  const rCfg = RARITY_CONFIG[b.rarity];
+                  const Icon = b.icon;
+                  return (
+                    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${rCfg.bg} ${rCfg.iconClass}`}>
+                      <Icon size={11} />
+                      {b.name}
+                    </span>
+                  );
+                })()}
                 <span className="text-xs text-ink-faint">
                   Member since {joinedLabel}
                 </span>
@@ -910,7 +964,26 @@ export default function ProfilePage() {
                   </div>
 
                   {achievement.unlocked && (
-                    <CheckCircle2 size={16} className="shrink-0 text-success mt-0.5" />
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <CheckCircle2 size={16} className="text-success" />
+                      {profile.equipped_badge_id === achievement.id ? (
+                        <button
+                          onClick={() => handleEquipBadge(achievement.id)}
+                          disabled={equippingBadgeId === achievement.id}
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gold text-ink disabled:opacity-50"
+                        >
+                          Equipped
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleEquipBadge(achievement.id)}
+                          disabled={equippingBadgeId === achievement.id}
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-border text-ink-muted hover:bg-canvas hover:text-ink transition-colors disabled:opacity-50"
+                        >
+                          {equippingBadgeId === achievement.id ? "…" : "Equip"}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </motion.div>
               );

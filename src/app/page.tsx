@@ -915,8 +915,9 @@ export default function DashboardPage() {
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, userId, POINT_ACTIONS.CHECK_IN);
-    // Early Bird: also fire if checking in before 9 AM local time
-    if (new Date().getHours() < 9) {
+    // Early Bird: fire if checking in within the first hour of opening (9–10 AM)
+    const checkInHour = new Date().getHours();
+    if (checkInHour >= 9 && checkInHour < 10) {
       trackMissionProgress(supabase, userId, POINT_ACTIONS.CHECK_IN_EARLY);
     }
 
