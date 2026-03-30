@@ -269,10 +269,43 @@ function OverviewTab() {
   const supabase = createClient();
   const [kpi, setKpi] = useState({ users: 0, checkins: 0, groups: 0, redemptions: 0 });
   const [ready, setReady] = useState(false);
+  const [aiInsight, setAiInsight] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const generateInsight = async (snapshot: Record<string, unknown>) => {
+    setAiInsight("");
+    setAiLoading(true);
+    try {
+      const res = await fetch("/api/admin-insight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ snapshot }),
+      });
+      if (!res.ok || !res.body) return;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.startsWith("0:")) {
+            try { setAiInsight((p) => p + JSON.parse(line.slice(2))); } catch { /* skip */ }
+          }
+        }
+      }
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   useEffect(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     Promise.all([
       supabase.from("profiles").select("id", { count: "exact", head: true }),
       supabase.from("active_sessions")
@@ -284,9 +317,26 @@ function OverviewTab() {
       supabase.from("user_redemptions")
         .select("id", { count: "exact", head: true })
         .eq("status", "pending"),
-    ]).then(([u, c, g, r]) => {
-      setKpi({ users: u.count ?? 0, checkins: c.count ?? 0, groups: g.count ?? 0, redemptions: r.count ?? 0 });
+      supabase.from("active_sessions")
+        .select("id", { count: "exact", head: true })
+        .gte("check_in_time", sevenDaysAgo.toISOString()),
+    ]).then(([u, c, g, r, w]) => {
+      const kpiData = {
+        users: u.count ?? 0,
+        checkins: c.count ?? 0,
+        groups: g.count ?? 0,
+        redemptions: r.count ?? 0,
+      };
+      setKpi(kpiData);
       setReady(true);
+      generateInsight({
+        checkinsToday:       kpiData.checkins,
+        weeklyTotal:         w.count ?? 0,
+        totalUsers:          kpiData.users,
+        activeGroups:        kpiData.groups,
+        groupsOpen:          kpiData.groups,
+        pendingRedemptions:  kpiData.redemptions,
+      });
     });
   }, []);
 
@@ -392,13 +442,19 @@ function OverviewTab() {
         <div className="shrink-0 w-10 h-10 rounded-xl bg-gold/20 flex items-center justify-center">
           <Lightbulb size={18} className="text-gold fill-gold/20" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-ink">AI Trend Alert</p>
-          <p className="text-sm text-ink-muted mt-0.5 leading-relaxed">
-            Libraries reach <span className="font-semibold text-ink">90% capacity by 2 PM on Tuesdays</span>.
-            Consider redirecting students to <span className="font-semibold text-ink">Study Corner A</span> or{" "}
-            <span className="font-semibold text-ink">PC Lab 2</span> during peak hours.
-          </p>
+          {aiLoading && !aiInsight ? (
+            <div className="mt-1.5 space-y-1.5">
+              <div className="h-3 bg-gold/20 rounded animate-pulse w-full" />
+              <div className="h-3 bg-gold/20 rounded animate-pulse w-4/5" />
+            </div>
+          ) : (
+            <p className="text-sm text-ink-muted mt-0.5 leading-relaxed">
+              {aiInsight}
+              {aiLoading && <span className="inline-block w-1 h-3.5 bg-gold/60 ml-0.5 animate-pulse rounded-sm align-middle" />}
+            </p>
+          )}
         </div>
       </div>
     </div>

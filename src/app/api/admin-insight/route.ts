@@ -34,15 +34,17 @@ export async function POST(req: Request) {
       });
     }
 
-    const userMessage =
-      `Analyse this campus usage snapshot and give me an admin insight:\n` +
-      `• Check-ins today: ${snapshot.checkinsToday}\n` +
-      `• Busiest spot: ${snapshot.busiestSpot} at ${snapshot.busiestCapacityPct}% capacity\n` +
-      `• Average session length: ${snapshot.avgStudyMins} min\n` +
-      `• Active study groups: ${snapshot.activeGroups} (${snapshot.groupsOpen} open to join)\n` +
-      `• Peak hour today: ${snapshot.peakHour} with ${snapshot.peakCount} check-ins (${snapshot.peakDensity}% of daily peak)\n` +
-      `• Top category this week: ${snapshot.topCategory} (${snapshot.topCategoryPct}%)\n` +
-      `• Total sessions last 7 days: ${snapshot.weeklyTotal}`;
+    const lines: string[] = ["Analyse this campus usage snapshot and give me an admin insight:"];
+    if (snapshot.checkinsToday  != null) lines.push(`• Check-ins today: ${snapshot.checkinsToday}`);
+    if (snapshot.weeklyTotal    != null) lines.push(`• Total sessions last 7 days: ${snapshot.weeklyTotal}`);
+    if (snapshot.totalUsers     != null) lines.push(`• Total registered users: ${snapshot.totalUsers}`);
+    if (snapshot.activeGroups   != null) lines.push(`• Active study groups: ${snapshot.activeGroups} (${snapshot.groupsOpen ?? snapshot.activeGroups} open to join)`);
+    if (snapshot.pendingRedemptions != null) lines.push(`• Pending reward redemptions: ${snapshot.pendingRedemptions}`);
+    if (snapshot.busiestSpot    != null) lines.push(`• Busiest spot: ${snapshot.busiestSpot} at ${snapshot.busiestCapacityPct}% capacity`);
+    if (snapshot.avgStudyMins   != null) lines.push(`• Average session length: ${snapshot.avgStudyMins} min`);
+    if (snapshot.peakHour       != null) lines.push(`• Peak hour today: ${snapshot.peakHour} with ${snapshot.peakCount} check-ins (${snapshot.peakDensity}% of daily peak)`);
+    if (snapshot.topCategory    != null) lines.push(`• Top category this week: ${snapshot.topCategory} (${snapshot.topCategoryPct}%)`);
+    const userMessage = lines.join("\n");
 
     const result = streamText({
       model: openai("gpt-4o-mini"),
