@@ -294,7 +294,7 @@ const MOOD_CONFIG: Record<SuggestionMood, {
 // ─────────────────────────────────────────────
 
 function AISuggestionCard({ dayEvents }: { dayEvents: CalendarEvent[] }) {
-  const { messages, sendMessage, status } = useChat({ api: "/api/chat" });
+  const { messages, sendMessage, status } = useChat();
   const sentRef = useRef(false);
 
   useEffect(() => {
