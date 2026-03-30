@@ -291,7 +291,47 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
     load();
   }, [locationId, supabase]);
 
-  // ── End solo session ──────────────────────────────────────
+  // ── Real-time subscription to active_sessions changes ──────────
+  useEffect(() => {
+    const channel = supabase
+      .channel(`active_sessions:location_id=eq.${locationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "active_sessions",
+          filter: `location_id=eq.${locationId}`,
+        },
+        async () => {
+          // Refetch active sessions to recalculate occupancy
+          const { data: sessions } = await supabase
+            .from("active_sessions")
+            .select("seats_taken, needs_power")
+            .eq("location_id", locationId)
+            .eq("is_active", true);
+
+          if (sessions) {
+            const occupied = sessions.reduce(
+              (sum: number, s: any) => sum + (s.seats_taken ?? 1),
+              0
+            );
+            setSeatsOccupied(occupied);
+
+            const powerUsed = sessions.reduce((sum: number, s: any) => {
+              const seatsForSession = s.seats_taken ?? 1;
+              return sum + (s.needs_power ? seatsForSession * 2 : 0);
+            }, 0);
+            setPowerOutletsUsed(powerUsed);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [locationId, supabase]);
   const handleEndSession = useCallback(async () => {
     if (!existingSession) return;
     setEndingSession(true);
