@@ -281,22 +281,23 @@ function OverviewTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ snapshot }),
       });
-      if (!res.ok || !res.body) return;
+      if (!res.ok || !res.body) {
+        setAiInsight("Unable to generate insight at this time.");
+        return;
+      }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
+        for (const line of decoder.decode(value).split("\n")) {
           if (line.startsWith("0:")) {
-            try { setAiInsight((p) => p + JSON.parse(line.slice(2))); } catch { /* skip */ }
+            try { setAiInsight((p) => p + JSON.parse(line.slice(2))); } catch { /* ignore */ }
           }
         }
       }
+    } catch {
+      setAiInsight("Unable to generate insight at this time.");
     } finally {
       setAiLoading(false);
     }
@@ -329,15 +330,15 @@ function OverviewTab() {
       };
       setKpi(kpiData);
       setReady(true);
-      generateInsight({
-        checkinsToday:       kpiData.checkins,
-        weeklyTotal:         w.count ?? 0,
-        totalUsers:          kpiData.users,
-        activeGroups:        kpiData.groups,
-        groupsOpen:          kpiData.groups,
-        pendingRedemptions:  kpiData.redemptions,
+      void generateInsight({
+        checkinsToday:      kpiData.checkins,
+        weeklyTotal:        w.count ?? 0,
+        totalUsers:         kpiData.users,
+        activeGroups:       kpiData.groups,
+        groupsOpen:         kpiData.groups,
+        pendingRedemptions: kpiData.redemptions,
       });
-    });
+    }).catch(console.error);
   }, []);
 
   const cards = [
