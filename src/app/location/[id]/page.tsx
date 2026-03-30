@@ -782,6 +782,35 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                   </div>
                 )}
 
+                {/* Availability Summary */}
+                {(location.total_seats || location.power_outlets) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {location.total_seats && (
+                      <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm">
+                        <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2">Study Seats</p>
+                        <p className="text-xl font-bold text-ink">
+                          {location.total_seats - seatsOccupied}
+                          <span className="text-xs text-ink-muted font-normal">/{location.total_seats}</span>
+                        </p>
+                        <p className="text-[10px] text-ink-muted mt-1">left available</p>
+                      </div>
+                    )}
+                    {location.power_outlets && location.power_outlets > 0 && (
+                      <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm">
+                        <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2 flex items-center gap-1">
+                          <Zap size={10} />
+                          Power Outlets
+                        </p>
+                        <p className="text-xl font-bold text-ink">
+                          {location.power_outlets - powerOutletsUsed}
+                          <span className="text-xs text-ink-muted font-normal">/{location.power_outlets}</span>
+                        </p>
+                        <p className="text-[10px] text-ink-muted mt-1">left available</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <p className="text-xs font-semibold text-ink-muted mb-3 flex items-center gap-1.5">
                     <Coins size={12} className="text-gold" />
