@@ -25,8 +25,11 @@ import {
   Settings,
   CheckCircle2,
   XCircle,
+  Camera,
+  Loader2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { uploadAvatar } from "./actions";
 
 // ─────────────────────────────────────────────
 // Types
@@ -206,6 +209,11 @@ export default function ProfilePage() {
   const [majors,          setMajors]          = useState<Major[]>([]);
   const [saveState,       setSaveState]       = useState<SaveState>("idle");
   const [saveError,       setSaveError]       = useState<string | null>(null);
+
+  // Avatar upload
+  const avatarInputRef                        = useRef<HTMLInputElement>(null);
+  const [avatarPreview,   setAvatarPreview]   = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   const setEdit = <K extends keyof EditForm>(k: K, v: EditForm[K]) =>
     setEditForm((f) => ({ ...f, [k]: v }));
@@ -437,6 +445,34 @@ export default function ProfilePage() {
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id, supabase]);
 
+  // ── Avatar upload ──
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1 * 1024 * 1024) {
+      setSaveError("File must be under 1 MB"); setSaveState("error"); return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setSaveError("Only JPEG, PNG, or WebP allowed"); setSaveState("error"); return;
+    }
+
+    setAvatarPreview(URL.createObjectURL(file));
+    setAvatarUploading(true);
+
+    const formData = new FormData();
+    formData.append("avatar", file);
+    const { url, error } = await uploadAvatar(formData);
+
+    setAvatarUploading(false);
+    if (error || !url) {
+      setAvatarPreview(null);
+      setSaveError(error ?? "Upload failed"); setSaveState("error"); return;
+    }
+    setProfile((prev) => prev ? { ...prev, avatar_url: url } : prev);
+    setAvatarPreview(null);
+  }
+
   // ── Save profile edits ──
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -530,18 +566,45 @@ export default function ProfilePage() {
           <div className="pointer-events-none absolute -bottom-4 right-6 w-28 h-28 rounded-full bg-brand-light opacity-30 blur-xl" />
 
           <div className="relative flex flex-col sm:flex-row sm:items-start gap-4">
-            <div className="shrink-0 w-20 h-20 rounded-2xl bg-brand-light flex items-center justify-center text-3xl font-extrabold text-ink shadow-sm select-none">
-              {profile.avatar_url ? (
+            {/* Hidden file input */}
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
+
+            {/* Clickable avatar */}
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              className="relative shrink-0 w-20 h-20 rounded-2xl bg-brand-light flex items-center justify-center text-3xl font-extrabold text-ink shadow-sm select-none group overflow-hidden"
+              aria-label="Upload profile picture"
+            >
+              {(avatarPreview ?? profile.avatar_url) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={profile.avatar_url}
+                  src={avatarPreview ?? profile.avatar_url!}
                   alt={profile.full_name}
                   className="w-full h-full rounded-2xl object-cover"
                 />
               ) : (
                 profile.full_name.charAt(0)
               )}
-            </div>
+              {/* Camera overlay on hover */}
+              {!avatarUploading && (
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Camera size={20} className="text-white" />
+                </div>
+              )}
+              {/* Spinner while uploading */}
+              {avatarUploading && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <Loader2 size={20} className="text-white animate-spin" />
+                </div>
+              )}
+            </button>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
