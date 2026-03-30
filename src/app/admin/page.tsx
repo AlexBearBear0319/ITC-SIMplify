@@ -246,28 +246,18 @@ function SkeletonRows({ n = 4 }: { n?: number }) {
   );
 }
 
-// ── Mock chart data (wire to RPCs when DB functions are ready) ──────────────
-
-const PEAK_HOURS = [
-  { hour: "8AM", d: 15 }, { hour: "9AM", d: 38 }, { hour: "10AM", d: 62 },
-  { hour: "11AM", d: 80 }, { hour: "12PM", d: 92 }, { hour: "1PM", d: 75 },
-  { hour: "2PM", d: 95 }, { hour: "3PM", d: 86 }, { hour: "4PM", d: 70 },
-  { hour: "5PM", d: 52 }, { hour: "6PM", d: 38 }, { hour: "7PM", d: 22 },
-  { hour: "8PM", d: 10 },
-];
-
-const CAT_SLICES = [
-  { name: "IT Labs",      value: 45, color: "#B3D2D5" },
-  { name: "Libraries",    value: 30, color: "#E5989B" },
-  { name: "Cafeterias",   value: 15, color: "#E2C044" },
-  { name: "Study Rooms",  value: 10, color: "#7BC99A" },
-];
-
 // ── Overview Tab ────────────────────────────────────────────────────────────
+
+const CAT_COLORS  = ["#B3D2D5", "#E5989B", "#E2C044", "#7BC99A", "#A89FD5", "#F4A261"];
+const OPEN_HOURS  = [9,10,11,12,13,14,15,16,17,18,19,20,21];
+function hourLabel(h: number) { return h === 12 ? "12PM" : h < 12 ? `${h}AM` : `${h-12}PM`; }
 
 function OverviewTab() {
   const supabase = createClient();
   const [kpi, setKpi] = useState({ users: 0, checkins: 0, groups: 0, redemptions: 0 });
+  const [weeklyTotal, setWeeklyTotal] = useState(0);
+  const [catSlices, setCatSlices] = useState<{ name: string; value: number; color: string }[]>([]);
+  const [peakHours, setPeakHours] = useState<{ hour: string; density: number }[]>(OPEN_HOURS.map(h => ({ hour: hourLabel(h), density: 0 })));
   const [ready, setReady] = useState(false);
   const [aiInsight, setAiInsight] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -290,11 +280,7 @@ function OverviewTab() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        for (const line of decoder.decode(value).split("\n")) {
-          if (line.startsWith("0:")) {
-            try { setAiInsight((p) => p + JSON.parse(line.slice(2))); } catch { /* ignore */ }
-          }
-        }
+        setAiInsight((p) => p + decoder.decode(value, { stream: true }));
       }
     } catch {
       setAiInsight("Unable to generate insight at this time.");
@@ -321,22 +307,64 @@ function OverviewTab() {
       supabase.from("active_sessions")
         .select("id", { count: "exact", head: true })
         .gte("check_in_time", sevenDaysAgo.toISOString()),
-    ]).then(([u, c, g, r, w]) => {
+      supabase.from("active_sessions")
+        .select("locations(category)")
+        .gte("check_in_time", sevenDaysAgo.toISOString()),
+      supabase.from("active_sessions")
+        .select("check_in_time")
+        .gte("check_in_time", today.toISOString())
+        .not("check_in_time", "is", null),
+    ]).then(([u, c, g, r, w, cat, hourly]) => {
       const kpiData = {
         users: u.count ?? 0,
         checkins: c.count ?? 0,
         groups: g.count ?? 0,
         redemptions: r.count ?? 0,
       };
+      const wTotal = w.count ?? 0;
+
+      // Build category slices from live data
+      const catMap: Record<string, number> = {};
+      for (const s of cat.data ?? []) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const category = (s as any).locations?.category ?? "Other";
+        catMap[category] = (catMap[category] ?? 0) + 1;
+      }
+      const catTotal = Object.values(catMap).reduce((a, b) => a + b, 0);
+      const slices = Object.entries(catMap)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count], i) => ({
+          name,
+          value: catTotal > 0 ? Math.round((count / catTotal) * 100) : 0,
+          color: CAT_COLORS[i % CAT_COLORS.length],
+        }));
+
+      // Build peak hours from live data
+      const buckets: Record<number, number> = {};
+      for (const s of hourly.data ?? []) {
+        const h = new Date((s as { check_in_time: string }).check_in_time).getHours();
+        buckets[h] = (buckets[h] ?? 0) + 1;
+      }
+      const maxCount = Math.max(1, ...Object.values(buckets));
+      const liveHours = OPEN_HOURS.map(h => ({
+        hour:    hourLabel(h),
+        density: Math.round(((buckets[h] ?? 0) / maxCount) * 100),
+      }));
+
       setKpi(kpiData);
+      setWeeklyTotal(wTotal);
+      setCatSlices(slices);
+      setPeakHours(liveHours);
       setReady(true);
       void generateInsight({
         checkinsToday:      kpiData.checkins,
-        weeklyTotal:        w.count ?? 0,
+        weeklyTotal:        wTotal,
         totalUsers:         kpiData.users,
         activeGroups:       kpiData.groups,
         groupsOpen:         kpiData.groups,
         pendingRedemptions: kpiData.redemptions,
+        topCategory:        slices[0]?.name,
+        topCategoryPct:     slices[0]?.value,
       });
     }).catch(console.error);
   }, []);
@@ -371,10 +399,10 @@ function OverviewTab() {
         {/* Peak hours bar */}
         <div className="lg:col-span-3 bg-surface rounded-2xl border border-border shadow-sm p-5">
           <h3 className="text-sm font-bold text-ink mb-0.5">Peak Hours (Campus-wide)</h3>
-          <p className="text-xs text-ink-muted mb-4">Crowd density % by time of day · indicative</p>
+          <p className="text-xs text-ink-muted mb-4">Crowd density % by time of day · today</p>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={PEAK_HOURS} margin={{ top: 4, right: 4, left: -24, bottom: 0 }} barSize={12}>
+              <BarChart data={peakHours} margin={{ top: 4, right: 4, left: -24, bottom: 0 }} barSize={12}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E4E4E0" vertical={false} />
                 <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "#A8B8C8" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: "#A8B8C8" }} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} />
@@ -390,7 +418,7 @@ function OverviewTab() {
                   }
                   cursor={{ fill: "#EDF5F6", radius: 4 }}
                 />
-                <Bar dataKey="d" fill="#B3D2D5" radius={[4, 4, 0, 0]} isAnimationActive animationDuration={600} />
+                <Bar dataKey="density" fill="#B3D2D5" radius={[4, 4, 0, 0]} isAnimationActive animationDuration={600} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -403,8 +431,8 @@ function OverviewTab() {
           <div className="relative h-40">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={CAT_SLICES} cx="50%" cy="50%" innerRadius={46} outerRadius={66} paddingAngle={3} dataKey="value" strokeWidth={0} isAnimationActive animationDuration={600}>
-                  {CAT_SLICES.map((e, i) => <Cell key={i} fill={e.color} />)}
+                <Pie data={catSlices} cx="50%" cy="50%" innerRadius={46} outerRadius={66} paddingAngle={3} dataKey="value" strokeWidth={0} isAnimationActive animationDuration={600}>
+                  {catSlices.map((e, i) => <Cell key={i} fill={e.color} />)}
                 </Pie>
                 <Tooltip
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -421,20 +449,24 @@ function OverviewTab() {
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="text-center">
-                <p className="text-xl font-extrabold text-ink leading-none">337</p>
+                <p className="text-xl font-extrabold text-ink leading-none">{weeklyTotal}</p>
                 <p className="text-[10px] text-ink-muted mt-0.5">7-day total</p>
               </div>
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
-            {CAT_SLICES.map((c) => (
-              <div key={c.name} className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
-                <span className="text-[11px] text-ink-muted truncate flex-1">{c.name}</span>
-                <span className="text-[11px] font-semibold text-ink">{c.value}%</span>
-              </div>
-            ))}
-          </div>
+          {catSlices.length > 0 ? (
+            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {catSlices.map((c) => (
+                <div key={c.name} className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
+                  <span className="text-[11px] text-ink-muted truncate flex-1">{c.name}</span>
+                  <span className="text-[11px] font-semibold text-ink">{c.value}%</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-[11px] text-ink-faint text-center">No check-in data for the past 7 days</p>
+          )}
         </div>
       </div>
 

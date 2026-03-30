@@ -293,11 +293,7 @@ export default function StatisticsPage() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        for (const line of decoder.decode(value).split("\n")) {
-          if (line.startsWith("0:")) {
-            try { setAiInsight((prev) => prev + JSON.parse(line.slice(2))); } catch { /* ignore */ }
-          }
-        }
+        setAiInsight((prev) => prev + decoder.decode(value, { stream: true }));
       }
     } finally {
       setAiLoading(false);

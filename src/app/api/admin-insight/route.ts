@@ -53,7 +53,7 @@ export async function POST(req: Request) {
       maxOutputTokens: 150,
     });
 
-    return result.toUIMessageStreamResponse();
+    return result.toTextStreamResponse();
   } catch (err) {
     console.error("[admin-insight/route] error:", err);
     return new Response(
