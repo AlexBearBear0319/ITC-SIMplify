@@ -303,7 +303,8 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
           table: "active_sessions",
           filter: `location_id=eq.${locationId}`,
         },
-        async () => {
+        async (payload) => {
+          console.log("[Realtime Update] Active sessions changed:", payload);
           // Refetch active sessions to recalculate occupancy
           const { data: sessions } = await supabase
             .from("active_sessions")
@@ -316,17 +317,21 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               (sum: number, s: any) => sum + (s.seats_taken ?? 1),
               0
             );
+            console.log("[Realtime Update] New seats occupied:", occupied);
             setSeatsOccupied(occupied);
 
             const powerUsed = sessions.reduce((sum: number, s: any) => {
               const seatsForSession = s.seats_taken ?? 1;
               return sum + (s.needs_power ? seatsForSession * 2 : 0);
             }, 0);
+            console.log("[Realtime Update] New power outlets used:", powerUsed);
             setPowerOutletsUsed(powerUsed);
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("[Realtime] Subscription status:", status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -622,6 +627,35 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
           </div>
         </motion.div>
 
+        {/* ── Availability Summary (Always Visible) ── */}
+        {(location.total_seats || location.power_outlets) && (
+          <motion.div variants={cardVariants} className="grid grid-cols-2 gap-3 px-4 md:px-6 mb-4">
+            {location.total_seats && (
+              <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm">
+                <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2">Study Seats</p>
+                <p className="text-xl font-bold text-ink">
+                  {location.total_seats - seatsOccupied}
+                  <span className="text-xs text-ink-muted font-normal">/{location.total_seats}</span>
+                </p>
+                <p className="text-[10px] text-ink-muted mt-1">left available</p>
+              </div>
+            )}
+            {location.power_outlets && location.power_outlets > 0 && (
+              <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm">
+                <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <Zap size={10} />
+                  Power Outlets
+                </p>
+                <p className="text-xl font-bold text-ink">
+                  {location.power_outlets - powerOutletsUsed}
+                  <span className="text-xs text-ink-muted font-normal">/{location.power_outlets}</span>
+                </p>
+                <p className="text-[10px] text-ink-muted mt-1">left available</p>
+              </div>
+            )}
+          </motion.div>
+        )}
+
         {/* ── Sticky Action Bar ── */}
         <div className="sticky top-16 z-10 bg-surface/80 backdrop-blur-md border-b border-border">
           <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 flex items-center gap-2">
@@ -765,9 +799,14 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                           style={{ width: `${Math.min(100, Math.round((seatsOccupied / location.total_seats) * 100))}%` }}
                         />
                       </div>
-                      <div className="flex justify-between text-[10px] text-ink-faint mt-1.5">
-                        <span>{seatsOccupied} seat{seatsOccupied !== 1 ? "s" : ""} occupied</span>
+                      <div className="flex justify-between text-[10px] text-ink-faint mt-1.5 mb-2">
+                        <span>{seatsOccupied} occupied</span>
                         <span>{location.total_seats} total</span>
+                      </div>
+                      <div className="px-3 py-2 rounded-lg bg-canvas border border-border">
+                        <p className="text-xs font-semibold text-ink">
+                          Seats left: <span className="text-success font-bold">{location.total_seats - seatsOccupied}/{location.total_seats}</span>
+                        </p>
                       </div>
                     </>
                   ) : (
@@ -815,9 +854,14 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                         style={{ width: `${Math.min(100, Math.round((powerOutletsUsed / location.power_outlets) * 100))}%` }}
                       />
                     </div>
-                    <div className="flex justify-between text-[10px] text-ink-faint mt-1.5">
-                      <span>{powerOutletsUsed} outlet{powerOutletsUsed !== 1 ? "s" : ""} in use</span>
+                    <div className="flex justify-between text-[10px] text-ink-faint mt-1.5 mb-2">
+                      <span>{powerOutletsUsed} in use</span>
                       <span>{location.power_outlets} total</span>
+                    </div>
+                    <div className="px-3 py-2 rounded-lg bg-canvas border border-border">
+                      <p className="text-xs font-semibold text-ink">
+                        Power outlet left: <span className="text-gold font-bold">{location.power_outlets - powerOutletsUsed}/{location.power_outlets}</span>
+                      </p>
                     </div>
                   </div>
                 )}
