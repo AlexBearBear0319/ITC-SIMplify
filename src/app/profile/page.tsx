@@ -581,6 +581,36 @@ export default function ProfilePage() {
           </div>
         </motion.div>
 
+        {/* ── Stats grid ── */}
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="grid grid-cols-3 gap-3"
+        >
+          {(
+            [
+              { label: "Total Points", value: profile.points,         suffix: "",      icon: Coins,  iconClass: "text-gold",       bg: "bg-gold-light"  },
+              { label: "Study Streak", value: profile.streak_days,    suffix: " days", icon: Flame,  iconClass: "text-alert",      bg: "bg-alert-light" },
+              { label: "Check-ins",    value: profile.total_checkins, suffix: "",      icon: MapPin, iconClass: "text-brand-dark", bg: "bg-brand-faint" },
+            ] as const
+          ).map(({ label, value, suffix, icon: Icon, iconClass, bg }) => (
+            <motion.div
+              key={label}
+              variants={cardVariants}
+              className="bg-surface rounded-2xl p-4 shadow-sm border border-border text-center"
+            >
+              <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center mx-auto mb-2`}>
+                <Icon size={16} className={iconClass} />
+              </div>
+              <p className="text-2xl font-extrabold text-ink leading-none">
+                <CountUp to={value} suffix={suffix} />
+              </p>
+              <p className="text-xs text-ink-muted mt-1 leading-tight">{label}</p>
+            </motion.div>
+          ))}
+        </motion.div>
+
         {/* ── Edit Profile ── */}
         <section
           id="edit-profile"
@@ -758,35 +788,7 @@ export default function ProfilePage() {
           </form>
         </section>
 
-        {/* ── Stats grid ── */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="grid grid-cols-3 gap-3"
-        >
-          {(
-            [
-              { label: "Total Points", value: profile.points,         suffix: "",      icon: Coins,  iconClass: "text-gold",       bg: "bg-gold-light"  },
-              { label: "Study Streak", value: profile.streak_days,    suffix: " days", icon: Flame,  iconClass: "text-alert",      bg: "bg-alert-light" },
-              { label: "Check-ins",    value: profile.total_checkins, suffix: "",      icon: MapPin, iconClass: "text-brand-dark", bg: "bg-brand-faint" },
-            ] as const
-          ).map(({ label, value, suffix, icon: Icon, iconClass, bg }) => (
-            <motion.div
-              key={label}
-              variants={cardVariants}
-              className="bg-surface rounded-2xl p-4 shadow-sm border border-border text-center"
-            >
-              <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center mx-auto mb-2`}>
-                <Icon size={16} className={iconClass} />
-              </div>
-              <p className="text-2xl font-extrabold text-ink leading-none">
-                <CountUp to={value} suffix={suffix} />
-              </p>
-              <p className="text-xs text-ink-muted mt-1 leading-tight">{label}</p>
-            </motion.div>
-          ))}
-        </motion.div>
+
 
         {/* ── IT Club Badges ── */}
         <section>
