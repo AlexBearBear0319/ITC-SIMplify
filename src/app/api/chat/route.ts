@@ -27,19 +27,41 @@ export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
 
-    // Fetch live location data from Supabase before calling OpenAI
     const supabase = await createClient();
-    const { data: locations, error: dbError } = await supabase
-      .from("locations")
-      .select("name, category, current_status, location_text, opening_time, total_seats, power_outlets, description");
+
+    // Fetch locations + active session seat tallies in parallel
+    const [{ data: locations, error: dbError }, { data: sessions }] = await Promise.all([
+      supabase
+        .from("locations")
+        .select("id, name, category, current_status, location_text, opening_time, total_seats, power_outlets, description"),
+      supabase
+        .from("active_sessions")
+        .select("location_id, seats_taken")
+        .eq("is_active", true),
+    ]);
 
     if (dbError) {
       console.error("[chat/route] Supabase error:", dbError.message);
     }
 
+    // Compute occupied seats per location
+    const occupiedMap: Record<number, number> = {};
+    (sessions ?? []).forEach((s: { location_id: number; seats_taken: number | null }) => {
+      occupiedMap[s.location_id] = (occupiedMap[s.location_id] ?? 0) + (s.seats_taken ?? 1);
+    });
+
+    // Enrich locations with seats_available
+    const enriched = (locations ?? []).map((loc) => ({
+      ...loc,
+      seats_occupied: occupiedMap[loc.id] ?? 0,
+      seats_available: loc.total_seats != null
+        ? Math.max(0, loc.total_seats - (occupiedMap[loc.id] ?? 0))
+        : null,
+    }));
+
     const campusData = dbError
       ? "Campus data temporarily unavailable — give general advice based on common study spot types."
-      : JSON.stringify(locations, null, 0);
+      : JSON.stringify(enriched, null, 0);
 
     const system = `${SYSTEM_PROMPT_BASE}
 

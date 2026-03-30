@@ -3,7 +3,7 @@
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Minus, Plus, Users, Coins, ChevronLeft } from "lucide-react";
+import { X, Minus, Plus, Users, Coins, ChevronLeft, Zap } from "lucide-react";
 
 // ─────────────────────────────────────────────
 // Types
@@ -12,6 +12,7 @@ import { X, Minus, Plus, Users, Coins, ChevronLeft } from "lucide-react";
 export type StudyBuddyData = {
   topic: string;
   max_members: number;
+  needs_power: boolean;
 };
 
 type Props = {
@@ -29,12 +30,14 @@ type Props = {
 export default function StudyBuddyModal({ open, locationName, onOpenChange, onSubmit, onBack }: Props) {
   const [topic,      setTopic]      = useState("");
   const [maxMembers, setMaxMembers] = useState(4);
+  const [needsPower, setNeedsPower] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [success,    setSuccess]    = useState(false);
 
   const reset = () => {
     setTopic("");
     setMaxMembers(4);
+    setNeedsPower(true);
     setSuccess(false);
   };
 
@@ -56,7 +59,7 @@ export default function StudyBuddyModal({ open, locationName, onOpenChange, onSu
   const handleSubmit = async () => {
     if (submitting) return;
     setSubmitting(true);
-    await onSubmit({ topic, max_members: maxMembers });
+    await onSubmit({ topic, max_members: maxMembers, needs_power: needsPower });
     setSuccess(true);
     setSubmitting(false);
     setTimeout(() => handleOpenChange(false), 1500);
@@ -165,6 +168,29 @@ export default function StudyBuddyModal({ open, locationName, onOpenChange, onSu
                       </button>
                       <span className="text-xs text-ink-faint">people max</span>
                     </div>
+                  </div>
+
+                  {/* Power seat toggle */}
+                  <div className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-canvas">
+                    <div className="flex items-center gap-2">
+                      <Zap size={15} className={needsPower ? "text-gold" : "text-ink-faint"} />
+                      <div>
+                        <p className="text-xs font-semibold text-ink leading-tight">Power seats needed?</p>
+                        <p className="text-[10px] text-ink-faint mt-0.5">
+                          {needsPower
+                            ? `~${maxMembers * 2} outlet${maxMembers * 2 !== 1 ? "s" : ""} reserved`
+                            : "No outlets reserved"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNeedsPower((v) => !v)}
+                      className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${needsPower ? "bg-gold" : "bg-border"}`}
+                      aria-pressed={needsPower}
+                    >
+                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-surface shadow transition-transform duration-200 ${needsPower ? "translate-x-5" : "translate-x-0.5"}`} />
+                    </button>
                   </div>
                 </div>
 

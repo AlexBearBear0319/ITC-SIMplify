@@ -263,7 +263,7 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                     <button
                       type="button"
                       onClick={() => setNeedsPower((v) => !v)}
-                      className={`relative w-10 h-5.5 rounded-full transition-colors duration-200 ${needsPower ? "bg-gold" : "bg-border"}`}
+                      className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${needsPower ? "bg-gold" : "bg-border"}`}
                       aria-pressed={needsPower}
                     >
                       <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-surface shadow transition-transform duration-200 ${needsPower ? "translate-x-5" : "translate-x-0.5"}`} />

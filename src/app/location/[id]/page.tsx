@@ -182,6 +182,14 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [existingGroupId,  setExistingGroupId]  = useState<number | null>(null);   // study group
   const [alreadyEarnedToday, setAlreadyEarnedToday] = useState(false);
   const [endingSession,    setEndingSession]    = useState(false);
+  const [newBadgeName,     setNewBadgeName]     = useState<string | null>(null);
+
+  // Auto-dismiss badge toast after 3 s
+  useEffect(() => {
+    if (!newBadgeName) return;
+    const t = setTimeout(() => setNewBadgeName(null), 3000);
+    return () => clearTimeout(t);
+  }, [newBadgeName]);
 
   // ── Load everything ──────────────────────────────────────
   useEffect(() => {
@@ -318,6 +326,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       module:           data.topic || null,
       duration_minutes: 120,
       seats_taken:      1,
+      needs_power:      data.needs_power,
       is_active:        true,
     });
 
@@ -339,7 +348,17 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
 
       // Update streak + unlock achievements + log activity
       await supabase.rpc("update_streak", { p_user_id: currentUserId });
-      supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUserId });
+      const { data: gBefore } = await supabase
+        .from("user_achievements").select("achievement_id").eq("user_id", currentUserId);
+      const gBeforeIds = new Set((gBefore ?? []).map((r: { achievement_id: number }) => r.achievement_id));
+      await supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUserId });
+      const { data: gAfter } = await supabase
+        .from("user_achievements").select("achievement_id, achievements(name)").eq("user_id", currentUserId);
+      const gNewlyUnlocked = (gAfter ?? []).filter((r: { achievement_id: number }) => !gBeforeIds.has(r.achievement_id));
+      if (gNewlyUnlocked.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setNewBadgeName((gNewlyUnlocked[0] as any).achievements?.name ?? "Badge");
+      }
       supabase.from("activity_log").insert({
         user_id:     currentUserId,
         type:        "group",
@@ -385,6 +404,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       seats_taken:      1,
       activity:         "solo_study",
       duration_minutes: 60,
+      needs_power:      false,
       is_active:        true,
     });
 
@@ -408,8 +428,18 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       // Update streak (RPC handles consecutive-day logic and duplicate-day guard)
       await supabase.rpc("update_streak", { p_user_id: currentUserId });
 
-      // Auto-unlock any newly earned achievements (fire-and-forget)
-      supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUserId });
+      // Detect newly unlocked achievements
+      const { data: before } = await supabase
+        .from("user_achievements").select("achievement_id").eq("user_id", currentUserId);
+      const beforeIds = new Set((before ?? []).map((r: { achievement_id: number }) => r.achievement_id));
+      await supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUserId });
+      const { data: after } = await supabase
+        .from("user_achievements").select("achievement_id, achievements(name)").eq("user_id", currentUserId);
+      const newlyUnlocked = (after ?? []).filter((r: { achievement_id: number }) => !beforeIds.has(r.achievement_id));
+      if (newlyUnlocked.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setNewBadgeName((newlyUnlocked[0] as any).achievements?.name ?? "Badge");
+      }
 
       // Write activity log (fire-and-forget)
       supabase.from("activity_log").insert({
@@ -474,6 +504,21 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         onOpenChange={(open) => { if (!open) setStudyBuddyOpen(false); }}
         onSubmit={handleStudyBuddyCreate}
       />
+
+      {/* Badge unlock toast — auto-dismisses after 3 s */}
+      <AnimatePresence>
+        {newBadgeName && (
+          <motion.div
+            key="badge-toast"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-gold text-ink font-semibold text-sm rounded-full shadow-lg pointer-events-none whitespace-nowrap"
+          >
+            🏅 Badge unlocked: {newBadgeName}!
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Floating +pts animation */}
       <AnimatePresence>

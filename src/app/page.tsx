@@ -403,7 +403,9 @@ function LocationDrawer({
                 ) : (
                   <button
                     onClick={onCheckIn}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
+                    disabled={!!activeSession}
+                    title={activeSession ? "End your current session first" : undefined}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand disabled:active:scale-100"
                   >
                     <LogIn size={15} />
                     Scan QR to Enter
@@ -1028,6 +1030,7 @@ export default function DashboardPage() {
         module:           data.topic || null,
         duration_minutes: 120,
         seats_taken:      1,
+        needs_power:      data.needs_power,
         is_active:        true,
       })
       .select("id")
