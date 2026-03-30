@@ -171,11 +171,8 @@ export async function joinStudyGroup(
     return { data: null, error: 'You are already in this group.' }
   }
 
-  // Sync counter to actual count (self-healing for any prior drift)
-  await supabase
-    .from('study_groups')
-    .update({ current_members: (actualCount ?? 0) + 1 })
-    .eq('id', groupId)
+  // Sync counter via SECURITY DEFINER RPC so RLS doesn't block the update
+  await supabase.rpc('sync_group_member_count', { p_group_id: groupId })
 
   return { data: member as StudyGroupMember, error: null }
 }
@@ -213,19 +210,12 @@ export async function leaveStudyGroup(
     return { data: null, error: removeError.message }
   }
 
-  // Count remaining members to keep the counter accurate
-  const { count: remaining } = await supabase
-    .from('study_group_members')
-    .select('*', { count: 'exact', head: true })
-    .eq('group_id', groupId)
-
   if (group.host_id === userId) {
+    // Host leaving disbands the group — no need to count members
     await supabase.from('study_groups').update({ is_active: false, current_members: 0 }).eq('id', groupId)
   } else {
-    await supabase
-      .from('study_groups')
-      .update({ current_members: remaining ?? 0 })
-      .eq('id', groupId)
+    // Sync counter via SECURITY DEFINER RPC so RLS doesn't block the update
+    await supabase.rpc('sync_group_member_count', { p_group_id: groupId })
   }
 
   return { data: null, error: null }
