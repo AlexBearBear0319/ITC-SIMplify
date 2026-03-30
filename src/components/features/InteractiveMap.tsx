@@ -265,7 +265,7 @@ export default function InteractiveMap({
             {/* ── Status legend ── */}
             <div className="absolute bottom-3 left-3 z-10 flex items-center gap-3 bg-surface/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-border pointer-events-none">
               {[
-                { color: "bg-success", label: "Open"  },
+                { color: "bg-success", label: "Empty"  },
                 { color: "bg-gold",    label: "Busy"  },
                 { color: "bg-alert",   label: "Full"  },
               ].map(({ color, label }) => (

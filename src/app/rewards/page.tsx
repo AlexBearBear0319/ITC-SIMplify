@@ -21,6 +21,7 @@ import {
   Star,
   Zap,
   CheckCircle2,
+  Clock,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -47,6 +48,13 @@ type UserRewards = {
   username: string;
   avatar_url: string | null;
   points: number;  // DB column name is "points" (not "points_balance")
+};
+
+type UserRedemption = {
+  id: number;
+  redeemed_at: string;
+  status: string;
+  redemption_items: { name: string };
 };
 
 // ─────────────────────────────────────────────
@@ -412,6 +420,7 @@ export default function RewardsPage() {
   const [activeCategory, setActiveCategory] = useState<ItemCategory | "all">("all");
   const [selectedItem, setSelectedItem]     = useState<RedemptionItem | null>(null);
   const [dialogOpen, setDialogOpen]         = useState(false);
+  const [redemptions, setRedemptions]       = useState<UserRedemption[]>([]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -429,12 +438,19 @@ export default function RewardsPage() {
           .select("*")
           .eq("is_active", true)
           .order("cost"),
-      ]).then(([{ data: profile }, { data: itemsData }]) => {
+        supabase
+          .from("user_redemptions")
+          .select("id, redeemed_at, status, redemption_items(name)")
+          .eq("user_id", authUser.id)
+          .order("redeemed_at", { ascending: false })
+          .limit(10),
+      ]).then(([{ data: profile }, { data: itemsData }, { data: redemptionData }]) => {
         if (profile) {
           setUser(profile as UserRewards);
           setPoints((profile as UserRewards).points ?? 0);
         }
         if (itemsData) setItems(itemsData as RedemptionItem[]);
+        if (redemptionData) setRedemptions(redemptionData as unknown as UserRedemption[]);
         setLoading(false);
       });
     });
@@ -478,17 +494,25 @@ export default function RewardsPage() {
       return;
     }
 
-    // 2. Decrement stock on the item
-    await supabase
-      .from("redemption_items")
-      .update({ stock: selectedItem.stock - 1 })
-      .eq("id", selectedItem.id);
+    // 2. Atomically decrement stock (prevents negative stock under concurrent redemptions)
+    await supabase.rpc("decrement_item_stock", { p_item_id: selectedItem.id });
 
     // 3. Record the redemption for admin tracking
-    await supabase.from("user_redemptions").insert({
-      user_id: userId,
-      item_id: selectedItem.id,
-      status:  "pending",
+    const { data: newRedemption } = await supabase
+      .from("user_redemptions")
+      .insert({ user_id: userId, item_id: selectedItem.id, status: "pending" })
+      .select("id, redeemed_at, status, redemption_items(name)")
+      .single();
+
+    if (newRedemption) {
+      setRedemptions((prev) => [newRedemption as unknown as UserRedemption, ...prev]);
+    }
+
+    // 4. Write activity log (fire-and-forget)
+    supabase.from("activity_log").insert({
+      user_id:     userId,
+      type:        "redemption",
+      description: `Redeemed "${selectedItem.name}"`,
     });
   }
 
@@ -586,6 +610,56 @@ export default function RewardsPage() {
             <Gift size={32} className="mx-auto mb-3 opacity-30" />
             <p className="font-medium">No items in this category yet.</p>
           </div>
+        )}
+
+        {/* ── My Redemptions ── */}
+        {redemptions.length > 0 && (
+          <section>
+            <h2 className="text-base font-bold text-ink mb-3">My Redemptions</h2>
+            <div className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden">
+              {redemptions.map((r, idx) => {
+                const isPending   = r.status === "pending";
+                const isClaimed   = r.status === "claimed";
+                const isCancelled = r.status === "cancelled";
+                return (
+                  <div
+                    key={r.id}
+                    className={`flex items-center gap-3 px-4 py-3.5 ${idx < redemptions.length - 1 ? "border-b border-border" : ""}`}
+                  >
+                    <div className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center ${
+                      isClaimed ? "bg-success-light" : isCancelled ? "bg-alert-light" : "bg-gold-light"
+                    }`}>
+                      {isClaimed ? (
+                        <CheckCircle2 size={14} className="text-success" />
+                      ) : isCancelled ? (
+                        <X size={14} className="text-alert" />
+                      ) : (
+                        <Clock size={14} className="text-gold" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-ink truncate">
+                        {r.redemption_items?.name ?? "Unknown item"}
+                      </p>
+                      <p className="text-xs text-ink-faint">
+                        {new Date(r.redeemed_at).toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric" })}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                      isClaimed   ? "bg-success-light text-success" :
+                      isCancelled ? "bg-alert-light text-alert"     :
+                                    "bg-gold-light text-gold"
+                    }`}>
+                      {isClaimed ? "Claimed" : isCancelled ? "Cancelled" : "Pending"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-ink-faint mt-2 px-1">
+              Pending redemptions are fulfilled by an IT Club admin. Show this screen when collecting your reward.
+            </p>
+          </section>
         )}
       </div>
 

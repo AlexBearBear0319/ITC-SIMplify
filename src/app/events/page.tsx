@@ -10,7 +10,9 @@
  * no react-day-picker/style.css import needed.
  */
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useChat } from "@ai-sdk/react";
+import { isTextUIPart } from "ai";
 import { DayPicker } from "react-day-picker";
 import type { DayButtonProps } from "react-day-picker";
 import { format, isSameDay, parseISO, startOfMonth, endOfMonth } from "date-fns";
@@ -27,6 +29,7 @@ import {
   Lightbulb,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
@@ -45,13 +48,6 @@ type CalendarEvent = {
 };
 
 type SuggestionMood = "neutral" | "warning" | "danger";
-
-type StudySuggestion = {
-  heading: string;
-  tip: string;
-  spots: { name: string; highlight: string; locationId: number }[];
-  mood: SuggestionMood;
-};
 
 // ─────────────────────────────────────────────
 // Location ID → name mapping
@@ -119,58 +115,16 @@ function getEventStyle(event: CalendarEvent): EventStyle {
   };
 }
 
-function getSuggestion(events: CalendarEvent[]): StudySuggestion {
-  const hasExam     = events.some((e) => /exam/i.test(e.title));
-  const hasNoisy    = events.some((e) => /fair|orientation|expo|welcome/i.test(e.title));
-  const hasPeak     = events.some((e) => e.is_peak_alert);
-  const hasWorkshop = events.some((e) => /workshop|bootcamp|talk/i.test(e.title));
+function getEventMood(events: CalendarEvent[]): SuggestionMood {
+  if (events.some((e) => /exam/i.test(e.title))) return "danger";
+  if (events.some((e) => e.is_peak_alert || /fair|orientation|expo|welcome/i.test(e.title))) return "warning";
+  return "neutral";
+}
 
-  if (hasExam)
-    return {
-      heading: "Exam period — campus will be packed",
-      tip:     "Library spots fill up fast. Arrive before 8 AM for a guaranteed seat. Keep noise levels down.",
-      spots:   SUGGESTION_SPOTS.slice(0, 2),
-      mood:    "danger",
-    };
-
-  if (hasNoisy)
-    return {
-      heading: "High-traffic event on campus today",
-      tip:     "Main areas and corridors will be crowded. Head to upper-floor spots for a quieter environment.",
-      spots:   SUGGESTION_SPOTS.slice(1, 3),
-      mood:    "warning",
-    };
-
-  if (hasPeak)
-    return {
-      heading: "Busier than usual today",
-      tip:     "Expect above-average footfall. Grab a spot early and consider packing lunch to avoid long queues.",
-      spots:   SUGGESTION_SPOTS.slice(0, 3),
-      mood:    "warning",
-    };
-
-  if (hasWorkshop)
-    return {
-      heading: "Workshop day — IT Labs may be occupied",
-      tip:     "One or more labs are running events. Quiet study spots on other floors remain fully available.",
-      spots:   [SUGGESTION_SPOTS[0], SUGGESTION_SPOTS[1], SUGGESTION_SPOTS[3]],
-      mood:    "neutral",
-    };
-
-  if (events.length === 0)
-    return {
-      heading: "Clear day — full campus available",
-      tip:     "No major events today. Most spots should be quiet and easy to find.",
-      spots:   SUGGESTION_SPOTS.slice(0, 3),
-      mood:    "neutral",
-    };
-
-  return {
-    heading: "Light schedule — great day to study",
-    tip:     "Campus is running its normal routine. Good conditions for a long, focused session.",
-    spots:   SUGGESTION_SPOTS.slice(0, 3),
-    mood:    "neutral",
-  };
+function getQuickSpots(mood: SuggestionMood) {
+  if (mood === "danger")  return SUGGESTION_SPOTS.slice(0, 2);
+  if (mood === "warning") return SUGGESTION_SPOTS.slice(1, 3);
+  return SUGGESTION_SPOTS.slice(0, 3);
 }
 
 // ─────────────────────────────────────────────
@@ -332,8 +286,37 @@ const MOOD_CONFIG: Record<SuggestionMood, {
   },
 };
 
-function StudySuggestionCard({ suggestion }: { suggestion: StudySuggestion }) {
-  const c = MOOD_CONFIG[suggestion.mood];
+// ─────────────────────────────────────────────
+// AISuggestionCard — real-time AI recommendation
+// Keyed by date so it remounts (fresh chat) each time the selected date changes.
+// ─────────────────────────────────────────────
+
+function AISuggestionCard({ dayEvents }: { dayEvents: CalendarEvent[] }) {
+  const { messages, sendMessage, status } = useChat({ api: "/api/chat" });
+  const sentRef = useRef(false);
+
+  useEffect(() => {
+    if (sentRef.current) return;
+    sentRef.current = true;
+    const evSummary =
+      dayEvents.length > 0
+        ? dayEvents
+            .map((e) => `${e.title}${e.is_peak_alert ? " [peak day]" : ""}`)
+            .join(", ")
+        : "No campus events today";
+    sendMessage({
+      text: `Campus events scheduled: ${evSummary}. Based on these events and real-time occupancy, recommend the 2–3 best study spots for today and briefly say why. Keep it under 60 words.`,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const isLoading = status === "submitted" || status === "streaming";
+  const lastMsg   = messages.filter((m) => m.role === "assistant").at(-1);
+  const aiText    = lastMsg?.parts.filter(isTextUIPart).map((p) => p.text).join("") ?? "";
+
+  const mood  = getEventMood(dayEvents);
+  const c     = MOOD_CONFIG[mood];
+  const spots = getQuickSpots(mood);
 
   return (
     <div className={`rounded-2xl border p-4 ${c.bg} ${c.border}`}>
@@ -344,17 +327,27 @@ function StudySuggestionCard({ suggestion }: { suggestion: StudySuggestion }) {
         </div>
         <div>
           <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest leading-none">
-            Where to Study Today
+            AI Study Suggestion
           </p>
-          <p className="text-sm font-bold text-ink mt-0.5 leading-snug">{suggestion.heading}</p>
+          <p className="text-sm font-bold text-ink mt-0.5 leading-snug">Where to Study Today</p>
         </div>
       </div>
 
-      <p className="text-xs text-ink-muted leading-relaxed mb-3">{suggestion.tip}</p>
+      {/* AI response or loading state */}
+      {isLoading && !aiText ? (
+        <div className="flex items-center gap-2 text-xs text-ink-muted mb-3">
+          <Loader2 size={12} className="animate-spin shrink-0" />
+          <span>AI is analysing today&apos;s schedule…</span>
+        </div>
+      ) : (
+        <p className="text-xs text-ink-muted leading-relaxed mb-3 whitespace-pre-wrap">
+          {aiText || "Analysing campus conditions…"}
+        </p>
+      )}
 
-      {/* Spot chips */}
+      {/* Quick-nav spot chips */}
       <div className="flex flex-wrap gap-2">
-        {suggestion.spots.map((spot) => (
+        {spots.map((spot) => (
           <Link
             key={spot.locationId}
             href={`/location/${spot.locationId}`}
@@ -406,8 +399,7 @@ export default function EventsPage() {
     [events]
   );
 
-  const dayEvents  = useMemo(() => getEventsForDate(selectedDate, events), [selectedDate, events]);
-  const suggestion = useMemo(() => getSuggestion(dayEvents), [dayEvents]);
+  const dayEvents = useMemo(() => getEventsForDate(selectedDate, events), [selectedDate, events]);
 
   return (
     <motion.div
@@ -545,8 +537,11 @@ export default function EventsPage() {
                   </div>
                 )}
 
-                {/* Smart suggestion — always shown when a date is selected */}
-                <StudySuggestionCard suggestion={suggestion} />
+                {/* AI-powered study suggestion — remounts fresh per date */}
+                <AISuggestionCard
+                  key={selectedDate.toDateString()}
+                  dayEvents={dayEvents}
+                />
               </motion.div>
             )}
           </AnimatePresence>

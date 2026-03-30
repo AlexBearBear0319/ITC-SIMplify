@@ -315,12 +315,22 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
 
       await awardPoints(supabase, currentUserId, POINT_ACTIONS.CREATE_STUDY_GROUP);
       trackMissionProgress(supabase, currentUserId, POINT_ACTIONS.CREATE_STUDY_GROUP);
+
+      // Update streak + unlock achievements + log activity
+      await supabase.rpc("update_streak", { p_user_id: currentUserId });
+      supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUserId });
+      supabase.from("activity_log").insert({
+        user_id:     currentUserId,
+        type:        "group",
+        description: `Created a study group at ${location?.name ?? "a study spot"}`,
+      });
+
       setPointsDelta(pts);
       setTimeout(() => setPointsDelta(null), 2500);
       setAlreadyEarnedToday(true);
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
-  }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday]);
+  }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday, location]);
 
   // ── Status update ─────────────────────────────────────────
   const handleStatusUpdate = async (newStatus: LocationStatus) => {
@@ -361,7 +371,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
     setCheckInDone(true);
     setExistingSession({ id: -1, location_id: locationId, check_in_time: new Date().toISOString(), duration_minutes: 60, activity: "solo_study" });
 
-    // Daily cooldown: only award points once per day
+    // Daily cooldown: only award points + update streak once per day
     if (!alreadyEarnedToday) {
       const { data: rule } = await supabase
         .from("point_rules")
@@ -374,6 +384,19 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       await awardPoints(supabase, currentUserId, POINT_ACTIONS.CHECK_IN);
       trackMissionProgress(supabase, currentUserId, POINT_ACTIONS.CHECK_IN);
 
+      // Update streak (RPC handles consecutive-day logic and duplicate-day guard)
+      await supabase.rpc("update_streak", { p_user_id: currentUserId });
+
+      // Auto-unlock any newly earned achievements (fire-and-forget)
+      supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUserId });
+
+      // Write activity log (fire-and-forget)
+      supabase.from("activity_log").insert({
+        user_id:     currentUserId,
+        type:        "checkin",
+        description: `Checked in at ${location?.name ?? "a study spot"}`,
+      });
+
       setPointsDelta(pts);
       setTimeout(() => setPointsDelta(null), 2500);
       setAlreadyEarnedToday(true);
@@ -381,7 +404,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       // Signal profile page to refresh its points counter
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
-  }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday]);
+  }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday, location]);
 
   if (loading || !location) {
     return (

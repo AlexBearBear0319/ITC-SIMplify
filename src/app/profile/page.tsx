@@ -289,9 +289,13 @@ export default function ProfilePage() {
           const icon       = ICON_MAP[a.icon_key] ?? BookOpen;
 
           let progress: string | undefined;
-          if (!unlockedAt) {
-            if (a.name === "Dedicated")    progress = `${streak} / 30 days`;
-            if (a.name === "IT Champion")  progress = `${pts.toLocaleString()} / 5,000 pts`;
+          if (!unlockedAt && a.unlock_type && a.unlock_threshold) {
+            if (a.unlock_type === "streak")
+              progress = `${streak} / ${a.unlock_threshold} days`;
+            else if (a.unlock_type === "points")
+              progress = `${pts.toLocaleString()} / ${a.unlock_threshold.toLocaleString()} pts`;
+            else if (a.unlock_type === "checkins")
+              progress = `${count ?? 0} / ${a.unlock_threshold} check-ins`;
           }
 
           return {
