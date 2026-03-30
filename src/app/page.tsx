@@ -53,6 +53,7 @@ type LeaderboardEntry = {
   initials: string;
   points: number;
   level: number;
+  avatar_url: string | null;
 };
 
 type LocationStatus = "empty" | "busy" | "full";
@@ -711,18 +712,19 @@ export default function DashboardPage() {
 
       supabase
         .from("profiles")
-        .select("full_name, username, points, level")
+        .select("full_name, username, points, level, avatar_url")
         .order("points", { ascending: false })
         .limit(3)
         .then(({ data }) => {
           if (!data) return;
           setTopEntries(
             data.map((p, i) => ({
-              rank:     i + 1,
-              name:     p.full_name ?? p.username ?? "Student",
-              initials: getInitials(p.full_name ?? p.username ?? "ST"),
-              points:   p.points ?? 0,
-              level:    p.level ?? getLevelNumber(p.points ?? 0),
+              rank:       i + 1,
+              name:       p.full_name ?? p.username ?? "Student",
+              initials:   getInitials(p.full_name ?? p.username ?? "ST"),
+              points:     p.points ?? 0,
+              level:      p.level ?? getLevelNumber(p.points ?? 0),
+              avatar_url: p.avatar_url ?? null,
             }))
           );
         });
@@ -1690,9 +1692,14 @@ export default function DashboardPage() {
                         className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-brand-faint transition-colors duration-150"
                       >
                         <div
-                          className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ring-2 ${style.ring} bg-brand-light text-ink`}
+                          className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ring-2 ${style.ring} bg-brand-light text-ink overflow-hidden`}
                         >
-                          {entry.initials}
+                          {entry.avatar_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={entry.avatar_url} alt={entry.name} className="w-full h-full object-cover" />
+                          ) : (
+                            entry.initials
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-ink truncate leading-tight">
