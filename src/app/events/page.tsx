@@ -62,8 +62,10 @@ const LOCATIONS_MAP: Record<number, string> = {
   6: "Reading Room",
 };
 
+type SuggestionSpot = { name: string; highlight: string; locationId: number };
+
 // Quiet-to-active tiers for smart suggestions
-const SUGGESTION_SPOTS: StudySuggestion["spots"] = [
+const SUGGESTION_SPOTS: SuggestionSpot[] = [
   { name: "Library Level 3",  highlight: "Quietest spot on campus",       locationId: 2 },
   { name: "Reading Room",     highlight: "Minimal foot traffic",           locationId: 6 },
   { name: "Study Corner A",   highlight: "Comfortable, uncrowded seating", locationId: 3 },
