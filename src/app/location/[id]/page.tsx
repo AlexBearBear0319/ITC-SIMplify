@@ -23,6 +23,7 @@ import {
   Plus,
   LogOut,
   AlertCircle,
+  Zap,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
