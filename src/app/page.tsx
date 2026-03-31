@@ -406,7 +406,7 @@ function LocationDrawer({
                     onClick={onCheckIn}
                     disabled={!!activeSession}
                     title={activeSession ? "End your current session first" : undefined}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand disabled:active:scale-100"
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:bg-border disabled:text-ink-muted disabled:border-border disabled:shadow-none disabled:hover:bg-border disabled:cursor-not-allowed disabled:active:scale-100 disabled:opacity-100"
                   >
                     <LogIn size={15} />
                     Scan QR to Enter
@@ -1129,6 +1129,14 @@ export default function DashboardPage() {
     await supabase.from("study_group_members").insert({
       group_id: group.id,
       user_id:  userId,
+    });
+
+    // Show the active-group banner immediately for the host
+    setActiveGroup({
+      id: group.id,
+      subject: data.topic || "Study Session",
+      locationName: selectedLocation.name,
+      isHost: true,
     });
 
     // 3. Create an active_sessions row so the seat count is reflected on the map
