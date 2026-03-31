@@ -862,6 +862,26 @@ export default function DashboardPage() {
 
     const supabase = createClient();
 
+    // Guard: block if user already has any active session (solo or study group)
+    const { count: activeSessionCount } = await supabase
+      .from("active_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_active", true);
+
+    const { data: activeMembership } = await supabase
+      .from("study_group_members")
+      .select("group_id, study_groups(is_active)")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+
+    if ((activeSessionCount ?? 0) > 0 || (activeMembership && (activeMembership as any).study_groups?.is_active)) {
+      const msg = "You are already in an active session. Please leave it first.";
+      showErrorToast(msg);
+      return;
+    }
+
     // Optimistic: show the active-session banner and close the modal immediately.
     // The session ID is filled in once the DB responds (two-phase).
     setActiveSession({
@@ -889,7 +909,9 @@ export default function DashboardPage() {
       .single();
 
     if (error) {
-      const errorText = error.message ?? "Unknown Supabase error";
+      const errorText = error.code === "42501"
+        ? "Check-in is blocked by a database security policy. Please contact an admin."
+        : error.message ?? "Unknown Supabase error";
       console.error("[check-in] Failed to create session:", error);
       setActiveSession(null); // rollback
       showErrorToast(`Check-in failed: ${errorText}`);
@@ -912,7 +934,6 @@ export default function DashboardPage() {
         prev ? { ...prev, points: prev.points + rule.points_awarded } : prev
       );
       setPointsDelta(rule.points_awarded);
-      setTimeout(() => setPointsDelta(null), 2500);
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, userId, POINT_ACTIONS.CHECK_IN);

@@ -28,11 +28,11 @@ type Props = {
 // Component
 // ─────────────────────────────────────────────
 
-export default function StudyBuddyModal({ open, locationName, onOpenChange, onSubmit, onBack }: Props) {
+  export default function StudyBuddyModal({ open, locationName, onOpenChange, onSubmit, onBack }: Props) {
   const [topic,      setTopic]      = useState("");
   const [maxMembers, setMaxMembers] = useState(4);
   const [needsPower, setNeedsPower] = useState(true);
-  const [duration,   setDuration]   = useState(120);
+    const [duration,   setDuration]   = useState(60);
   const [submitting, setSubmitting] = useState(false);
   const [success,    setSuccess]    = useState(false);
   const [error,      setError]      = useState<string | null>(null);
@@ -41,7 +41,7 @@ export default function StudyBuddyModal({ open, locationName, onOpenChange, onSu
     setTopic("");
     setMaxMembers(4);
     setNeedsPower(true);
-    setDuration(120);
+    setDuration(60);
     setSuccess(false);
     setError(null);
   };
@@ -192,15 +192,16 @@ export default function StudyBuddyModal({ open, locationName, onOpenChange, onSu
                       Duration
                     </label>
                     <div className="relative">
-                      <select
-                        value={duration}
-                        onChange={(e) => setDuration(Number(e.target.value))}
-                        className="w-full appearance-none px-3 py-2.5 bg-canvas border border-border rounded-xl text-sm text-ink cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand pr-8"
-                      >
-                        <option value={60}>1 hour</option>
-                        <option value={120}>2 hours</option>
-                        <option value={240}>4 hours</option>
-                      </select>
+                        <select
+                          value={duration}
+                          onChange={(e) => setDuration(Number(e.target.value))}
+                          className="w-full appearance-none px-3 py-2.5 bg-canvas border border-border rounded-xl text-sm text-ink cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand pr-8"
+                        >
+                          <option value={30}>30 minutes</option>
+                          <option value={60}>1 hour</option>
+                          <option value={120}>2 hours</option>
+                          <option value={240}>4 hours</option>
+                        </select>
                       <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint">⌄</span>
                     </div>
                   </div>

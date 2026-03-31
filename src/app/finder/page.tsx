@@ -533,7 +533,7 @@ function CreateGroupDialog({
   subjects: Subject[];
   defaultLocationId?: number;
 }) {
-  const [form,        setForm]        = useState<CreateForm>({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 120 });
+  const [form,        setForm]        = useState<CreateForm>({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 60 });
   const [submitting,  setSubmitting]  = useState(false);
   const [success,     setSuccess]     = useState(false);
 
@@ -548,7 +548,7 @@ function CreateGroupDialog({
 
   const handleOpenChange = (next: boolean) => {
     if (!next && !submitting) {
-      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 120 });
+      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 60 });
       setSuccess(false);
     }
     onOpenChange(next);
@@ -561,7 +561,7 @@ function CreateGroupDialog({
     setSuccess(true);
     setSubmitting(false);
     setTimeout(() => {
-      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 120 });
+      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 60 });
       setSuccess(false);
       onOpenChange(false);
     }, 1400);
@@ -734,6 +734,7 @@ function CreateGroupDialog({
                       onChange={(e) => setForm((f) => ({ ...f, duration_minutes: Number(e.target.value) }))}
                       className={`${FORM_INPUT} appearance-none pr-8 cursor-pointer`}
                     >
+                      <option value={30}>30 minutes</option>
                       <option value={60}>1 hour</option>
                       <option value={120}>2 hours</option>
                       <option value={240}>4 hours</option>
