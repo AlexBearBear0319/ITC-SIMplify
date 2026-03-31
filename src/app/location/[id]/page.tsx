@@ -6,6 +6,7 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/utils/supabase/client";
 import { awardPoints, POINT_ACTIONS, trackMissionProgress } from "@/lib/db/points";
+import { leaveStudyGroup } from "@/lib/db/study-groups";
 import QRScannerModal from "@/components/features/QRScannerModal";
 import ActionChoiceModal from "@/components/features/ActionChoiceModal";
 import StudyBuddyModal, { type StudyBuddyData } from "@/components/features/StudyBuddyModal";
@@ -338,19 +339,43 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
     };
   }, [locationId, supabase]);
   const handleEndSession = useCallback(async () => {
-    if (!existingSession) return;
+    if (!existingSession && !existingGroupId) return;
     setEndingSession(true);
-    await supabase.from("active_sessions").update({ is_active: false }).eq("id", existingSession.id);
-    setExistingSession(null);
+
+    const wasGroup = !!existingGroupId;
+
+    if (existingGroupId && currentUserId) {
+      await leaveStudyGroup(supabase, existingGroupId, currentUserId);
+      supabase.from("activity_log").insert({
+        user_id: currentUserId,
+        type: "group",
+        description: `Left a study group at ${location?.name ?? "a study spot"}`,
+      });
+      setExistingGroupId(null);
+    }
+
+    if (existingSession) {
+      await supabase.from("active_sessions").update({ is_active: false }).eq("id", existingSession.id);
+      if (!wasGroup && currentUserId) {
+        supabase.from("activity_log").insert({
+          user_id: currentUserId,
+          type: "checkin",
+          description: `Checked out from ${location?.name ?? "a study spot"}`,
+        });
+      }
+      setExistingSession(null);
+    }
+
     setCheckInDone(false);
     setEndingSession(false);
-  }, [existingSession, supabase]);
+  }, [existingSession, existingGroupId, currentUserId, supabase, location]);
 
   // ── Study Buddy creation ──────────────────────────────────
   const handleStudyBuddyCreate = useCallback(async (data: StudyBuddyData) => {
     if (!currentUserId || existingSession || existingGroupId) return;
 
-    // Create the study group
+    // Create the study group (expires in 2 hours)
+    const expiresAt = new Date(Date.now() + 120 * 60_000).toISOString();
     const { data: group, error: groupError } = await supabase
       .from("study_groups")
       .insert({
@@ -360,6 +385,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         max_members:     data.max_members,
         current_members: 1,
         is_active:       true,
+        expires_at:      expiresAt,
       })
       .select("id")
       .single();
@@ -372,9 +398,8 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       user_id:  currentUserId,
     });
 
-    // Create active_sessions row so seat count is reflected.
-    // Only 1 seat is occupied now (the host) — seats_taken grows as members join.
-    await supabase.from("active_sessions").insert({
+    // Create active_sessions row so seat count is reflected; capture ID so host can leave later
+    const { data: newSession } = await supabase.from("active_sessions").insert({
       user_id:          currentUserId,
       location_id:      locationId,
       activity:         "study_group",
@@ -383,10 +408,11 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       seats_taken:      1,
       needs_power:      data.needs_power,
       is_active:        true,
-    });
+    }).select("id, location_id, check_in_time, duration_minutes, activity").single();
 
     setCheckInDone(true);
     setExistingGroupId(group.id);
+    if (newSession) setExistingSession(newSession as ActiveSessionInfo);
 
     // Award points (daily cooldown applies)
     if (!alreadyEarnedToday) {
@@ -413,6 +439,11 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       if (gNewlyUnlocked.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setNewBadgeName((gNewlyUnlocked[0] as any).achievements?.name ?? "Badge");
+        // Log each newly unlocked badge to activity history
+        for (const badge of gNewlyUnlocked) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          supabase.from("activity_log").insert({ user_id: currentUserId, type: "badge", description: `Unlocked badge: ${(badge as any).achievements?.name ?? "Badge"}` });
+        }
       }
       supabase.from("activity_log").insert({
         user_id:     currentUserId,
@@ -494,6 +525,10 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       if (newlyUnlocked.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setNewBadgeName((newlyUnlocked[0] as any).achievements?.name ?? "Badge");
+        for (const badge of newlyUnlocked) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          supabase.from("activity_log").insert({ user_id: currentUserId, type: "badge", description: `Unlocked badge: ${(badge as any).achievements?.name ?? "Badge"}` });
+        }
       }
 
       // Write activity log (fire-and-forget)
@@ -699,14 +734,14 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                   <p className="text-sm font-semibold text-ink">Session already active</p>
                   <p className="text-xs text-ink-muted mt-0.5">{blockReason}</p>
                 </div>
-                {existingSession && existingSession.location_id === locationId && (
+                {(existingGroupId || (existingSession && existingSession.location_id === locationId)) && (
                   <button
                     onClick={handleEndSession}
                     disabled={endingSession}
                     className="shrink-0 flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors disabled:opacity-50"
                   >
                     <LogOut size={12} />
-                    {endingSession ? "Ending…" : "End Session"}
+                    {endingSession ? "Leaving…" : existingGroupId ? "Leave Group" : "End Session"}
                   </button>
                 )}
               </motion.div>
@@ -724,10 +759,14 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               >
                 <CheckCircle2 size={16} className="text-success shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-ink">Checked in at {location.name}!</p>
+                  <p className="text-sm font-semibold text-ink">
+                    {existingGroupId ? "Study group created!" : `Checked in at ${location.name}!`}
+                  </p>
                   <p className="text-xs text-ink-muted">
                     {alreadyEarnedToday && !pointsDelta
                       ? "Points already earned today — come back tomorrow."
+                      : existingGroupId
+                      ? "Points awarded. Group active for 2 hours."
                       : "Points awarded. Session valid for 60 min."}
                   </p>
                 </div>
@@ -737,7 +776,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                   className="shrink-0 flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors disabled:opacity-50"
                 >
                   <LogOut size={12} />
-                  {endingSession ? "Ending…" : "Check Out"}
+                  {endingSession ? "Leaving…" : existingGroupId ? "Leave Group" : "Check Out"}
                 </button>
               </motion.div>
             )}

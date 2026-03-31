@@ -662,7 +662,7 @@ function CreateGroupDialog({
                   </div>
 
                   <div>
-                    <label className={FORM_LABEL}>Max Members</label>
+                    <label className={FORM_LABEL}>Max Members (incl. you)</label>
                     <div className="flex items-center gap-2 px-3 py-2 bg-canvas border border-border rounded-xl">
                       <button
                         type="button"
@@ -871,6 +871,15 @@ function FinderPageContent() {
 
   // Initial data load: groups + locations list + point rules
   useEffect(() => {
+    // Auto-close study groups that have passed their expires_at time
+    const now = new Date().toISOString();
+    supabase
+      .from("study_groups")
+      .update({ is_active: false })
+      .eq("is_active", true)
+      .not("expires_at", "is", null)
+      .lt("expires_at", now)
+      .then(() => {});
     fetchGroups();
     supabase
       .from("locations")
@@ -1013,6 +1022,12 @@ function FinderPageContent() {
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.JOIN_GROUP);
+    const joinedGroup = groups.find((g) => g.id === id);
+    supabase.from("activity_log").insert({
+      user_id: currentUser.id,
+      type: "group",
+      description: `Joined a study group: ${joinedGroup?.subject ?? "Study Session"}`,
+    });
     setActiveGroupId(id);
     await fetchGroups();
   };
@@ -1021,6 +1036,17 @@ function FinderPageContent() {
     if (!currentUser || activeGroupId !== id) return;
     const { error } = await leaveStudyGroup(supabase, id, currentUser.id);
     if (error) { console.error("[handleLeaveGroup]", error); return; }
+    // Clean up any study_group active_sessions row the host may have
+    await supabase.from("active_sessions")
+      .update({ is_active: false })
+      .eq("user_id", currentUser.id)
+      .eq("is_active", true)
+      .eq("activity", "study_group");
+    supabase.from("activity_log").insert({
+      user_id: currentUser.id,
+      type: "group",
+      description: "Left a study group",
+    });
     // Optimistic update: drop the card count immediately
     setGroups((prev) =>
       prev.map((g) =>
@@ -1049,12 +1075,14 @@ function FinderPageContent() {
     setScannedLocationId(undefined);
     setActiveGroupId(-1);
 
+    const expiresAt = new Date(Date.now() + 120 * 60_000).toISOString();
     const { data, error } = await createStudyGroup(supabase, {
       host_id:     currentUser.id,
       location_id: form.location_id,
       subject:     form.subject,
       description: form.description,
       max_members: form.max_members,
+      expires_at:  expiresAt,
     });
     if (error || !data) {
       console.error("[handleCreate]", error);
@@ -1070,6 +1098,11 @@ function FinderPageContent() {
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);
+    supabase.from("activity_log").insert({
+      user_id: currentUser.id,
+      type: "group",
+      description: `Created a study group: ${form.subject}`,
+    });
     setActiveGroupId(data.id);
     await fetchGroups();
   };

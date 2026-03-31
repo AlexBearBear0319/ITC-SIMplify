@@ -166,7 +166,7 @@ export default function StudyBuddyModal({ open, locationName, onOpenChange, onSu
                       >
                         <Plus size={14} />
                       </button>
-                      <span className="text-xs text-ink-faint">people max</span>
+                      <span className="text-xs text-ink-faint">total (you + others)</span>
                     </div>
                   </div>
 

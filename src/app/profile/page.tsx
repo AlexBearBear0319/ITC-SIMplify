@@ -70,6 +70,16 @@ type Achievement = {
 
 type ActivityType = "checkin" | "redemption" | "group" | "event" | "badge";
 
+type SessionEntry = {
+  id: number;
+  activity: string;
+  module: string | null;
+  duration_minutes: number;
+  check_in_time: string;
+  is_active: boolean;
+  location_name: string;
+};
+
 type ActivityItem = {
   id: number;
   type: ActivityType;
@@ -197,6 +207,7 @@ export default function ProfilePage() {
   const [profile,      setProfile]      = useState<UserProfile | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [activity,     setActivity]     = useState<ActivityItem[]>([]);
+  const [sessions,     setSessions]     = useState<SessionEntry[]>([]);
   const [loading,      setLoading]      = useState(true);
   const prevPointsRef  = useRef<number | null>(null);
   const [pointsDelta,  setPointsDelta]  = useState<number | null>(null);
@@ -232,6 +243,7 @@ export default function ProfilePage() {
         { data: allAchievements },
         { data: userAchievements },
         { data: activityData },
+        { data: sessionsData },
       ] = await Promise.all([
         supabase
           .from("profiles")
@@ -259,7 +271,14 @@ export default function ProfilePage() {
           .select("id, type, description, created_at")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
-          .limit(6),
+          .limit(10),
+        supabase
+          .from("active_sessions")
+          .select("id, activity, module, duration_minutes, check_in_time, is_active, locations(name)")
+          .eq("user_id", user.id)
+          .not("check_in_time", "is", null)
+          .order("check_in_time", { ascending: false })
+          .limit(10),
       ]);
 
       if (prof) {
@@ -327,6 +346,19 @@ export default function ProfilePage() {
           type:        a.type as ActivityType,
           description: a.description,
           time:        timeAgo(a.created_at),
+        }))
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setSessions(
+        (sessionsData ?? []).map((s: any) => ({
+          id:               s.id,
+          activity:         s.activity,
+          module:           s.module,
+          duration_minutes: s.duration_minutes,
+          check_in_time:    s.check_in_time,
+          is_active:        s.is_active ?? false,
+          location_name:    s.locations?.name ?? "Unknown location",
         }))
       );
 
@@ -649,6 +681,47 @@ export default function ProfilePage() {
             })}
           </motion.div>
         </section>
+
+        {/* ── Session History ── */}
+        {sessions.length > 0 && (
+          <section>
+            <h2 className="text-base font-bold text-ink mb-3">Session History</h2>
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] as [number, number, number, number], delay: 0.1 }}
+              className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden"
+            >
+              {sessions.map((session, index) => (
+                <div
+                  key={session.id}
+                  className={`flex items-center gap-3 px-4 py-3.5 ${index < sessions.length - 1 ? "border-b border-border" : ""}`}
+                >
+                  <div className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center ${session.activity === "study_group" ? "bg-success-light" : "bg-brand-faint"}`}>
+                    {session.activity === "study_group"
+                      ? <Users size={14} className="text-success" />
+                      : <MapPin size={14} className="text-brand-dark" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-ink leading-snug truncate">
+                      {session.location_name}
+                      {session.module && <span className="text-ink-muted"> · {session.module}</span>}
+                    </p>
+                    <p className="text-xs text-ink-faint mt-0.5">
+                      {session.activity === "study_group" ? "Study Group" : "Solo Study"} · {session.duration_minutes} min
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs text-ink-faint whitespace-nowrap">{timeAgo(session.check_in_time)}</p>
+                    <p className={`text-[10px] font-medium mt-0.5 ${session.is_active ? "text-success" : "text-ink-faint"}`}>
+                      {session.is_active ? "Active" : "Completed"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          </section>
+        )}
 
         {/* ── Recent Activity ── */}
         <section>
