@@ -889,9 +889,10 @@ export default function DashboardPage() {
       .single();
 
     if (error) {
-      console.error("[check-in] Failed to create session:", error.message);
+      const errorText = error.message ?? "Unknown Supabase error";
+      console.error("[check-in] Failed to create session:", error);
       setActiveSession(null); // rollback
-      showErrorToast("Check-in failed. Please try again.");
+      showErrorToast(`Check-in failed: ${errorText}`);
       return;
     }
 

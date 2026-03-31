@@ -64,6 +64,7 @@ type Review = {
 
 type StudyGroup = {
   id: number;
+  host_id: string;
   subject: string;
   current_members: number;
   max_members: number;
@@ -206,7 +207,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         supabase.from("locations").select("id, name, category, current_status, image_url, coordinates_x, coordinates_y, description, total_seats, power_outlets, location_text").eq("id", locationId).single(),
         supabase.from("status_logs").select("id, status, created_at, profiles(username)").eq("location_id", locationId).order("created_at", { ascending: false }).limit(10),
         supabase.from("reviews").select("id, rating, comment, created_at, profiles(username, avatar_url)").eq("location_id", locationId).order("created_at", { ascending: false }),
-        supabase.from("study_groups").select("id, subject, current_members, max_members, is_active, created_at, profiles(username)").eq("location_id", locationId).eq("is_active", true).order("created_at", { ascending: false }),
+        supabase.from("study_groups").select("id, host_id, subject, current_members, max_members, is_active, created_at, profiles(username)").eq("location_id", locationId).eq("is_active", true).order("created_at", { ascending: false }),
         supabase.from("active_sessions").select("seats_taken, needs_power").eq("location_id", locationId).eq("is_active", true),
       ]);
 
@@ -242,7 +243,32 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       }
       setStatusLogs((logsRes.data ?? []) as unknown as StatusLog[]);
       setReviews((revsRes.data ?? []) as unknown as Review[]);
-      setStudyGroups((groupsRes.data ?? []) as unknown as StudyGroup[]);
+      const rawGroups = (groupsRes.data ?? []) as unknown as StudyGroup[];
+      if (rawGroups.length > 0) {
+        const ids = rawGroups.map((g) => g.id);
+        const { data: memberRows } = await supabase
+          .from("study_group_members")
+          .select("group_id, user_id")
+          .in("group_id", ids);
+
+        const memberSets: Record<number, Set<string>> = {};
+        (memberRows ?? []).forEach((m: { group_id: number; user_id: string }) => {
+          if (!memberSets[m.group_id]) memberSets[m.group_id] = new Set();
+          memberSets[m.group_id].add(m.user_id);
+        });
+
+        const normalized = rawGroups.map((g) => {
+          const set = memberSets[g.id] ?? new Set<string>();
+          if (g.host_id) set.add(g.host_id);
+          const capacity    = Math.max(1, g.max_members);
+          const memberCount = Math.min(capacity, Math.max(1, set.size || g.current_members));
+          return { ...g, current_members: memberCount };
+        });
+
+        setStudyGroups(normalized as StudyGroup[]);
+      } else {
+        setStudyGroups([]);
+      }
 
       // ── Check for any existing active session for this user ──
       if (userId) {
