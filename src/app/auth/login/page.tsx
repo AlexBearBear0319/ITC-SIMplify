@@ -301,7 +301,7 @@ function LoginPageContent() {
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-surface border border-border flex items-center justify-center shadow-md mb-4 overflow-hidden">
             <Image
-              src="/SIMplify_logo.svg?v=20260330-1"
+              src="/SIMplify_logo_light.svg?v=20260330-1"
               alt="SIMplify logo light"
               width={40}
               height={40}

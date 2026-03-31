@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
-import { ArrowLeft, CheckCircle2, Settings, XCircle } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, Loader2, Settings, XCircle } from "lucide-react";
+import { uploadAvatar } from "../actions";
 
 type EditForm = {
   full_name: string;
@@ -19,6 +20,17 @@ type School = { id: number; name: string; abbr: string };
 type Major = { id: number; name: string };
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+const DEFAULT_PROFILE_ICON = "/profile_default.png";
+
+const PRESET_PROFILE_ICONS = [
+  "/profile_cool.png",
+  "/profile_default.png",
+  "/profile_excited.png",
+  "/profile_happy.png",
+  "/profile_smirk.png",
+  "/profile_tired.png",
+];
+
 const FIELD_INPUT =
   "w-full px-4 py-2.5 rounded-xl border border-border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow";
 const FIELD_LABEL = "block text-sm font-medium text-ink mb-1.5";
@@ -29,10 +41,14 @@ export default function EditProfilePage() {
   const [loading, setLoading] = useState(true);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [schools, setSchools] = useState<School[]>([]);
   const [majors, setMajors] = useState<Major[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [editForm, setEditForm] = useState<EditForm>({
     full_name: "",
     username: "",
@@ -55,13 +71,14 @@ export default function EditProfilePage() {
 
       const { data: prof } = await supabase
         .from("profiles")
-        .select("id, full_name, username, age, school_id, major_id, education_level, semester_term")
+        .select("id, full_name, username, avatar_url, age, school_id, major_id, education_level, semester_term")
         .eq("id", user.id)
         .single();
 
       if (prof) {
         setProfileId(prof.id);
         setEmail(user.email ?? "");
+        setAvatarUrl(prof.avatar_url ?? DEFAULT_PROFILE_ICON);
         setEditForm({
           full_name: prof.full_name ?? "",
           username: prof.username ?? "",
@@ -103,6 +120,66 @@ export default function EditProfilePage() {
       });
   }, [editForm.school_id, supabase]);
 
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1 * 1024 * 1024) {
+      setSaveError("File must be under 1 MB");
+      setSaveState("error");
+      return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setSaveError("Only JPEG, PNG, or WebP allowed");
+      setSaveState("error");
+      return;
+    }
+
+    setAvatarPreview(URL.createObjectURL(file));
+    setAvatarUploading(true);
+    setSaveError(null);
+
+    const formData = new FormData();
+    formData.append("avatar", file);
+    const { url, error } = await uploadAvatar(formData);
+
+    setAvatarUploading(false);
+    if (error || !url) {
+      setAvatarPreview(null);
+      setSaveError(error ?? "Upload failed");
+      setSaveState("error");
+      return;
+    }
+
+    setAvatarUrl(url);
+    setAvatarPreview(null);
+    setSaveState("saved");
+    setTimeout(() => setSaveState("idle"), 2000);
+  }
+
+  async function handlePickPresetAvatar(nextUrl: string) {
+    if (!profileId) return;
+
+    setSaveState("saving");
+    setSaveError(null);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ avatar_url: nextUrl })
+      .eq("id", profileId);
+
+    if (error) {
+      setSaveState("error");
+      setSaveError(error.message);
+      return;
+    }
+
+    setAvatarUrl(nextUrl);
+    window.dispatchEvent(new Event("profile-updated"));
+    setSaveState("saved");
+    setTimeout(() => setSaveState("idle"), 2000);
+  }
+
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
     if (!profileId) return;
@@ -113,6 +190,7 @@ export default function EditProfilePage() {
     const updatedFields = {
       full_name: editForm.full_name.trim(),
       username: editForm.username.trim(),
+      avatar_url: avatarUrl ?? DEFAULT_PROFILE_ICON,
       age: editForm.age ? Number(editForm.age) : null,
       school_id: editForm.school_id || null,
       major_id: editForm.major_id || null,
@@ -164,6 +242,83 @@ export default function EditProfilePage() {
           </div>
 
           <form onSubmit={handleSaveProfile} className="p-5 space-y-4">
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
+
+            <div className="rounded-2xl border border-border bg-canvas/50 p-4">
+              <p className="text-sm font-semibold text-ink mb-3">Profile Icon</p>
+              <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-4 items-start">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="relative w-28 h-28 rounded-2xl overflow-hidden border border-border bg-surface">
+                    {avatarPreview || avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={avatarPreview ?? avatarUrl!}
+                        alt="Selected profile icon"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={DEFAULT_PROFILE_ICON}
+                        alt="Default profile icon"
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+
+                    {avatarUploading && (
+                      <div className="absolute inset-0 bg-black/40 grid place-items-center">
+                        <Loader2 size={20} className="text-white animate-spin" />
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-border text-ink-muted hover:text-ink hover:bg-surface transition-colors"
+                  >
+                    <Camera size={13} />
+                    Upload your own
+                  </button>
+                </div>
+
+                <div>
+                  <p className="text-xs text-ink-muted mb-2">Choose from preset icons:</p>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                    {PRESET_PROFILE_ICONS.map((iconPath) => {
+                      const selected = avatarUrl === iconPath;
+                      return (
+                        <button
+                          key={iconPath}
+                          type="button"
+                          onClick={() => handlePickPresetAvatar(iconPath)}
+                          className={`relative rounded-xl border p-1.5 bg-surface transition-all ${
+                            selected
+                              ? "border-brand ring-2 ring-brand/30"
+                              : "border-border hover:border-brand/50"
+                          }`}
+                          aria-label={`Select ${iconPath.replace("/profile_", "").replace(/\.(svg|png)$/i, "")} avatar`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={iconPath}
+                            alt={iconPath}
+                            className="w-full aspect-square object-contain"
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
                 <label className={FIELD_LABEL}>Email</label>
