@@ -65,6 +65,7 @@ type Review = {
 
 type StudyGroup = {
   id: number;
+  host_id: string;
   subject: string;
   current_members: number;
   max_members: number;
@@ -188,6 +189,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [alreadyEarnedToday, setAlreadyEarnedToday] = useState(false);
   const [endingSession,    setEndingSession]    = useState(false);
   const [newBadgeName,     setNewBadgeName]     = useState<string | null>(null);
+  const [blockToast,       setBlockToast]       = useState<string | null>(null);
 
   // Auto-dismiss badge toast after 3 s
   useEffect(() => {
@@ -207,7 +209,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         supabase.from("locations").select("id, name, category, current_status, image_url, coordinates_x, coordinates_y, description, total_seats, power_outlets, location_text").eq("id", locationId).single(),
         supabase.from("status_logs").select("id, status, created_at, profiles(username)").eq("location_id", locationId).order("created_at", { ascending: false }).limit(10),
         supabase.from("reviews").select("id, rating, comment, created_at, profiles(username, avatar_url)").eq("location_id", locationId).order("created_at", { ascending: false }),
-        supabase.from("study_groups").select("id, subject, current_members, max_members, is_active, created_at, profiles(username)").eq("location_id", locationId).eq("is_active", true).order("created_at", { ascending: false }),
+        supabase.from("study_groups").select("id, host_id, subject, current_members, max_members, is_active, created_at, profiles(username)").eq("location_id", locationId).eq("is_active", true).order("created_at", { ascending: false }),
         supabase.from("active_sessions").select("seats_taken, needs_power").eq("location_id", locationId).eq("is_active", true),
       ]);
 
@@ -243,7 +245,32 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       }
       setStatusLogs((logsRes.data ?? []) as unknown as StatusLog[]);
       setReviews((revsRes.data ?? []) as unknown as Review[]);
-      setStudyGroups((groupsRes.data ?? []) as unknown as StudyGroup[]);
+      const rawGroups = (groupsRes.data ?? []) as unknown as StudyGroup[];
+      if (rawGroups.length > 0) {
+        const ids = rawGroups.map((g) => g.id);
+        const { data: memberRows } = await supabase
+          .from("study_group_members")
+          .select("group_id, user_id")
+          .in("group_id", ids);
+
+        const memberSets: Record<number, Set<string>> = {};
+        (memberRows ?? []).forEach((m: { group_id: number; user_id: string }) => {
+          if (!memberSets[m.group_id]) memberSets[m.group_id] = new Set();
+          memberSets[m.group_id].add(m.user_id);
+        });
+
+        const normalized = rawGroups.map((g) => {
+          const set = memberSets[g.id] ?? new Set<string>();
+          if (g.host_id) set.add(g.host_id);
+          const capacity    = Math.max(1, g.max_members);
+          const memberCount = Math.min(capacity, Math.max(1, set.size || g.current_members));
+          return { ...g, current_members: memberCount };
+        });
+
+        setStudyGroups(normalized as StudyGroup[]);
+      } else {
+        setStudyGroups([]);
+      }
 
       // ── Check for any existing active session for this user ──
       if (userId) {
@@ -373,10 +400,33 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
 
   // ── Study Buddy creation ──────────────────────────────────
   const handleStudyBuddyCreate = useCallback(async (data: StudyBuddyData) => {
-    if (!currentUserId || existingSession || existingGroupId) return;
+    if (!currentUserId) return { error: "Missing user." };
+
+    // Hard guard: one active session at a time (solo or group)
+    const { count: activeSessionCount } = await supabase
+      .from("active_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", currentUserId)
+      .eq("is_active", true);
+    if ((activeSessionCount ?? 0) > 0 || existingSession || existingGroupId) {
+      const msg = "You are already in an active session. Please leave it first.";
+      return { error: msg };
+    }
+
+    const { data: activeMembership } = await supabase
+      .from("study_group_members")
+      .select("group_id, study_groups(is_active)")
+      .eq("user_id", currentUserId)
+      .limit(1)
+      .maybeSingle();
+
+    if (activeMembership && (activeMembership as any).study_groups?.is_active) {
+      const msg = "You are already in an active session. Please leave it first.";
+      return { error: msg };
+    }
 
     // Create the study group (expires in 2 hours)
-    const expiresAt = new Date(Date.now() + 120 * 60_000).toISOString();
+    const expiresAt = new Date(Date.now() + data.duration_minutes * 60_000).toISOString();
     const { data: group, error: groupError } = await supabase
       .from("study_groups")
       .insert({
@@ -391,7 +441,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       .select("id")
       .single();
 
-    if (groupError || !group) return;
+    if (groupError || !group) return { error: groupError?.message ?? "Failed to create group." };
 
     // Add creator as first member
     await supabase.from("study_group_members").insert({
@@ -405,7 +455,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       location_id:      locationId,
       activity:         "study_group",
       module:           data.topic || null,
-      duration_minutes: 120,
+      duration_minutes: data.duration_minutes,
       seats_taken:      1,
       needs_power:      data.needs_power,
       is_active:        true,
@@ -700,12 +750,19 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             {/* Scan QR — disabled when user already has an active session */}
             <button
               onClick={() => {
-                if (isBlocked) return;
+                if (isBlocked || checkInDone) {
+                  const msg = blockReason ?? "Leave your existing session first.";
+                  setBlockToast(msg);
+                  setTimeout(() => setBlockToast(null), 4000);
+                  return;
+                }
                 setQrOpen(true);
               }}
-              disabled={isBlocked || checkInDone}
+              aria-disabled={isBlocked || checkInDone}
               title={blockReason ?? undefined}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] ${
+                isBlocked || checkInDone ? "opacity-60 cursor-not-allowed" : ""
+              }`}
             >
               {checkInDone ? (
                 <><CheckCircle2 size={16} /> Checked In</>
@@ -719,6 +776,22 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             </button>
           </div>
         </div>
+
+        {/* Block toast for disabled check-in */}
+        <AnimatePresence>
+          {blockToast && (
+            <motion.div
+              key="block-toast"
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0,  scale: 1    }}
+              exit={{    opacity: 0, y: -8, scale: 0.97 }}
+              className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-start gap-2.5 bg-ink text-surface text-sm font-medium px-4 py-3 rounded-2xl shadow-xl max-w-sm w-[calc(100vw-2rem)]"
+            >
+              <AlertCircle size={16} className="text-gold shrink-0 mt-0.5" />
+              {blockToast}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Page Body ── */}
         <div className="max-w-6xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-4">

@@ -404,9 +404,7 @@ function LocationDrawer({
                 ) : (
                   <button
                     onClick={onCheckIn}
-                    disabled={!!activeSession}
-                    title={activeSession ? "End your current session first" : undefined}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand disabled:active:scale-100"
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
                   >
                     <LogIn size={15} />
                     Scan QR to Enter
@@ -456,6 +454,7 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter]       = useState<LocationStatus | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<DashboardLocation | null>(null);
   const [activeSession, setActiveSession]     = useState<ActiveSession | null>(null);
+  const [activeGroup, setActiveGroup]         = useState<{ id: number; subject: string; locationName: string; isHost: boolean } | null>(null);
   const [qrScanOpen, setQrScanOpen]           = useState(false);
   const [checkInOpen, setCheckInOpen]         = useState(false);
   const [feedbackOpen, setFeedbackOpen]       = useState(false);
@@ -596,6 +595,31 @@ export default function DashboardPage() {
           ),
         });
       }
+
+      // Restore any active study group membership (host or member)
+      const { data: membership } = await supabase
+        .from("study_group_members")
+        .select("group_id, study_groups(id, subject, location_id, is_active, host_id)")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      const sg = (membership as any)?.study_groups;
+      if (sg?.is_active) {
+        const { data: locRow } = await supabase
+          .from("locations")
+          .select("name")
+          .eq("id", sg.location_id)
+          .single();
+        setActiveGroup({
+          id: sg.id,
+          subject: sg.subject ?? "Study Group",
+          locationName: locRow?.name ?? "Study spot",
+          isHost: sg.host_id === user.id,
+        });
+      } else {
+        setActiveGroup(null);
+      }
     }
 
     loadProfile();
@@ -630,6 +654,35 @@ export default function DashboardPage() {
         setLocLoading(false);
         return;
       }
+            {/* Active study group indicator (host or member) */}
+            <AnimatePresence>
+              {activeGroup && (
+                <motion.div
+                  key="active-group-banner"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="fixed top-16 left-1/2 -translate-x-1/2 z-40 max-w-lg w-[calc(100vw-2rem)]"
+                >
+                  <div className="flex items-start gap-3 px-4 py-3 bg-brand-faint border border-brand/30 rounded-2xl shadow-lg">
+                    <Users size={16} className="text-brand-dark shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-ink truncate">
+                        {activeGroup.subject}
+                        <span className="text-xs text-ink-faint ml-2">at {activeGroup.locationName}</span>
+                      </p>
+                      <p className="text-[11px] text-ink-muted mt-0.5">
+                        {activeGroup.isHost ? "You are hosting this group." : "You have joined this group."}
+                      </p>
+                    </div>
+                    <span className="text-[11px] font-semibold text-brand-dark bg-brand/10 px-2 py-1 rounded-full border border-brand/30 shrink-0">
+                      Active
+                    </span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
 
       const mapped = (data ?? []).map((loc) => ({
         ...loc,
@@ -856,11 +909,41 @@ export default function DashboardPage() {
     main.scrollTo({ top, behavior: "smooth" });
   };
 
+  const scrollToActive = () => {
+    const main = document.querySelector<HTMLElement>("main");
+    const activeCard = document.querySelector<HTMLElement>("#active-session-card");
+    if (!main) return;
+    const top = activeCard
+      ? main.scrollTop + activeCard.getBoundingClientRect().top - main.getBoundingClientRect().top - 12
+      : 0;
+    main.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  };
+
   // Creates an active_sessions row, awards check-in points, and recalculates location status.
   const handleCheckInSubmit = async (data: CheckInData) => {
     if (!selectedLocation || !userId) return;
 
     const supabase = createClient();
+
+    // Guard: block if user already has any active session (solo or study group)
+    const { count: activeSessionCount } = await supabase
+      .from("active_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_active", true);
+
+    const { data: activeMembership } = await supabase
+      .from("study_group_members")
+      .select("group_id, study_groups(is_active)")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+
+    if ((activeSessionCount ?? 0) > 0 || (activeMembership && (activeMembership as any).study_groups?.is_active)) {
+      const msg = "You are already in an active session. Please leave it first.";
+      showErrorToast(msg);
+      return;
+    }
 
     // Optimistic: show the active-session banner and close the modal immediately.
     // The session ID is filled in once the DB responds (two-phase).
@@ -889,9 +972,12 @@ export default function DashboardPage() {
       .single();
 
     if (error) {
-      console.error("[check-in] Failed to create session:", error.message);
+      const errorText = error.code === "42501"
+        ? "Check-in is blocked by a database security policy. Please contact an admin."
+        : error.message ?? "Unknown Supabase error";
+      console.error("[check-in] Failed to create session:", error);
       setActiveSession(null); // rollback
-      showErrorToast("Check-in failed. Please try again.");
+      showErrorToast(`Check-in failed: ${errorText}`);
       return;
     }
 
@@ -911,7 +997,6 @@ export default function DashboardPage() {
         prev ? { ...prev, points: prev.points + rule.points_awarded } : prev
       );
       setPointsDelta(rule.points_awarded);
-      setTimeout(() => setPointsDelta(null), 2500);
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, userId, POINT_ACTIONS.CHECK_IN);
@@ -980,9 +1065,37 @@ export default function DashboardPage() {
 
   // Creates a study group at the selected location, reserves seats, and awards points.
   const handleStudyBuddySubmit = async (data: StudyBuddyData) => {
-    if (!selectedLocation || !userId) return;
+    if (!selectedLocation || !userId) return { error: "Missing location or user." };
 
     const supabase = createClient();
+
+    // Hard block: user already in any active session
+    const { count: activeSessionCount } = await supabase
+      .from("active_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_active", true);
+    if ((activeSessionCount ?? 0) > 0) {
+      const msg = "You are already in an active session. Please leave it first.";
+      showErrorToast(msg);
+      return { error: msg };
+    }
+
+    // Block if user is already in an active study group via membership
+    const { data: activeMembership } = await supabase
+      .from("study_group_members")
+      .select("group_id, study_groups(is_active)")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+
+    if (activeMembership && (activeMembership as any).study_groups?.is_active) {
+      const msg = "You are already in an active session. Please leave it first.";
+      showErrorToast(msg);
+      return { error: msg };
+    }
+
+    const durationMs = data.duration_minutes * 60_000;
 
     // Optimistic: show the active-session banner and close the modal immediately.
     setActiveSession({
@@ -991,12 +1104,13 @@ export default function DashboardPage() {
       seats_needed:     data.max_members,
       activity:         "study",
       module:           data.topic,
-      duration_minutes: 120,
-      endsAt:           new Date(Date.now() + 120 * 60_000),
+      duration_minutes: data.duration_minutes,
+      endsAt:           new Date(Date.now() + durationMs),
     });
     setStudyBuddyOpen(false);
 
     // 1. Create the study group
+    const expiresAt = new Date(Date.now() + durationMs).toISOString();
     const { data: group, error: groupError } = await supabase
       .from("study_groups")
       .insert({
@@ -1006,6 +1120,7 @@ export default function DashboardPage() {
         max_members:     data.max_members,
         current_members: 1,
         is_active:       true,
+        expires_at:      expiresAt,
       })
       .select("id")
       .single();
@@ -1013,14 +1128,23 @@ export default function DashboardPage() {
     if (groupError || !group) {
       console.error("[study-buddy] Failed to create group:", groupError?.message);
       setActiveSession(null); // rollback
-      showErrorToast("Failed to create study group. Please try again.");
-      return;
+      const msg = groupError?.message ?? "Failed to create study group. Please try again.";
+      showErrorToast(msg);
+      return { error: msg };
     }
 
     // 2. Add the creator as the first member
     await supabase.from("study_group_members").insert({
       group_id: group.id,
       user_id:  userId,
+    });
+
+    // Show the active-group banner immediately for the host
+    setActiveGroup({
+      id: group.id,
+      subject: data.topic || "Study Session",
+      locationName: selectedLocation.name,
+      isHost: true,
     });
 
     // 3. Create an active_sessions row so the seat count is reflected on the map
@@ -1031,7 +1155,7 @@ export default function DashboardPage() {
         location_id:      selectedLocation.id,
         activity:         "study_group",
         module:           data.topic || null,
-        duration_minutes: 120,
+        duration_minutes: data.duration_minutes,
         seats_taken:      1,
         needs_power:      data.needs_power,
         is_active:        true,
@@ -1059,6 +1183,12 @@ export default function DashboardPage() {
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, userId, POINT_ACTIONS.CREATE_STUDY_GROUP);
+
+    supabase.from("activity_log").insert({
+      user_id:     userId,
+      type:        "group",
+      description: `Created a study group at ${selectedLocation.name}`,
+    });
 
     // 5. Recalculate location status
     const { data: activeSessions } = await supabase
@@ -1237,7 +1367,15 @@ export default function DashboardPage() {
             location={selectedLocation}
             activeSession={activeSession}
             reviews={reviews}
-            onCheckIn={() => setQrScanOpen(true)}
+            onCheckIn={() => {
+              if (activeSession || activeGroup) {
+                showErrorToast("Leave your existing session or group first.");
+                setSelectedLocation(null);
+                scrollToActive();
+                return;
+              }
+              setQrScanOpen(true);
+            }}
             onLeaveSpot={() => setFeedbackOpen(true)}
             onClose={() => setSelectedLocation(null)}
           />
@@ -1381,6 +1519,7 @@ export default function DashboardPage() {
           const isWarning = msLeft <= 5 * 60_000; // last 5 mins
           return (
             <motion.div
+              id="active-session-card"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}

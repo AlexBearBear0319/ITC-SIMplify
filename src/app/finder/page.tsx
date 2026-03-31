@@ -1,7 +1,7 @@
 "use client";
 
 
-import { useState, useMemo, useEffect, useRef, Suspense } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -43,6 +43,7 @@ type StudyGroup = {
   current_members: number;
   is_active: boolean;
   created_at: string;
+  expires_at: string | null;
   profiles:  { username: string; avatar_url: string | null };
   locations: { name: string; category: string };
 };
@@ -60,6 +61,7 @@ type CreateForm = {
   description: string;
   location_id: number;
   max_members: number;
+  duration_minutes: number;
 };
 
 
@@ -173,10 +175,15 @@ function GroupDetailDialog({
     return () => { supabase.removeChannel(channel); };
   }, [group.id, supabase]);
 
-  // Use actual member rows once loaded; fall back to stored count but never below 1 (host always exists)
-  const liveCount          = members.length > 0 ? members.length : Math.max(1, group.current_members);
-  const cap                = getCapacityInfo(liveCount, group.max_members);
-  const isFull             = liveCount >= group.max_members;
+  // The host avatar is always rendered explicitly outside the members list.
+  // liveCount must account for the host even if their junction-table row is absent.
+  const nonHostMembers     = members.filter((m) => m.user_id !== group.host_id);
+  const totalCapacity      = Math.max(1, group.max_members);
+  const liveCount          = members.length > 0
+    ? Math.min(totalCapacity, nonHostMembers.length + 1)  // non-host members + 1 for the explicit host slot
+    : Math.min(totalCapacity, Math.max(1, group.current_members));
+  const cap                = getCapacityInfo(liveCount, totalCapacity);
+  const isFull             = liveCount >= totalCapacity;
   // Check in-memory state OR actual membership list OR host identity so the correct
   // button shows even after a page refresh or if activeGroupId hasn't synced yet
   const isThisGroupActive  =
@@ -184,7 +191,7 @@ function GroupDetailDialog({
     group.host_id === currentUserId ||
     members.some((m) => m.user_id === currentUserId);
   const hasOtherActiveGroup = activeGroupId !== null && activeGroupId !== group.id && !isThisGroupActive;
-  const emptySlots         = Math.max(0, group.max_members - liveCount);
+  const emptySlots         = Math.max(0, totalCapacity - liveCount);
   const hostInitials       = group.profiles.username.slice(0, 2).toUpperCase();
 
   return (
@@ -344,6 +351,8 @@ function StudyGroupCard({
   group,
   activeGroupId,
   currentUserId,
+  now,
+  onExpire,
   onSelect,
   onJoin,
   onLeave,
@@ -351,18 +360,34 @@ function StudyGroupCard({
   group: StudyGroup;
   activeGroupId: number | null;
   currentUserId: string | null;
+  now: Date;
+  onExpire: (id: number) => void;
   onSelect: () => void;
   onJoin: (id: number) => void;
   onLeave: (id: number) => void;
 }) {
-  const cap              = getCapacityInfo(group.current_members, group.max_members);
-  const isFull           = group.current_members >= group.max_members;
-  const spotsLeft        = group.max_members - group.current_members;
+  const totalCapacity    = Math.max(1, group.max_members);
+  const memberCount      = Math.min(totalCapacity, Math.max(1, group.current_members));
+  const cap              = getCapacityInfo(memberCount, totalCapacity);
+  const isFull           = memberCount >= totalCapacity;
+  const spotsLeft        = totalCapacity - memberCount;
   const initials         = group.profiles.username.slice(0, 2).toUpperCase();
   const isThisGroupActive   = activeGroupId === group.id || group.host_id === currentUserId;
   const hasOtherActiveGroup = activeGroupId !== null && !isThisGroupActive;
-  const pipCount  = Math.min(group.max_members, 8);
-  const pipFilled = Math.min(group.current_members, pipCount);
+  const pipCount  = Math.min(totalCapacity, 8);
+  const pipFilled = Math.min(memberCount, pipCount);
+
+  const expiresAt  = group.expires_at ? new Date(group.expires_at) : null;
+  const msLeft     = expiresAt ? expiresAt.getTime() - now.getTime() : null;
+  const isExpired  = msLeft !== null && msLeft <= 0;
+  const minsLeft   = msLeft !== null ? Math.max(0, Math.floor(msLeft / 60_000)) : null;
+  const secsLeft   = msLeft !== null ? Math.max(0, Math.floor((msLeft % 60_000) / 1_000)) : null;
+
+  useEffect(() => {
+    if (isExpired && group.is_active) {
+      onExpire(group.id);
+    }
+  }, [isExpired, group.is_active, group.id, onExpire]);
 
   return (
     <div
@@ -376,10 +401,22 @@ function StudyGroupCard({
             <BookOpen size={9} />
             {group.locations.category}
           </span>
-          <span className="flex items-center gap-1 text-[10px] text-ink-faint">
-            <Clock size={10} />
-            {timeAgo(group.created_at)}
-          </span>
+          <div className="flex items-center gap-2 text-[10px]">
+            <span className="flex items-center gap-1 text-ink-faint">
+              <Clock size={10} />
+              {timeAgo(group.created_at)}
+            </span>
+            {expiresAt && (
+              <span
+                className={`flex items-center gap-1 font-semibold ${
+                  isExpired ? "text-alert" : msLeft !== null && msLeft <= 5 * 60_000 ? "text-gold" : "text-ink-muted"
+                }`}
+              >
+                <Clock size={10} />
+                {isExpired ? "Expired" : `${minsLeft}:${String(secsLeft ?? 0).padStart(2, "0")} left`}
+              </span>
+            )}
+          </div>
         </div>
 
         <h3 className="text-base font-bold text-ink leading-snug line-clamp-2 mb-1.5">
@@ -405,13 +442,13 @@ function StudyGroupCard({
             ))}
           </div>
           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${cap.bg} ${cap.text}`}>
-            {cap.label} · {group.current_members}/{group.max_members}
+            {cap.label} · {memberCount}/{totalCapacity}
           </span>
         </div>
         <div className="h-1 bg-canvas rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${cap.pipColor}`}
-            style={{ width: `${(group.current_members / group.max_members) * 100}%` }}
+            style={{ width: `${(memberCount / totalCapacity) * 100}%` }}
           />
         </div>
       </div>
@@ -439,9 +476,9 @@ function StudyGroupCard({
           onClick={(e) => {
             e.stopPropagation();
             if (isThisGroupActive) onLeave(group.id);
-            else if (!hasOtherActiveGroup && !isFull) onJoin(group.id);
+            else if (!hasOtherActiveGroup && !isFull && !isExpired) onJoin(group.id);
           }}
-          disabled={hasOtherActiveGroup || (!isThisGroupActive && isFull)}
+          disabled={hasOtherActiveGroup || isExpired || (!isThisGroupActive && isFull)}
           className={`
             shrink-0 flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-full
             transition-all duration-200 active:scale-[0.97]
@@ -449,7 +486,9 @@ function StudyGroupCard({
               ? "bg-alert-light text-alert border border-alert/40 hover:bg-alert/20"
               : hasOtherActiveGroup
                 ? "bg-canvas text-ink-faint border border-border cursor-not-allowed"
-                : isFull
+                : isExpired
+                  ? "bg-canvas text-ink-faint border border-border cursor-not-allowed"
+                  : isFull
                   ? "bg-canvas text-ink-faint border border-border cursor-not-allowed"
                   : "bg-brand hover:bg-brand-dark text-ink border border-brand hover:border-brand-dark hover:shadow-sm"
             }
@@ -457,6 +496,8 @@ function StudyGroupCard({
         >
           {isThisGroupActive ? (
             <><LogOut size={12} /> Leave</>
+          ) : isExpired ? (
+            <><Clock size={12} /> Expired</>
           ) : isFull ? (
             <><Users size={12} /> Full</>
           ) : hasOtherActiveGroup ? (
@@ -493,7 +534,7 @@ function CreateGroupDialog({
   subjects: Subject[];
   defaultLocationId?: number;
 }) {
-  const [form,        setForm]        = useState<CreateForm>({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
+  const [form,        setForm]        = useState<CreateForm>({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 60 });
   const [submitting,  setSubmitting]  = useState(false);
   const [success,     setSuccess]     = useState(false);
 
@@ -508,7 +549,7 @@ function CreateGroupDialog({
 
   const handleOpenChange = (next: boolean) => {
     if (!next && !submitting) {
-      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
+      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 60 });
       setSuccess(false);
     }
     onOpenChange(next);
@@ -521,7 +562,7 @@ function CreateGroupDialog({
     setSuccess(true);
     setSubmitting(false);
     setTimeout(() => {
-      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
+      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 60 });
       setSuccess(false);
       onOpenChange(false);
     }, 1400);
@@ -685,6 +726,26 @@ function CreateGroupDialog({
                     </div>
                   </div>
                 </div>
+
+                <div>
+                  <label className={FORM_LABEL}>Duration</label>
+                  <div className="relative">
+                    <select
+                      value={form.duration_minutes}
+                      onChange={(e) => setForm((f) => ({ ...f, duration_minutes: Number(e.target.value) }))}
+                      className={`${FORM_INPUT} appearance-none pr-8 cursor-pointer`}
+                    >
+                      <option value={30}>30 minutes</option>
+                      <option value={60}>1 hour</option>
+                      <option value={120}>2 hours</option>
+                      <option value={240}>4 hours</option>
+                    </select>
+                    <ChevronDown
+                      size={13}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="px-6 pb-6">
@@ -769,21 +830,26 @@ function FinderPageContent() {
 
     if (!data) { setLoading(false); return; }
 
-    // One extra query: pull every member row for these groups to get real counts.
+    // One extra query: pull every member row (with user_id) so we can count correctly.
     const ids = data.map((g) => g.id as number);
     const { data: memberRows } = ids.length
-      ? await supabase.from("study_group_members").select("group_id").in("group_id", ids)
+      ? await supabase.from("study_group_members").select("group_id, user_id").in("group_id", ids)
       : { data: [] };
 
-    // Build a map: groupId → real member count
-    const countMap: Record<number, number> = {};
-    (memberRows ?? []).forEach((m: { group_id: number }) => {
-      countMap[m.group_id] = (countMap[m.group_id] ?? 0) + 1;
+    // Build a set per group so we can detect if the host row is present.
+    // The host is always a member even if their study_group_members row is missing.
+    const memberSets: Record<number, Set<string>> = {};
+    (memberRows ?? []).forEach((m: { group_id: number; user_id: string }) => {
+      if (!memberSets[m.group_id]) memberSets[m.group_id] = new Set();
+      memberSets[m.group_id].add(m.user_id);
     });
 
     // Override current_members with the real count and self-heal stale DB counters
     const mapped = data.map((g) => {
-      const real = Math.max(1, countMap[g.id] ?? 0);
+      const memberSet = memberSets[g.id] ?? new Set<string>();
+      // Host is always a member; add them if their row was missing from the junction table
+      if (g.host_id) memberSet.add(g.host_id as string);
+      const real = Math.max(1, memberSet.size);
       if (g.current_members !== real) {
         // Fire-and-forget: sync the counter in the background
         supabase
@@ -928,6 +994,12 @@ function FinderPageContent() {
   const [alreadyEarnedToday,   setAlreadyEarnedToday]   = useState(false);   // daily cooldown for group points
   const [blockToast,           setBlockToast]           = useState<string | null>(null); // inline message
   const [newBadgeName,         setNewBadgeName]         = useState<string | null>(null);
+  const [countdownNow,         setCountdownNow]         = useState(() => new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setCountdownNow(new Date()), 1_000);
+    return () => clearInterval(id);
+  }, []);
 
   // If the host disbanded the group the user was in, the group disappears from the
   // active list but activeGroupId stays set — blocking the user from joining again.
@@ -1074,6 +1146,13 @@ function FinderPageContent() {
     await fetchGroups();
   };
 
+  const expireGroup = useCallback(async (id: number) => {
+    setGroups((prev) => prev.map((g) => g.id === id ? { ...g, is_active: false } : g));
+    if (activeGroupId === id) setActiveGroupId(null);
+    await supabase.from("study_groups").update({ is_active: false }).eq("id", id);
+    await supabase.from("study_group_members").delete().eq("group_id", id);
+  }, [supabase, activeGroupId]);
+
   const handleCreate = async (form: CreateForm) => {
     if (!currentUser) return;
     // Guard: one active session at a time
@@ -1092,19 +1171,20 @@ function FinderPageContent() {
     setScannedLocationId(undefined);
     setActiveGroupId(-1);
 
-    const expiresAt = new Date(Date.now() + 120 * 60_000).toISOString();
+    const expiresAt = new Date(Date.now() + form.duration_minutes * 60_000).toISOString();
     const { data, error } = await createStudyGroup(supabase, {
       host_id:     currentUser.id,
       location_id: form.location_id,
       subject:     form.subject,
       description: form.description,
       max_members: form.max_members,
+      duration_minutes: form.duration_minutes,
       expires_at:  expiresAt,
     });
     if (error || !data) {
       console.error("[handleCreate]", error);
       setActiveGroupId(null); // rollback
-      showBlockToast("Failed to create group. Please try again.");
+      showBlockToast(error ?? "Failed to create group. Please try again.");
       return;
     }
     // Daily cooldown: only award points once per day
@@ -1417,6 +1497,8 @@ function FinderPageContent() {
                   group={group}
                   activeGroupId={activeGroupId}
                   currentUserId={currentUser?.id ?? null}
+                  now={countdownNow}
+                  onExpire={expireGroup}
                   onSelect={() => setSelectedGroupId(group.id)}
                   onJoin={handleJoinGroup}
                   onLeave={handleLeaveGroup}
