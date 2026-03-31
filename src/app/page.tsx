@@ -404,9 +404,7 @@ function LocationDrawer({
                 ) : (
                   <button
                     onClick={onCheckIn}
-                    disabled={!!activeSession}
-                    title={activeSession ? "End your current session first" : undefined}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:bg-border disabled:text-ink-muted disabled:border-border disabled:shadow-none disabled:hover:bg-border disabled:cursor-not-allowed disabled:active:scale-100 disabled:opacity-100"
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
                   >
                     <LogIn size={15} />
                     Scan QR to Enter
@@ -911,6 +909,16 @@ export default function DashboardPage() {
     main.scrollTo({ top, behavior: "smooth" });
   };
 
+  const scrollToActive = () => {
+    const main = document.querySelector<HTMLElement>("main");
+    const activeCard = document.querySelector<HTMLElement>("#active-session-card");
+    if (!main) return;
+    const top = activeCard
+      ? main.scrollTop + activeCard.getBoundingClientRect().top - main.getBoundingClientRect().top - 12
+      : 0;
+    main.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  };
+
   // Creates an active_sessions row, awards check-in points, and recalculates location status.
   const handleCheckInSubmit = async (data: CheckInData) => {
     if (!selectedLocation || !userId) return;
@@ -1362,6 +1370,8 @@ export default function DashboardPage() {
             onCheckIn={() => {
               if (activeSession || activeGroup) {
                 showErrorToast("Leave your existing session or group first.");
+                setSelectedLocation(null);
+                scrollToActive();
                 return;
               }
               setQrScanOpen(true);
@@ -1509,6 +1519,7 @@ export default function DashboardPage() {
           const isWarning = msLeft <= 5 * 60_000; // last 5 mins
           return (
             <motion.div
+              id="active-session-card"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
