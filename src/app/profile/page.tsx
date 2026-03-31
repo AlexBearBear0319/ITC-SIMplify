@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
+import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { getLevel } from "@/lib/levels";
 import {
@@ -56,19 +57,6 @@ type UserProfile = {
   semester_term: string | null;
   equipped_badge_id: number | null;
 };
-
-type EditForm = {
-  full_name: string;
-  username: string;
-  age: string;
-  school_id: number;
-  major_id: number;
-  education_level: string;
-  semester_term: string;
-};
-
-type School = { id: number; name: string; abbr: string };
-type Major  = { id: number; name: string };
 
 type AchievementRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
 
@@ -150,10 +138,6 @@ function timeAgo(dateStr: string): string {
   return `${days} days ago`;
 }
 
-const FIELD_INPUT =
-  "w-full px-4 py-2.5 rounded-xl border border-border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow";
-const FIELD_LABEL = "block text-sm font-medium text-ink mb-1.5";
-
 // ─────────────────────────────────────────────
 // CountUp
 // ─────────────────────────────────────────────
@@ -218,13 +202,6 @@ export default function ProfilePage() {
   const prevPointsRef  = useRef<number | null>(null);
   const [pointsDelta,  setPointsDelta]  = useState<number | null>(null);
 
-  // Edit form state
-  const [editForm,        setEditForm]        = useState<EditForm>({
-    full_name: "", username: "", age: "", school_id: 0, major_id: 0,
-    education_level: "", semester_term: "",
-  });
-  const [schools,         setSchools]         = useState<School[]>([]);
-  const [majors,          setMajors]          = useState<Major[]>([]);
   const [saveState,       setSaveState]       = useState<SaveState>("idle");
   const [saveError,       setSaveError]       = useState<string | null>(null);
 
@@ -248,9 +225,6 @@ export default function ProfilePage() {
   const avatarInputRef                        = useRef<HTMLInputElement>(null);
   const [avatarPreview,   setAvatarPreview]   = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
-
-  const setEdit = <K extends keyof EditForm>(k: K, v: EditForm[K]) =>
-    setEditForm((f) => ({ ...f, [k]: v }));
 
   // ── Initial data load ──
   useEffect(() => {
@@ -317,17 +291,6 @@ export default function ProfilePage() {
         setProfile(loaded);
         prevPointsRef.current = pts;
 
-        // Initialise the edit form from loaded profile data
-        setEditForm({
-          full_name:       loaded.full_name,
-          username:        loaded.username,
-          age:             loaded.age != null ? String(loaded.age) : "",
-          school_id:       loaded.school_id  ?? 0,
-          major_id:        loaded.major_id   ?? 0,
-          education_level: loaded.education_level ?? "",
-          semester_term:   loaded.semester_term   ?? "",
-        });
-
         const unlockedMap = new Map(
           (userAchievements ?? []).map((ua) => [ua.achievement_id, ua.unlocked_at])
         );
@@ -376,29 +339,6 @@ export default function ProfilePage() {
       setLoading(false);
     });
   }, []);
-
-  // ── Load schools on mount ──
-  useEffect(() => {
-    supabase
-      .from("schools")
-      .select("id, name, abbr")
-      .order("name")
-      .then(({ data }) => { if (data) setSchools(data); });
-  }, []);
-
-  // ── Reload majors whenever school changes ──
-  useEffect(() => {
-    if (editForm.school_id === 0) {
-      setMajors([]);
-      return;
-    }
-    supabase
-      .from("majors")
-      .select("id, name")
-      .eq("school_id", editForm.school_id)
-      .order("name")
-      .then(({ data }) => { if (data) setMajors(data); });
-  }, [editForm.school_id]);
 
   // ── Re-fetch profile when the tab regains focus (handles cases where
   //    Supabase realtime is not yet enabled for the profiles table) ──
@@ -515,43 +455,6 @@ export default function ProfilePage() {
     setAvatarPreview(null);
   }
 
-  // ── Save profile edits ──
-  async function handleSaveProfile(e: React.FormEvent) {
-    e.preventDefault();
-    if (!profile) return;
-    setSaveState("saving");
-    setSaveError(null);
-
-    const updatedFields = {
-      full_name:       editForm.full_name.trim(),
-      username:        editForm.username.trim(),
-      age:             editForm.age ? Number(editForm.age) : null,
-      school_id:       editForm.school_id || null,
-      major_id:        editForm.major_id  || null,
-      education_level: editForm.education_level || null,
-      semester_term:   editForm.semester_term.trim() || null,
-    };
-
-    // Snapshot for rollback, then apply immediately so the UI updates at once.
-    const snapshotProfile = profile;
-    setProfile((prev) => prev ? { ...prev, ...updatedFields } : prev);
-
-    const { error } = await supabase
-      .from("profiles")
-      .update(updatedFields)
-      .eq("id", profile.id);
-
-    if (error) {
-      setProfile(snapshotProfile); // rollback
-      setSaveState("error");
-      setSaveError(error.message);
-      return;
-    }
-
-    setSaveState("saved");
-    setTimeout(() => setSaveState("idle"), 2500);
-  }
-
   if (loading || !profile) {
     return (
       <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
@@ -656,13 +559,13 @@ export default function ProfilePage() {
                   </h1>
                   <p className="text-sm text-ink-muted">@{profile.username}</p>
                 </div>
-                <a
-                  href="#edit-profile"
-                  className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors duration-150"
+                <Link
+                  href="/profile/edit"
+                  className="shrink-0 flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors duration-150"
                 >
-                  <Settings size={12} />
-                  Edit
-                </a>
+                  <Settings size={14} />
+                  Edit Profile
+                </Link>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -727,185 +630,6 @@ export default function ProfilePage() {
             </motion.div>
           ))}
         </motion.div>
-
-        {/* ── Edit Profile ── */}
-        <section
-          id="edit-profile"
-          className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden"
-        >
-          <div className="px-5 py-4 border-b border-border flex items-center gap-2">
-            <Settings size={16} className="text-ink-muted" />
-            <h2 className="font-semibold text-ink">Edit Profile</h2>
-          </div>
-
-          <form onSubmit={handleSaveProfile} className="p-5 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-              {/* Email (read-only — managed in Settings) */}
-              <div className="sm:col-span-2">
-                <label className={FIELD_LABEL}>Email</label>
-                <div className={`${FIELD_INPUT} bg-canvas/50 text-ink-muted cursor-not-allowed select-none`}>
-                  {profile.email}
-                </div>
-                <p className="mt-1 text-xs text-ink-faint">
-                  To change your email, go to{" "}
-                  <a href="/settings" className="underline hover:text-ink">Settings</a>.
-                </p>
-              </div>
-
-              {/* Full Name */}
-              <div>
-                <label className={FIELD_LABEL}>Full Name</label>
-                <input
-                  type="text"
-                  value={editForm.full_name}
-                  onChange={(e) => setEdit("full_name", e.target.value)}
-                  required
-                  className={FIELD_INPUT}
-                  placeholder="Your full name"
-                />
-              </div>
-
-              {/* Username */}
-              <div>
-                <label className={FIELD_LABEL}>Username</label>
-                <input
-                  type="text"
-                  value={editForm.username}
-                  onChange={(e) => setEdit("username", e.target.value)}
-                  required
-                  className={FIELD_INPUT}
-                  placeholder="your_username"
-                />
-              </div>
-
-              {/* Age */}
-              <div>
-                <label className={FIELD_LABEL}>Age</label>
-                <input
-                  type="number"
-                  min={16}
-                  max={100}
-                  value={editForm.age}
-                  onChange={(e) => setEdit("age", e.target.value)}
-                  className={FIELD_INPUT}
-                  placeholder="e.g. 21"
-                />
-              </div>
-
-              {/* Education Level */}
-              <div>
-                <label className={FIELD_LABEL}>Education Level</label>
-                <div className="relative">
-                  <select
-                    value={editForm.education_level}
-                    onChange={(e) => setEdit("education_level", e.target.value)}
-                    className={`${FIELD_INPUT} appearance-none cursor-pointer pr-8`}
-                  >
-                    <option value="">Select…</option>
-                    <option value="Diploma">Diploma</option>
-                    <option value="Undergraduate">Undergraduate</option>
-                    <option value="Postgraduate">Postgraduate</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* School */}
-              <div>
-                <label className={FIELD_LABEL}>School</label>
-                <div className="relative">
-                  <select
-                    value={editForm.school_id}
-                    onChange={(e) => {
-                      setEdit("school_id", Number(e.target.value));
-                      setEdit("major_id", 0);
-                    }}
-                    className={`${FIELD_INPUT} appearance-none cursor-pointer pr-8`}
-                  >
-                    <option value={0}>Select school…</option>
-                    {schools.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.abbr} — {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Major */}
-              <div>
-                <label className={FIELD_LABEL}>Major</label>
-                <div className="relative">
-                  <select
-                    value={editForm.major_id}
-                    onChange={(e) => setEdit("major_id", Number(e.target.value))}
-                    disabled={editForm.school_id === 0 || majors.length === 0}
-                    className={`${FIELD_INPUT} appearance-none cursor-pointer pr-8 disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    <option value={0}>
-                      {editForm.school_id === 0 ? "Select school first…" : "Select major…"}
-                    </option>
-                    {majors.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Semester / Term */}
-              <div className="sm:col-span-2">
-                <label className={FIELD_LABEL}>Semester / Term</label>
-                <input
-                  type="text"
-                  value={editForm.semester_term}
-                  onChange={(e) => setEdit("semester_term", e.target.value)}
-                  className={FIELD_INPUT}
-                  placeholder="e.g. Autumn 2025, Trimester 1"
-                />
-              </div>
-            </div>
-
-            {/* Save row */}
-            <div className="flex items-center gap-3 pt-1">
-              <button
-                type="submit"
-                disabled={saveState === "saving"}
-                className="px-5 py-2.5 rounded-full bg-ink text-surface text-sm font-medium hover:bg-ink/80 active:scale-95 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {saveState === "saving" ? "Saving…" : "Save Profile"}
-              </button>
-
-              <AnimatePresence>
-                {saveState === "saved" && (
-                  <motion.div
-                    key="saved"
-                    initial={{ opacity: 0, x: -4 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="flex items-center gap-1.5 text-success text-sm"
-                  >
-                    <CheckCircle2 size={15} />
-                    <span>Saved!</span>
-                  </motion.div>
-                )}
-                {saveState === "error" && (
-                  <motion.div
-                    key="error"
-                    initial={{ opacity: 0, x: -4 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="flex items-center gap-1.5 text-alert text-sm"
-                  >
-                    <XCircle size={15} />
-                    <span>{saveError ?? "Failed to save."}</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </form>
-        </section>
-
-
 
         {/* ── IT Club Badges ── */}
         <section>
