@@ -188,6 +188,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
   const [alreadyEarnedToday, setAlreadyEarnedToday] = useState(false);
   const [endingSession,    setEndingSession]    = useState(false);
   const [newBadgeName,     setNewBadgeName]     = useState<string | null>(null);
+  const [blockToast,       setBlockToast]       = useState<string | null>(null);
 
   // Auto-dismiss badge toast after 3 s
   useEffect(() => {
@@ -746,12 +747,19 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             {/* Scan QR — disabled when user already has an active session */}
             <button
               onClick={() => {
-                if (isBlocked) return;
+                if (isBlocked || checkInDone) {
+                  const msg = blockReason ?? "Leave your existing session first.";
+                  setBlockToast(msg);
+                  setTimeout(() => setBlockToast(null), 4000);
+                  return;
+                }
                 setQrOpen(true);
               }}
-              disabled={isBlocked || checkInDone}
+              aria-disabled={isBlocked || checkInDone}
               title={blockReason ?? undefined}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] ${
+                isBlocked || checkInDone ? "opacity-60 cursor-not-allowed" : ""
+              }`}
             >
               {checkInDone ? (
                 <><CheckCircle2 size={16} /> Checked In</>
@@ -765,6 +773,22 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             </button>
           </div>
         </div>
+
+        {/* Block toast for disabled check-in */}
+        <AnimatePresence>
+          {blockToast && (
+            <motion.div
+              key="block-toast"
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0,  scale: 1    }}
+              exit={{    opacity: 0, y: -8, scale: 0.97 }}
+              className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-start gap-2.5 bg-ink text-surface text-sm font-medium px-4 py-3 rounded-2xl shadow-xl max-w-sm w-[calc(100vw-2rem)]"
+            >
+              <AlertCircle size={16} className="text-gold shrink-0 mt-0.5" />
+              {blockToast}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Page Body ── */}
         <div className="max-w-6xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-4">
