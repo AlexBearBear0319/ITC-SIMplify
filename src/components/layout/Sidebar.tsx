@@ -128,7 +128,7 @@ export default function Sidebar() {
           <Link href="/" className="flex items-center gap-3 group flex-1 min-w-0">
             <div className="w-11 h-11 rounded-xl bg-surface border border-border flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-200 shrink-0 overflow-hidden">
               <Image
-                src="/SIMplify_logo.svg?v=20260330-1"
+                src="/SIMplify_logo_light.svg?v=20260330-1"
                 alt="SIMplify logo light"
                 width={36}
                 height={36}
