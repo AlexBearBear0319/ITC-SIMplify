@@ -26,6 +26,7 @@ import {
   LogOut,
   QrCode,
   AlertCircle,
+  Trophy,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -926,6 +927,7 @@ function FinderPageContent() {
   const [existingSoloSession,  setExistingSoloSession]  = useState(false);   // user has an active solo check-in
   const [alreadyEarnedToday,   setAlreadyEarnedToday]   = useState(false);   // daily cooldown for group points
   const [blockToast,           setBlockToast]           = useState<string | null>(null); // inline message
+  const [newBadgeName,         setNewBadgeName]         = useState<string | null>(null);
 
   // If the host disbanded the group the user was in, the group disappears from the
   // active list but activeGroupId stays set — blocking the user from joining again.
@@ -989,6 +991,12 @@ function FinderPageContent() {
     }
   };
 
+  useEffect(() => {
+    if (!newBadgeName) return;
+    const t = setTimeout(() => setNewBadgeName(null), 3000);
+    return () => clearTimeout(t);
+  }, [newBadgeName]);
+
   const showBlockToast = (msg: string) => {
     setBlockToast(msg);
     setTimeout(() => setBlockToast(null), 4000);
@@ -1028,6 +1036,15 @@ function FinderPageContent() {
       type: "group",
       description: `Joined a study group: ${joinedGroup?.subject ?? "Study Session"}`,
     });
+
+    // Check for newly unlocked achievements
+    const { data: before } = await supabase.from("user_achievements").select("achievement_id").eq("user_id", currentUser.id);
+    const beforeIds = new Set((before ?? []).map((r: { achievement_id: number }) => r.achievement_id));
+    await supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUser.id });
+    const { data: after } = await supabase.from("user_achievements").select("achievement_id, achievements(name)").eq("user_id", currentUser.id);
+    const newlyUnlocked = (after ?? []).filter((r: { achievement_id: number }) => !beforeIds.has(r.achievement_id));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (newlyUnlocked.length > 0) setNewBadgeName((newlyUnlocked[0] as any).achievements?.name ?? "Badge");
     setActiveGroupId(id);
     await fetchGroups();
   };
@@ -1103,6 +1120,15 @@ function FinderPageContent() {
       type: "group",
       description: `Created a study group: ${form.subject}`,
     });
+
+    // Check for newly unlocked achievements
+    const { data: cBefore } = await supabase.from("user_achievements").select("achievement_id").eq("user_id", currentUser.id);
+    const cBeforeIds = new Set((cBefore ?? []).map((r: { achievement_id: number }) => r.achievement_id));
+    await supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUser.id });
+    const { data: cAfter } = await supabase.from("user_achievements").select("achievement_id, achievements(name)").eq("user_id", currentUser.id);
+    const cNewlyUnlocked = (cAfter ?? []).filter((r: { achievement_id: number }) => !cBeforeIds.has(r.achievement_id));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (cNewlyUnlocked.length > 0) setNewBadgeName((cNewlyUnlocked[0] as any).achievements?.name ?? "Badge");
     setActiveGroupId(data.id);
     await fetchGroups();
   };
@@ -1134,6 +1160,23 @@ function FinderPageContent() {
           >
             <Coins size={16} />
             +{pointsDelta} pts
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Badge unlock toast */}
+      <AnimatePresence>
+        {newBadgeName && (
+          <motion.div
+            key="badge-toast"
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0,  scale: 1    }}
+            exit={{    opacity: 0, y: -16, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gold text-ink text-xs font-semibold px-4 py-2 rounded-full shadow-lg pointer-events-none whitespace-nowrap"
+          >
+            <Trophy size={13} />
+            Badge unlocked: {newBadgeName}!
           </motion.div>
         )}
       </AnimatePresence>
