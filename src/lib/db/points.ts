@@ -101,6 +101,10 @@ export async function awardPoints(
     return { data: null, error: updateError.message }
   }
 
+  // Award the same amount as EXP — exp never decreases so level always reflects
+  // total effort, even after the user spends points on rewards.
+  await supabase.rpc('increment_exp', { user_id: userId, amount: pointsToAdd })
+
   return { data: newTotal as number, error: null }
 }
 
@@ -357,9 +361,13 @@ export async function updateMissionProgress(
     return { data: null, error: error.message }
   }
 
-  // if they just completed the mission, give them the bonus points
+  // if they just completed the mission, give them the bonus points and matching EXP
   if (isCompleted && (mission.reward_points ?? 0) > 0) {
     await supabase.rpc('increment_points', {
+      user_id: userId,
+      amount: mission.reward_points,
+    })
+    await supabase.rpc('increment_exp', {
       user_id: userId,
       amount: mission.reward_points,
     })

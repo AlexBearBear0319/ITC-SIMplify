@@ -237,7 +237,7 @@ export default function ProfilePage() {
       ] = await Promise.all([
         supabase
           .from("profiles")
-          .select("id, full_name, username, avatar_url, points, streak_days, age, school_id, major_id, education_level, semester_term, featured_achievement_ids")
+          .select("id, full_name, username, avatar_url, points, exp, streak_days, age, school_id, major_id, education_level, semester_term, featured_achievement_ids")
           .eq("id", user.id)
           .single(),
         supabase
@@ -540,7 +540,7 @@ export default function ProfilePage() {
     );
   }
 
-  const level      = getLevel(profile.points);
+  const level      = getLevel(profile.exp ?? 0);
   const joinedLabel = new Date(profile.joined_at).toLocaleDateString("en-SG", {
     month: "short",
     year: "numeric",
@@ -596,13 +596,22 @@ export default function ProfilePage() {
                   </h1>
                   <p className="text-sm text-ink-muted">@{profile.username}</p>
                 </div>
-                <Link
-                  href="/profile/edit"
-                  className="shrink-0 flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors duration-150"
-                >
-                  <Settings size={14} />
-                  Edit Profile
-                </Link>
+                <div className="shrink-0 flex flex-col items-stretch gap-2">
+                  <Link
+                    href="/profile/edit"
+                    className="flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors duration-150"
+                  >
+                    <Settings size={14} />
+                    Edit Profile
+                  </Link>
+                  <Link
+                    href="/profile/rewards"
+                    className="flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2 rounded-full bg-gold-light text-gold border border-gold/30 hover:bg-gold hover:text-ink transition-colors duration-150"
+                  >
+                    <Gift size={14} />
+                    My Rewards
+                  </Link>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -665,11 +674,12 @@ export default function ProfilePage() {
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          className="grid grid-cols-3 gap-3"
+          className="grid grid-cols-2 sm:grid-cols-4 gap-3"
         >
           {(
             [
               { label: "Total Points", value: profile.points,         suffix: "",      icon: Coins,  iconClass: "text-gold",       bg: "bg-gold-light"  },
+              { label: "Total EXP",    value: profile.exp,            suffix: "",      icon: Zap,    iconClass: "text-success",    bg: "bg-success-light" },
               { label: "Study Streak", value: profile.streak_days,    suffix: " days", icon: Flame,  iconClass: "text-alert",      bg: "bg-alert-light" },
               { label: "Check-ins",    value: profile.total_checkins, suffix: "",      icon: MapPin, iconClass: "text-brand-dark", bg: "bg-brand-faint" },
             ] as const

@@ -8,6 +8,7 @@ import { createClient } from "@/utils/supabase/client";
 import {
   adminSaveEvent, adminDeleteEvent,
   adminSaveReward, adminDeleteReward, adminToggleReward, adminAdjustStock,
+  adminClaimRewardByToken,
   adminToggleAdmin, adminUpdatePoints,
   adminSaveLocation, adminDeleteLocation, adminUpdateLocationStatus,
   adminUploadLocationImage, adminUploadCampusMap,
@@ -17,6 +18,7 @@ import {
   adminSaveMajor, adminDeleteMajor,
   adminSaveSubject, adminDeleteSubject,
 } from "@/app/admin/actions";
+import RewardClaimScannerModal from "@/components/features/RewardClaimScannerModal";
 import { getLevelEmoji } from "@/lib/levels";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -26,7 +28,7 @@ import {
   Activity, MapPin, Users, Lightbulb, CalendarDays, Gift, Star,
   Plus, Pencil, Trash2, X, Coins, Shield, BarChart2, MessageSquare,
   Minus, AlertTriangle, ChevronRight, GraduationCap, BookOpen,
-  Upload, ImageIcon, Copy, CheckCircle2, Maximize2,
+  Upload, ImageIcon, Copy, CheckCircle2, Maximize2, QrCode,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -673,6 +675,11 @@ function RewardsTab() {
   const [form,      setForm]      = useState<RewardForm>(EMPTY_REWARD);
   const [saving,    setSaving]    = useState(false);
   const [confirmId, setConfirmId] = useState<number | string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [claimFeedback, setClaimFeedback] = useState<{
+    tone: "success" | "info";
+    message: string;
+  } | null>(null);
 
   const load = async () => {
     const { data } = await supabase.from("redemption_items").select("*").order("name");
@@ -731,9 +738,59 @@ function RewardsTab() {
   const set = <K extends keyof RewardForm>(k: K, v: RewardForm[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  const handleClaimToken = async (claimToken: string) => {
+    const result = await adminClaimRewardByToken(claimToken);
+
+    if (result.error) {
+      if (result.alreadyClaimed) {
+        setClaimFeedback({ tone: "info", message: result.error });
+      }
+      return result;
+    }
+
+    const rewardLabel = result.reward
+      ? `Reward #${result.reward.id} · ${result.reward.name}`
+      : "Reward";
+    const studentSuffix = result.reward?.username
+      ? ` for @${result.reward.username}`
+      : "";
+
+    setClaimFeedback({
+      tone: "success",
+      message: `${rewardLabel} marked as collected${studentSuffix}.`,
+    });
+
+    return result;
+  };
+
   return (
     <>
       <SectionHeader title="Rewards" sub="Items students can redeem with points" onAdd={openCreate} />
+
+      <div className="bg-surface rounded-2xl border border-border shadow-sm p-4 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-bold text-ink">Reward Collection Scanner</h3>
+          <p className="text-xs text-ink-muted mt-1 max-w-2xl">
+            Scan a student&apos;s <span className="font-semibold text-ink">My Rewards</span> QR pass to mark a pending redemption as collected automatically.
+          </p>
+        </div>
+        <button onClick={() => setScannerOpen(true)} className={BTN_PRI}>
+          <QrCode size={14} />
+          Scan Pickup QR
+        </button>
+      </div>
+
+      {claimFeedback && (
+        <div
+          className={`mb-4 rounded-2xl border px-4 py-3 text-sm ${
+            claimFeedback.tone === "success"
+              ? "border-success/30 bg-success-light text-success"
+              : "border-gold/30 bg-gold-light text-gold"
+          }`}
+        >
+          {claimFeedback.message}
+        </div>
+      )}
 
       {loading ? <SkeletonRows /> : (
         <DataTable heads={["Item", "Cost (pts)", "Stock", "Active", ""]}>
@@ -831,6 +888,12 @@ function RewardsTab() {
           </div>
         </div>
       </Modal>
+
+      <RewardClaimScannerModal
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onClaimToken={handleClaimToken}
+      />
     </>
   );
 }

@@ -1707,10 +1707,15 @@ export default function DashboardPage() {
                   <span className="hidden sm:block h-0.5 flex-1 rounded-full bg-linear-to-r from-brand/70 to-transparent" />
                 </div>
                 {mission && (
-                  <div className="flex items-center gap-1 bg-gold-light border border-gold/30 px-2.5 py-1 rounded-full">
+                  <div className="flex items-center gap-1.5 bg-gold-light border border-gold/30 px-2.5 py-1 rounded-full">
                     <Coins size={12} className="text-gold" />
                     <span className="text-xs font-bold text-gold">
                       +{mission.reward_points} pts
+                    </span>
+                    <span className="text-xs text-gold/60">·</span>
+                    <Zap size={11} className="text-gold/80" />
+                    <span className="text-xs font-bold text-gold/80">
+                      +{mission.reward_points} exp
                     </span>
                   </div>
                 )}
