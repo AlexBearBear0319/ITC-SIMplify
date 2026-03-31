@@ -456,6 +456,7 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter]       = useState<LocationStatus | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<DashboardLocation | null>(null);
   const [activeSession, setActiveSession]     = useState<ActiveSession | null>(null);
+  const [activeGroup, setActiveGroup]         = useState<{ id: number; subject: string; locationName: string; isHost: boolean } | null>(null);
   const [qrScanOpen, setQrScanOpen]           = useState(false);
   const [checkInOpen, setCheckInOpen]         = useState(false);
   const [feedbackOpen, setFeedbackOpen]       = useState(false);
@@ -596,6 +597,31 @@ export default function DashboardPage() {
           ),
         });
       }
+
+      // Restore any active study group membership (host or member)
+      const { data: membership } = await supabase
+        .from("study_group_members")
+        .select("group_id, study_groups(id, subject, location_id, is_active, host_id)")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      const sg = (membership as any)?.study_groups;
+      if (sg?.is_active) {
+        const { data: locRow } = await supabase
+          .from("locations")
+          .select("name")
+          .eq("id", sg.location_id)
+          .single();
+        setActiveGroup({
+          id: sg.id,
+          subject: sg.subject ?? "Study Group",
+          locationName: locRow?.name ?? "Study spot",
+          isHost: sg.host_id === user.id,
+        });
+      } else {
+        setActiveGroup(null);
+      }
     }
 
     loadProfile();
@@ -630,6 +656,35 @@ export default function DashboardPage() {
         setLocLoading(false);
         return;
       }
+            {/* Active study group indicator (host or member) */}
+            <AnimatePresence>
+              {activeGroup && (
+                <motion.div
+                  key="active-group-banner"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="fixed top-16 left-1/2 -translate-x-1/2 z-40 max-w-lg w-[calc(100vw-2rem)]"
+                >
+                  <div className="flex items-start gap-3 px-4 py-3 bg-brand-faint border border-brand/30 rounded-2xl shadow-lg">
+                    <Users size={16} className="text-brand-dark shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-ink truncate">
+                        {activeGroup.subject}
+                        <span className="text-xs text-ink-faint ml-2">at {activeGroup.locationName}</span>
+                      </p>
+                      <p className="text-[11px] text-ink-muted mt-0.5">
+                        {activeGroup.isHost ? "You are hosting this group." : "You have joined this group."}
+                      </p>
+                    </div>
+                    <span className="text-[11px] font-semibold text-brand-dark bg-brand/10 px-2 py-1 rounded-full border border-brand/30 shrink-0">
+                      Active
+                    </span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
 
       const mapped = (data ?? []).map((loc) => ({
         ...loc,
@@ -1296,7 +1351,13 @@ export default function DashboardPage() {
             location={selectedLocation}
             activeSession={activeSession}
             reviews={reviews}
-            onCheckIn={() => setQrScanOpen(true)}
+            onCheckIn={() => {
+              if (activeSession || activeGroup) {
+                showErrorToast("Leave your existing session or group first.");
+                return;
+              }
+              setQrScanOpen(true);
+            }}
             onLeaveSpot={() => setFeedbackOpen(true)}
             onClose={() => setSelectedLocation(null)}
           />
