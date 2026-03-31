@@ -398,10 +398,33 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
 
   // ── Study Buddy creation ──────────────────────────────────
   const handleStudyBuddyCreate = useCallback(async (data: StudyBuddyData) => {
-    if (!currentUserId || existingSession || existingGroupId) return;
+    if (!currentUserId) return { error: "Missing user." };
+
+    // Hard guard: one active session at a time (solo or group)
+    const { count: activeSessionCount } = await supabase
+      .from("active_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", currentUserId)
+      .eq("is_active", true);
+    if ((activeSessionCount ?? 0) > 0 || existingSession || existingGroupId) {
+      const msg = "You are already in an active session. Please leave it first.";
+      return { error: msg };
+    }
+
+    const { data: activeMembership } = await supabase
+      .from("study_group_members")
+      .select("group_id, study_groups(is_active)")
+      .eq("user_id", currentUserId)
+      .limit(1)
+      .maybeSingle();
+
+    if (activeMembership && (activeMembership as any).study_groups?.is_active) {
+      const msg = "You are already in an active session. Please leave it first.";
+      return { error: msg };
+    }
 
     // Create the study group (expires in 2 hours)
-    const expiresAt = new Date(Date.now() + 120 * 60_000).toISOString();
+    const expiresAt = new Date(Date.now() + data.duration_minutes * 60_000).toISOString();
     const { data: group, error: groupError } = await supabase
       .from("study_groups")
       .insert({
@@ -416,7 +439,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       .select("id")
       .single();
 
-    if (groupError || !group) return;
+    if (groupError || !group) return { error: groupError?.message ?? "Failed to create group." };
 
     // Add creator as first member
     await supabase.from("study_group_members").insert({
@@ -430,7 +453,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       location_id:      locationId,
       activity:         "study_group",
       module:           data.topic || null,
-      duration_minutes: 120,
+      duration_minutes: data.duration_minutes,
       seats_taken:      1,
       needs_power:      data.needs_power,
       is_active:        true,

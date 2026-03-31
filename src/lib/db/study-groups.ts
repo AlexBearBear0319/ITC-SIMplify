@@ -82,7 +82,48 @@ export type CreateStudyGroupData = {
   subject: string
   max_members?: number    // defaults to 5
   description?: string
+  duration_minutes?: number
   expires_at?: string     // ISO datetime
+}
+
+async function getActiveSessionBlockReason(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string | null> {
+  // Any active session (solo or group) blocks new joins/creates
+  const { count: activeSessionCount } = await supabase
+    .from('active_sessions')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('is_active', true)
+
+  if ((activeSessionCount ?? 0) > 0) {
+    return 'You are already in an active session. Please leave it first.'
+  }
+
+  // Any active study group membership (host or member) also blocks
+  const { data: activeMembership } = await supabase
+    .from('study_group_members')
+    .select('group_id, study_groups(is_active)', { count: 'exact' })
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle()
+
+  if (activeMembership && (activeMembership as any).study_groups?.is_active) {
+    return 'You are already in an active session. Please leave it first.'
+  }
+
+  const { count: hostingCount } = await supabase
+    .from('study_groups')
+    .select('id', { count: 'exact', head: true })
+    .eq('host_id', userId)
+    .eq('is_active', true)
+
+  if ((hostingCount ?? 0) > 0) {
+    return 'You are already in an active session. Please leave it first.'
+  }
+
+  return null
 }
 
 /**
@@ -93,6 +134,12 @@ export async function createStudyGroup(
   supabase: SupabaseClient,
   groupData: CreateStudyGroupData,
 ): Promise<DbResult<StudyGroup>> {
+  const blockReason = await getActiveSessionBlockReason(supabase, groupData.host_id)
+  if (blockReason) return { data: null, error: blockReason }
+
+  const expiresAt = groupData.expires_at
+    ?? (groupData.duration_minutes ? new Date(Date.now() + groupData.duration_minutes * 60_000).toISOString() : null)
+
   const { data: group, error: groupError } = await supabase
     .from('study_groups')
     .insert({
@@ -102,7 +149,7 @@ export async function createStudyGroup(
       max_members:     groupData.max_members ?? 5,
       current_members: 1,
       description:     groupData.description ?? null,
-      expires_at:      groupData.expires_at ?? null,
+      expires_at:      expiresAt,
       is_active:       true,
     })
     .select()
@@ -123,6 +170,13 @@ export async function createStudyGroup(
     return { data: null, error: memberError.message }
   }
 
+  // Fire-and-forget activity log so the profile feed shows the creation
+  supabase.from('activity_log').insert({
+    user_id:     groupData.host_id,
+    type:        'group',
+    description: `Created a study group: ${groupData.subject}`,
+  })
+
   return { data: group as StudyGroup, error: null }
 }
 
@@ -137,6 +191,9 @@ export async function joinStudyGroup(
   groupId: number,
   userId: string,
 ): Promise<DbResult<StudyGroupMember>> {
+  const blockReason = await getActiveSessionBlockReason(supabase, userId)
+  if (blockReason) return { data: null, error: blockReason }
+
   const { data: group, error: fetchError } = await supabase
     .from('study_groups')
     .select('max_members, is_active')
@@ -173,6 +230,12 @@ export async function joinStudyGroup(
 
   // Sync counter via SECURITY DEFINER RPC so RLS doesn't block the update
   await supabase.rpc('sync_group_member_count', { p_group_id: groupId })
+
+  supabase.from('activity_log').insert({
+    user_id:     userId,
+    type:        'group',
+    description: 'Joined a study group',
+  })
 
   return { data: member as StudyGroupMember, error: null }
 }

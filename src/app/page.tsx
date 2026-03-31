@@ -981,9 +981,37 @@ export default function DashboardPage() {
 
   // Creates a study group at the selected location, reserves seats, and awards points.
   const handleStudyBuddySubmit = async (data: StudyBuddyData) => {
-    if (!selectedLocation || !userId) return;
+    if (!selectedLocation || !userId) return { error: "Missing location or user." };
 
     const supabase = createClient();
+
+    // Hard block: user already in any active session
+    const { count: activeSessionCount } = await supabase
+      .from("active_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_active", true);
+    if ((activeSessionCount ?? 0) > 0) {
+      const msg = "You are already in an active session. Please leave it first.";
+      showErrorToast(msg);
+      return { error: msg };
+    }
+
+    // Block if user is already in an active study group via membership
+    const { data: activeMembership } = await supabase
+      .from("study_group_members")
+      .select("group_id, study_groups(is_active)")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+
+    if (activeMembership && (activeMembership as any).study_groups?.is_active) {
+      const msg = "You are already in an active session. Please leave it first.";
+      showErrorToast(msg);
+      return { error: msg };
+    }
+
+    const durationMs = data.duration_minutes * 60_000;
 
     // Optimistic: show the active-session banner and close the modal immediately.
     setActiveSession({
@@ -992,12 +1020,13 @@ export default function DashboardPage() {
       seats_needed:     data.max_members,
       activity:         "study",
       module:           data.topic,
-      duration_minutes: 120,
-      endsAt:           new Date(Date.now() + 120 * 60_000),
+      duration_minutes: data.duration_minutes,
+      endsAt:           new Date(Date.now() + durationMs),
     });
     setStudyBuddyOpen(false);
 
     // 1. Create the study group
+    const expiresAt = new Date(Date.now() + durationMs).toISOString();
     const { data: group, error: groupError } = await supabase
       .from("study_groups")
       .insert({
@@ -1007,6 +1036,7 @@ export default function DashboardPage() {
         max_members:     data.max_members,
         current_members: 1,
         is_active:       true,
+        expires_at:      expiresAt,
       })
       .select("id")
       .single();
@@ -1014,8 +1044,9 @@ export default function DashboardPage() {
     if (groupError || !group) {
       console.error("[study-buddy] Failed to create group:", groupError?.message);
       setActiveSession(null); // rollback
-      showErrorToast("Failed to create study group. Please try again.");
-      return;
+      const msg = groupError?.message ?? "Failed to create study group. Please try again.";
+      showErrorToast(msg);
+      return { error: msg };
     }
 
     // 2. Add the creator as the first member
@@ -1032,7 +1063,7 @@ export default function DashboardPage() {
         location_id:      selectedLocation.id,
         activity:         "study_group",
         module:           data.topic || null,
-        duration_minutes: 120,
+        duration_minutes: data.duration_minutes,
         seats_taken:      1,
         needs_power:      data.needs_power,
         is_active:        true,
@@ -1060,6 +1091,12 @@ export default function DashboardPage() {
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, userId, POINT_ACTIONS.CREATE_STUDY_GROUP);
+
+    supabase.from("activity_log").insert({
+      user_id:     userId,
+      type:        "group",
+      description: `Created a study group at ${selectedLocation.name}`,
+    });
 
     // 5. Recalculate location status
     const { data: activeSessions } = await supabase

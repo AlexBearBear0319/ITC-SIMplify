@@ -60,6 +60,7 @@ type CreateForm = {
   description: string;
   location_id: number;
   max_members: number;
+  duration_minutes: number;
 };
 
 
@@ -532,7 +533,7 @@ function CreateGroupDialog({
   subjects: Subject[];
   defaultLocationId?: number;
 }) {
-  const [form,        setForm]        = useState<CreateForm>({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
+  const [form,        setForm]        = useState<CreateForm>({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 120 });
   const [submitting,  setSubmitting]  = useState(false);
   const [success,     setSuccess]     = useState(false);
 
@@ -547,7 +548,7 @@ function CreateGroupDialog({
 
   const handleOpenChange = (next: boolean) => {
     if (!next && !submitting) {
-      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
+      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 120 });
       setSuccess(false);
     }
     onOpenChange(next);
@@ -560,7 +561,7 @@ function CreateGroupDialog({
     setSuccess(true);
     setSubmitting(false);
     setTimeout(() => {
-      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4 });
+      setForm({ subject: "", description: "", location_id: defaultLocationId ?? 0, max_members: 4, duration_minutes: 120 });
       setSuccess(false);
       onOpenChange(false);
     }, 1400);
@@ -722,6 +723,25 @@ function CreateGroupDialog({
                         <Plus size={12} />
                       </button>
                     </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className={FORM_LABEL}>Duration</label>
+                  <div className="relative">
+                    <select
+                      value={form.duration_minutes}
+                      onChange={(e) => setForm((f) => ({ ...f, duration_minutes: Number(e.target.value) }))}
+                      className={`${FORM_INPUT} appearance-none pr-8 cursor-pointer`}
+                    >
+                      <option value={60}>1 hour</option>
+                      <option value={120}>2 hours</option>
+                      <option value={240}>4 hours</option>
+                    </select>
+                    <ChevronDown
+                      size={13}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none"
+                    />
                   </div>
                 </div>
               </div>
@@ -1073,12 +1093,6 @@ function FinderPageContent() {
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.JOIN_GROUP);
-    const joinedGroup = groups.find((g) => g.id === id);
-    supabase.from("activity_log").insert({
-      user_id: currentUser.id,
-      type: "group",
-      description: `Joined a study group: ${joinedGroup?.subject ?? "Study Session"}`,
-    });
     setActiveGroupId(id);
     await fetchGroups();
   };
@@ -1133,19 +1147,20 @@ function FinderPageContent() {
     setScannedLocationId(undefined);
     setActiveGroupId(-1);
 
-    const expiresAt = new Date(Date.now() + 120 * 60_000).toISOString();
+    const expiresAt = new Date(Date.now() + form.duration_minutes * 60_000).toISOString();
     const { data, error } = await createStudyGroup(supabase, {
       host_id:     currentUser.id,
       location_id: form.location_id,
       subject:     form.subject,
       description: form.description,
       max_members: form.max_members,
+      duration_minutes: form.duration_minutes,
       expires_at:  expiresAt,
     });
     if (error || !data) {
       console.error("[handleCreate]", error);
       setActiveGroupId(null); // rollback
-      showBlockToast("Failed to create group. Please try again.");
+      showBlockToast(error ?? "Failed to create group. Please try again.");
       return;
     }
     // Daily cooldown: only award points once per day
@@ -1156,11 +1171,6 @@ function FinderPageContent() {
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);
-    supabase.from("activity_log").insert({
-      user_id: currentUser.id,
-      type: "group",
-      description: `Created a study group: ${form.subject}`,
-    });
     setActiveGroupId(data.id);
     await fetchGroups();
   };
