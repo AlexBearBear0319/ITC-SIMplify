@@ -218,6 +218,7 @@ export default function ProfilePage() {
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
+      await supabase.rpc("check_and_unlock_achievements", { p_user_id: user.id });
 
       const [
         { data: prof },
@@ -449,6 +450,23 @@ export default function ProfilePage() {
         .then(() => {});
       return next;
     });
+  }
+
+  async function handleEquipBadge(id: number) {
+    if (!profile) return;
+    const previous = profile.equipped_badge_id;
+    const next = previous === id ? null : id;
+
+    setProfile((prev) => (prev ? { ...prev, equipped_badge_id: next } : prev));
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ equipped_badge_id: next })
+      .eq("id", profile.id);
+
+    if (error) {
+      setProfile((prev) => (prev ? { ...prev, equipped_badge_id: previous } : prev));
+    }
   }
 
   if (loading || !profile) {
@@ -687,6 +705,22 @@ export default function ProfilePage() {
                   {achievement.unlocked && (
                     <div className="flex flex-col items-center gap-1">
                       <CheckCircle2 size={16} className="shrink-0 text-success" />
+                      <button
+                        type="button"
+                        onClick={() => handleEquipBadge(achievement.id)}
+                        title={
+                          profile.equipped_badge_id === achievement.id
+                            ? "Badge equipped"
+                            : "Equip badge"
+                        }
+                        className={`shrink-0 transition-colors ${
+                          profile.equipped_badge_id === achievement.id
+                            ? "text-brand-dark"
+                            : "text-ink-faint hover:text-brand-dark"
+                        }`}
+                      >
+                        <Crown size={15} fill={profile.equipped_badge_id === achievement.id ? "currentColor" : "none"} />
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleToggleFeatured(achievement.id)}

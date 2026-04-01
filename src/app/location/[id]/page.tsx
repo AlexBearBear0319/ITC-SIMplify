@@ -204,6 +204,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id ?? null;
       if (userId) setCurrentUserId(userId);
+      if (userId) await supabase.rpc("check_and_unlock_achievements", { p_user_id: userId });
 
       const [locRes, logsRes, revsRes, groupsRes, sessionsRes] = await Promise.all([
         supabase.from("locations").select("id, name, category, current_status, image_url, coordinates_x, coordinates_y, description, total_seats, power_outlets, location_text").eq("id", locationId).single(),
@@ -355,6 +356,18 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             }, 0);
             console.log("[Realtime Update] New power outlets used:", powerUsed);
             setPowerOutletsUsed(powerUsed);
+
+            const totalSeats = location?.total_seats ?? 0;
+            const fillPct = totalSeats > 0 ? (occupied / totalSeats) * 100 : 0;
+            const derivedStatus: LocationStatus =
+              fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+
+            setActiveStatus(derivedStatus);
+            setLocation((prev) => (prev ? { ...prev, current_status: derivedStatus } : prev));
+
+            if (location && derivedStatus !== (location.current_status ?? "empty")) {
+              void supabase.from("locations").update({ current_status: derivedStatus }).eq("id", locationId);
+            }
           }
         }
       )
@@ -365,7 +378,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [locationId, supabase]);
+  }, [location?.current_status, location?.total_seats, locationId, supabase]);
   const handleEndSession = useCallback(async () => {
     if (!existingSession && !existingGroupId) return;
     setEndingSession(true);
@@ -918,11 +931,6 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                         <span>{seatsOccupied} occupied</span>
                         <span>{location.total_seats} total</span>
                       </div>
-                      <div className="px-3 py-2 rounded-lg bg-canvas border border-border">
-                        <p className="text-xs font-semibold text-ink">
-                          Seats left: <span className="text-success font-bold">{location.total_seats - seatsOccupied}/{location.total_seats}</span>
-                        </p>
-                      </div>
                     </>
                   ) : (
                     <>
@@ -973,40 +981,6 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                       <span>{powerOutletsUsed} in use</span>
                       <span>{location.power_outlets} total</span>
                     </div>
-                    <div className="px-3 py-2 rounded-lg bg-canvas border border-border">
-                      <p className="text-xs font-semibold text-ink">
-                        Power outlet left: <span className="text-gold font-bold">{location.power_outlets - powerOutletsUsed}/{location.power_outlets}</span>
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Availability Summary */}
-                {(location.total_seats || location.power_outlets) && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {location.total_seats && (
-                      <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm">
-                        <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2">Study Seats</p>
-                        <p className="text-xl font-bold text-ink">
-                          {location.total_seats - seatsOccupied}
-                          <span className="text-xs text-ink-muted font-normal">/{location.total_seats}</span>
-                        </p>
-                        <p className="text-[10px] text-ink-muted mt-1">left available</p>
-                      </div>
-                    )}
-                    {location.power_outlets && location.power_outlets > 0 && (
-                      <div className="bg-surface rounded-2xl border border-border p-4 shadow-sm">
-                        <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-2 flex items-center gap-1">
-                          <Zap size={10} />
-                          Power Outlets
-                        </p>
-                        <p className="text-xl font-bold text-ink">
-                          {location.power_outlets - powerOutletsUsed}
-                          <span className="text-xs text-ink-muted font-normal">/{location.power_outlets}</span>
-                        </p>
-                        <p className="text-[10px] text-ink-muted mt-1">left available</p>
-                      </div>
-                    )}
                   </div>
                 )}
 

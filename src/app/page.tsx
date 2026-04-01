@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import InteractiveMap from "@/components/features/InteractiveMap";
@@ -98,6 +98,11 @@ type DashboardProfile = {
   points: number;
   level: number;
   streak_days: number;
+};
+
+type LocationLiveStats = {
+  seatsOccupied: number;
+  powerOutletsUsed: number;
 };
 
 // ─────────────────────────────────────────────
@@ -198,6 +203,7 @@ function getInitials(name: string): string {
 
 function LocationDrawer({
   location,
+  liveStats,
   activeSession,
   reviews,
   onCheckIn,
@@ -205,6 +211,7 @@ function LocationDrawer({
   onClose,
 }: {
   location: DashboardLocation;
+  liveStats?: LocationLiveStats;
   activeSession: ActiveSession | null;
   reviews: Review[];
   onCheckIn: () => void;
@@ -223,6 +230,14 @@ function LocationDrawer({
 
   const totalImages = location.images?.length ?? 0;
   const currentImage = hasImages ? location.images![activeImageIndex] : null;
+  const seatsLeft =
+    location.total_seats != null && liveStats
+      ? Math.max(0, location.total_seats - liveStats.seatsOccupied)
+      : null;
+  const outletsLeft =
+    location.power_outlets != null && liveStats
+      ? Math.max(0, location.power_outlets - liveStats.powerOutletsUsed)
+      : null;
 
   const showPrevImage = () => {
     if (!hasImages || totalImages <= 1) return;
@@ -354,17 +369,27 @@ function LocationDrawer({
                 {location.total_seats != null && (
                   <div className="flex items-center gap-1.5 text-xs text-ink-muted">
                     <Users size={13} className="text-brand-dark shrink-0" />
-                    {location.total_seats} seats
+                    {seatsLeft != null ? `${seatsLeft}/${location.total_seats} seats left` : `${location.total_seats} seats`}
                   </div>
                 )}
                 {location.power_outlets != null && (
                   <div className="flex items-center gap-1.5 text-xs text-ink-muted">
                     <Zap size={13} className="text-brand-dark shrink-0" />
-                    {location.power_outlets} outlets
+                    {outletsLeft != null ? `${outletsLeft}/${location.power_outlets} outlets left` : `${location.power_outlets} outlets`}
                   </div>
                 )}
               </div>
             )}
+
+            <div className="mt-3">
+              <Link
+                href={`/location/${location.id}`}
+                onClick={onClose}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors"
+              >
+                View latest status
+              </Link>
+            </div>
 
             {/* ── Description ── */}
             {location.description && (
@@ -486,12 +511,14 @@ export default function DashboardPage() {
 
   // Computed from active_sessions seat tallies — drives the Peak Hour Alert banner
   const [busiestLocation, setBusiestLocation] = useState<{ name: string; seats: number } | null>(null);
+  const [liveStatsByLocation, setLiveStatsByLocation] = useState<Record<number, LocationLiveStats>>({});
 
   // Locations
   const [locations, setLocations]   = useState<DashboardLocation[]>([]);
   const [locLoading, setLocLoading] = useState(true);
   const [locError, setLocError]     = useState<string | null>(null);
   const [mapImageUrl, setMapImageUrl] = useState<string | undefined>(undefined);
+  const locationsRef = useRef<DashboardLocation[]>([]);
 
   // Daily mission
   const [mission, setMission]           = useState<Mission | null>(null);
@@ -536,7 +563,52 @@ export default function DashboardPage() {
   // Reviews for selected location
   const [reviews, setReviews] = useState<Review[]>([]);
 
+  function applyLiveStats(
+    sessions: Array<{ location_id: number | null; seats_taken: number | null; needs_power?: boolean }> | null,
+    locationSource: DashboardLocation[] = locationsRef.current,
+  ) {
+    const stats: Record<number, LocationLiveStats> = {};
+
+    (sessions ?? []).forEach((session) => {
+      if (session.location_id == null) return;
+
+      const seats = session.seats_taken ?? 1;
+      if (!stats[session.location_id]) {
+        stats[session.location_id] = { seatsOccupied: 0, powerOutletsUsed: 0 };
+      }
+
+      stats[session.location_id].seatsOccupied += seats;
+      if (session.needs_power) {
+        stats[session.location_id].powerOutletsUsed += seats * 2;
+      }
+    });
+
+    setLiveStatsByLocation(stats);
+
+    const entries = Object.entries(stats);
+    if (entries.length === 0) {
+      setBusiestLocation(null);
+      return;
+    }
+
+    const [busiestIdRaw, busiest] = entries.sort(
+      (a, b) => b[1].seatsOccupied - a[1].seatsOccupied
+    )[0];
+    const busiestId = Number(busiestIdRaw);
+    const loc = locationSource.find((l) => l.id === busiestId) ?? locationsRef.current.find((l) => l.id === busiestId);
+    if (!loc) {
+      setBusiestLocation(null);
+      return;
+    }
+
+    setBusiestLocation({ name: loc.name, seats: busiest.seatsOccupied });
+  }
+
   useEffect(() => { setGreeting(getGreeting()); }, []);
+
+  useEffect(() => {
+    locationsRef.current = locations;
+  }, [locations]);
 
   // Fetches profile and restores any active session that survived a page refresh.
   useEffect(() => {
@@ -547,6 +619,7 @@ export default function DashboardPage() {
       if (!user) return;
 
       setUserId(user.id);
+      await supabase.rpc("check_and_unlock_achievements", { p_user_id: user.id });
 
       const { data } = await supabase
         .from("profiles")
@@ -654,39 +727,10 @@ export default function DashboardPage() {
         setLocLoading(false);
         return;
       }
-            {/* Active study group indicator (host or member) */}
-            <AnimatePresence>
-              {activeGroup && (
-                <motion.div
-                  key="active-group-banner"
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="fixed top-16 left-1/2 -translate-x-1/2 z-40 max-w-lg w-[calc(100vw-2rem)]"
-                >
-                  <div className="flex items-start gap-3 px-4 py-3 bg-brand-faint border border-brand/30 rounded-2xl shadow-lg">
-                    <Users size={16} className="text-brand-dark shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-ink truncate">
-                        {activeGroup.subject}
-                        <span className="text-xs text-ink-faint ml-2">at {activeGroup.locationName}</span>
-                      </p>
-                      <p className="text-[11px] text-ink-muted mt-0.5">
-                        {activeGroup.isHost ? "You are hosting this group." : "You have joined this group."}
-                      </p>
-                    </div>
-                    <span className="text-[11px] font-semibold text-brand-dark bg-brand/10 px-2 py-1 rounded-full border border-brand/30 shrink-0">
-                      Active
-                    </span>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
 
       const mapped = (data ?? []).map((loc) => ({
         ...loc,
-        current_status: (loc.current_status as string).toLowerCase() as LocationStatus,
+        current_status: ((loc.current_status ?? "empty") as string).toLowerCase() as LocationStatus,
       }));
 
       setLocations(mapped);
@@ -698,22 +742,11 @@ export default function DashboardPage() {
           : prev
       );
 
-      // Tally seats per location to find the busiest spot for the alert banner
       const { data: sessions } = await supabase
         .from("active_sessions")
-        .select("location_id, seats_taken")
+        .select("location_id, seats_taken, needs_power")
         .eq("is_active", true);
-
-      if (sessions && sessions.length > 0) {
-        const tally: Record<number, number> = {};
-        sessions.forEach((s) => {
-          tally[s.location_id] = (tally[s.location_id] ?? 0) + (s.seats_taken ?? 1);
-        });
-        const sorted     = Object.entries(tally).sort((a, b) => b[1] - a[1]);
-        const busiestId  = Number(sorted[0][0]);
-        const busiestLoc = mapped.find((l) => l.id === busiestId);
-        if (busiestLoc) setBusiestLocation({ name: busiestLoc.name, seats: tally[busiestId] });
-      }
+      applyLiveStats(sessions, mapped);
 
       setLocLoading(false);
     }
@@ -811,6 +844,18 @@ export default function DashboardPage() {
       });
   }, [selectedLocation]);
 
+  useEffect(() => {
+    if (!selectedLocation) return;
+    const latest = locations.find((loc) => loc.id === selectedLocation.id);
+    if (!latest) {
+      setSelectedLocation(null);
+      return;
+    }
+    if (latest !== selectedLocation) {
+      setSelectedLocation(latest);
+    }
+  }, [locations, selectedLocation]);
+
   // Realtime subscription — keeps status dots and the busiest-location banner in sync
   // without requiring a manual refresh.
   useEffect(() => {
@@ -825,7 +870,7 @@ export default function DashboardPage() {
           setLocations((prev) =>
             prev.map((loc) =>
               loc.id === payload.new.id
-                ? { ...loc, current_status: payload.new.current_status as LocationStatus }
+                ? { ...loc, current_status: ((payload.new.current_status ?? "empty") as string).toLowerCase() as LocationStatus }
                 : loc
             )
           );
@@ -837,25 +882,10 @@ export default function DashboardPage() {
         () => {
           supabase
             .from("active_sessions")
-            .select("location_id, seats_taken")
+            .select("location_id, seats_taken, needs_power")
             .eq("is_active", true)
             .then(({ data: sessions }) => {
-              if (!sessions || sessions.length === 0) {
-                setBusiestLocation(null);
-                return;
-              }
-              const tally: Record<number, number> = {};
-              sessions.forEach((s) => {
-                tally[s.location_id] = (tally[s.location_id] ?? 0) + (s.seats_taken ?? 1);
-              });
-              const sorted    = Object.entries(tally).sort((a, b) => b[1] - a[1]);
-              const busiestId = Number(sorted[0][0]);
-              // Read latest locations state functionally to avoid stale closure
-              setLocations((prev) => {
-                const loc = prev.find((l) => l.id === busiestId);
-                if (loc) setBusiestLocation({ name: loc.name, seats: tally[busiestId] });
-                return prev;
-              });
+              applyLiveStats(sessions);
             });
         }
       )
@@ -1365,6 +1395,7 @@ export default function DashboardPage() {
         {selectedLocation && (
           <LocationDrawer
             location={selectedLocation}
+            liveStats={liveStatsByLocation[selectedLocation.id]}
             activeSession={activeSession}
             reviews={reviews}
             onCheckIn={() => {
@@ -1379,6 +1410,35 @@ export default function DashboardPage() {
             onLeaveSpot={() => setFeedbackOpen(true)}
             onClose={() => setSelectedLocation(null)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Active study group indicator (host or member) */}
+      <AnimatePresence>
+        {activeGroup && (
+          <motion.div
+            key="active-group-banner"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="fixed top-16 left-1/2 -translate-x-1/2 z-40 max-w-lg w-[calc(100vw-2rem)]"
+          >
+            <div className="flex items-start gap-3 px-4 py-3 bg-brand-faint border border-brand/30 rounded-2xl shadow-lg">
+              <Users size={16} className="text-brand-dark shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-ink truncate">
+                  {activeGroup.subject}
+                  <span className="text-xs text-ink-faint ml-2">at {activeGroup.locationName}</span>
+                </p>
+                <p className="text-[11px] text-ink-muted mt-0.5">
+                  {activeGroup.isHost ? "You are hosting this group." : "You have joined this group."}
+                </p>
+              </div>
+              <span className="text-[11px] font-semibold text-brand-dark bg-brand/10 px-2 py-1 rounded-full border border-brand/30 shrink-0">
+                Active
+              </span>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 

@@ -23,6 +23,7 @@ import {
   Zap,
   CheckCircle2,
   Clock,
+  QrCode,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -266,6 +267,7 @@ function RedemptionItemCard({
 // ─────────────────────────────────────────────
 
 type CheckoutState = "confirm" | "success";
+type CheckoutResult = { ok: boolean; error?: string };
 
 function CheckoutDialog({
   item,
@@ -278,16 +280,37 @@ function CheckoutDialog({
   open: boolean;
   userPoints: number;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<CheckoutResult>;
 }) {
   const [step, setStep] = useState<CheckoutState>("confirm");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  function handleConfirm() {
+  useEffect(() => {
+    if (!open) {
+      setStep("confirm");
+      setSubmitting(false);
+      setSubmitError(null);
+    }
+  }, [open]);
+
+  async function handleConfirm() {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    const result = await onConfirm();
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setSubmitError(result.error ?? "Redemption failed. Please try again.");
+      return;
+    }
+
     setStep("success");
-    onConfirm(); // optimistic point deduction in parent
     setTimeout(() => {
       onClose();
       setStep("confirm"); // reset for next open (fires after dialog unmounts)
+      setSubmitError(null);
     }, 1600);
   }
 
@@ -297,7 +320,7 @@ function CheckoutDialog({
   const remaining = userPoints - item.cost;
 
   return (
-    <Dialog.Root open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+    <Dialog.Root open={open} onOpenChange={(v) => { if (!v && !submitting) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <Dialog.Content
@@ -315,7 +338,7 @@ function CheckoutDialog({
           >
             {step === "confirm" && (
               <button
-                onClick={onClose}
+                onClick={() => { if (!submitting) onClose(); }}
                 className="absolute top-4 right-4 p-1.5 rounded-full text-ink-muted hover:bg-canvas transition-colors"
               >
                 <X size={16} />
@@ -364,16 +387,21 @@ function CheckoutDialog({
 
                   <button
                     onClick={handleConfirm}
-                    className="w-full py-3 rounded-full bg-gold text-ink font-semibold hover:bg-gold/80 active:scale-95 transition-all duration-150"
+                    disabled={submitting}
+                    className="w-full py-3 rounded-full bg-gold text-ink font-semibold hover:bg-gold/80 active:scale-95 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Confirm Redemption
+                    {submitting ? "Redeeming..." : "Confirm Redemption"}
                   </button>
                   <button
                     onClick={onClose}
+                    disabled={submitting}
                     className="w-full py-2 text-sm text-ink-muted hover:text-ink transition-colors"
                   >
                     Cancel
                   </button>
+                  {submitError && (
+                    <p className="text-xs text-alert text-center">{submitError}</p>
+                  )}
                 </motion.div>
               ) : (
                 <motion.div
@@ -474,54 +502,73 @@ export default function RewardsPage() {
     setDialogOpen(true);
   }
 
-  async function handleConfirm() {
-    if (!selectedItem || !userId) return;
+  async function handleConfirm(): Promise<CheckoutResult> {
+    if (!selectedItem || !userId) {
+      return { ok: false, error: "Missing reward or user session." };
+    }
 
     const supabase = createClient();
     const cost = selectedItem.cost;
-
-    // Optimistic: deduct points and decrement stock in the UI immediately
-    setPoints((prev) => prev - cost);
-    setItems((prev) =>
-      prev.map((i) => i.id === selectedItem.id ? { ...i, stock: Math.max(0, i.stock - 1) } : i)
-    );
-
-    // 1. Deduct points from the DB
-    const { error: pointsError } = await supabase.rpc("increment_points", {
-      user_id: userId,
-      amount:  -cost,
-    });
-
-    if (pointsError) {
-      // Rollback both optimistic updates
-      setPoints((prev) => prev + cost);
-      setItems((prev) =>
-        prev.map((i) => i.id === selectedItem.id ? { ...i, stock: i.stock + 1 } : i)
-      );
-      console.error("[redeem] Failed to deduct points:", pointsError.message);
-      return;
+    if (points < cost) {
+      return { ok: false, error: "Not enough points for this reward." };
+    }
+    if ((selectedItem.stock ?? 0) <= 0) {
+      return { ok: false, error: "This reward is out of stock." };
     }
 
-    // 2. Atomically decrement stock (prevents negative stock under concurrent redemptions)
-    await supabase.rpc("decrement_item_stock", { p_item_id: selectedItem.id });
-
-    // 3. Record the redemption for admin tracking
-    const { data: newRedemption } = await supabase
+    // 1. Create redemption row first so we never show a fake success without a pass.
+    const { data: newRedemption, error: redemptionError } = await supabase
       .from("user_redemptions")
       .insert({ user_id: userId, item_id: selectedItem.id, status: "pending" })
       .select("id, redeemed_at, status, redemption_items(name)")
       .single();
 
-    if (newRedemption) {
-      setRedemptions((prev) => [newRedemption as unknown as UserRedemption, ...prev]);
+    if (redemptionError || !newRedemption) {
+      return { ok: false, error: redemptionError?.message ?? "Could not create redemption pass." };
     }
 
-    // 4. Write activity log (fire-and-forget)
+    const cancelRedemption = async () => {
+      await supabase
+        .from("user_redemptions")
+        .update({ status: "cancelled" })
+        .eq("id", newRedemption.id);
+    };
+
+    // 2. Deduct points from DB.
+    const { error: pointsError } = await supabase.rpc("increment_points", {
+      user_id: userId,
+      amount: -cost,
+    });
+    if (pointsError) {
+      await cancelRedemption();
+      return { ok: false, error: pointsError.message };
+    }
+
+    // 3. Decrement stock atomically.
+    const { error: stockError } = await supabase.rpc("decrement_item_stock", {
+      p_item_id: selectedItem.id,
+    });
+    if (stockError) {
+      await supabase.rpc("increment_points", { user_id: userId, amount: cost });
+      await cancelRedemption();
+      return { ok: false, error: stockError.message };
+    }
+
+    // 4. Apply UI updates only after DB operations succeed.
+    setPoints((prev) => prev - cost);
+    setItems((prev) =>
+      prev.map((i) => i.id === selectedItem.id ? { ...i, stock: Math.max(0, i.stock - 1) } : i)
+    );
+    setRedemptions((prev) => [newRedemption as unknown as UserRedemption, ...prev]);
+
+    // 5. Write activity log (fire-and-forget)
     supabase.from("activity_log").insert({
-      user_id:     userId,
-      type:        "redemption",
+      user_id: userId,
+      type: "redemption",
       description: `Redeemed "${selectedItem.name}"`,
     });
+
+    return { ok: true };
   }
 
   function handleClose() {
@@ -561,11 +608,20 @@ export default function RewardsPage() {
       <div className="max-w-6xl mx-auto space-y-8">
 
         {/* Page header */}
-        <div>
-          <h1 className="text-2xl font-extrabold text-ink">Rewards Store</h1>
-          <p className="text-sm text-ink-muted mt-1">
-            Spend your points on exclusive perks ✨
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-extrabold text-ink">Rewards Store</h1>
+            <p className="text-sm text-ink-muted mt-1">
+              Spend your points on exclusive perks ✨
+            </p>
+          </div>
+          <Link
+            href="/profile/rewards"
+            className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-full bg-gold-light text-gold border border-gold/30 hover:bg-gold hover:text-ink transition-colors"
+          >
+            <QrCode size={14} />
+            My Rewards
+          </Link>
         </div>
 
         {/* Balance hero */}
