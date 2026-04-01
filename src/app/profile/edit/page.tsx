@@ -46,6 +46,7 @@ export default function EditProfilePage() {
   const [majors, setMajors] = useState<Major[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [metaError, setMetaError] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -69,11 +70,51 @@ export default function EditProfilePage() {
         return;
       }
 
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("id, full_name, username, avatar_url, age, school_id, major_id, education_level, semester_term")
-        .eq("id", user.id)
-        .single();
+      const [profileResult, schoolsResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, full_name, username, avatar_url, age, school_id, major_id, education_level, semester_term")
+          .eq("id", user.id)
+          .single(),
+        supabase
+          .from("schools")
+          .select("id, name, abbr")
+          .order("name"),
+      ]);
+
+      const prof = profileResult.data;
+
+      if (schoolsResult.error) {
+        // Fallback for schemas that don't have "abbr" yet.
+        const fallback = await supabase
+          .from("schools")
+          .select("id, name")
+          .order("name");
+
+        if (fallback.data && fallback.data.length > 0) {
+          setSchools(
+            fallback.data.map((s: { id: number; name: string }) => ({
+              id: s.id,
+              name: s.name,
+              abbr: "",
+            }))
+          );
+          setMetaError(null);
+        } else {
+          setSchools([]);
+          setMetaError(
+            "School list is not visible to your user role. Ask admin to add a SELECT policy for schools.",
+          );
+        }
+      } else {
+        const rows = (schoolsResult.data ?? []) as School[];
+        setSchools(rows);
+        setMetaError(
+          rows.length === 0
+            ? "No schools are visible for your login. If schools exist in DB, this is likely an RLS policy issue."
+            : null
+        );
+      }
 
       if (prof) {
         setProfileId(prof.id);
@@ -92,16 +133,6 @@ export default function EditProfilePage() {
 
       setLoading(false);
     });
-  }, [supabase]);
-
-  useEffect(() => {
-    supabase
-      .from("schools")
-      .select("id, name, abbr")
-      .order("name")
-      .then(({ data }) => {
-        if (data) setSchools(data);
-      });
   }, [supabase]);
 
   useEffect(() => {
@@ -390,15 +421,21 @@ export default function EditProfilePage() {
                     setEdit("school_id", Number(e.target.value));
                     setEdit("major_id", 0);
                   }}
+                  disabled={schools.length === 0}
                   className={`${FIELD_INPUT} appearance-none cursor-pointer pr-8`}
                 >
                   <option value={0}>Select school...</option>
                   {schools.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.abbr} - {s.name}
+                      {s.abbr ? `${s.abbr} - ${s.name}` : s.name}
                     </option>
                   ))}
                 </select>
+                {schools.length === 0 && (
+                  <p className="mt-1 text-xs text-alert">
+                    {metaError ?? "No schools available yet. Please ask admin to add schools."}
+                  </p>
+                )}
               </div>
 
               <div>
