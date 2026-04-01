@@ -111,3 +111,170 @@ body {
 ::-webkit-scrollbar-track  { background: transparent; }
 ::-webkit-scrollbar-thumb  { background: var(--color-brand); border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-brand-dark); }
+
+/* ── Rarity shine effects for achievement cards ── */
+/* Sweep-then-pause: crosses the card in the first 40%, waits off-screen for the rest */
+@keyframes rarity-shimmer {
+  0%   { transform: translateX(-200%); }
+  40%  { transform: translateX(300%); }
+  100% { transform: translateX(300%); }
+}
+
+/* Shared layout for all rarity cards — required for ::before clipping */
+.rarity-common,
+.rarity-uncommon,
+.rarity-rare,
+.rarity-epic,
+.rarity-legendary {
+  position: relative;
+  overflow: hidden;
+}
+
+.rarity-common {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-brand) 35%, transparent);
+}
+.rarity-common::before {
+  content: ''; position: absolute; top: 0; left: 0;
+  width: 50%; height: 100%; pointer-events: none;
+  background: linear-gradient(90deg, transparent 15%, rgba(227, 177, 122, 0.35) 50%, transparent 85%);
+  animation: rarity-shimmer 6.5s linear infinite;
+}
+
+.rarity-uncommon {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-success) 40%, transparent),
+              0 2px 10px color-mix(in srgb, var(--color-success) 15%, transparent);
+}
+.rarity-uncommon::before {
+  content: ''; position: absolute; top: 0; left: 0;
+  width: 50%; height: 100%; pointer-events: none;
+  background: linear-gradient(90deg, transparent 15%, rgba(126, 155, 106, 0.40) 50%, transparent 85%);
+  animation: rarity-shimmer 6s linear infinite;
+}
+
+.rarity-rare {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-gold) 55%, transparent),
+              0 2px 14px color-mix(in srgb, var(--color-gold) 25%, transparent);
+}
+.rarity-rare::before {
+  content: ''; position: absolute; top: 0; left: 0;
+  width: 50%; height: 100%; pointer-events: none;
+  background: linear-gradient(90deg, transparent 15%, rgba(212, 164, 71, 0.45) 50%, transparent 85%);
+  animation: rarity-shimmer 5.5s linear infinite;
+}
+
+.rarity-epic {
+  box-shadow: 0 0 0 1.5px rgba(147, 51, 234, 0.55),
+              0 4px 18px rgba(147, 51, 234, 0.22);
+}
+.rarity-epic::before {
+  content: ''; position: absolute; top: 0; left: 0;
+  width: 50%; height: 100%; pointer-events: none;
+  background: linear-gradient(90deg, transparent 15%, rgba(147, 51, 234, 0.40) 50%, transparent 85%);
+  animation: rarity-shimmer 5s linear infinite;
+}
+
+.rarity-legendary {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-gold) 75%, transparent),
+              0 4px 22px color-mix(in srgb, var(--color-gold) 35%, transparent);
+}
+.rarity-legendary::before {
+  content: ''; position: absolute; top: 0; left: 0;
+  width: 50%; height: 100%; pointer-events: none;
+  background: linear-gradient(90deg, transparent 15%, rgba(212, 164, 71, 0.55) 50%, transparent 85%);
+  animation: rarity-shimmer 4.5s linear infinite;
+}
+
+/* Animated gradient borders for the leaderboard podium */
+@keyframes gradient-border-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animated-gradient-border {
+  position: relative;
+  isolation: isolate;
+}
+
+.animated-gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    var(--gradient-border-a),
+    var(--gradient-border-b),
+    var(--gradient-border-c),
+    var(--gradient-border-a)
+  );
+  background-size: 220% 220%;
+  animation: gradient-border-shift var(--gradient-border-speed, 8s) ease-in-out infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+
+.podium-gradient-gold {
+  --gradient-border-a: color-mix(in srgb, var(--color-gold) 80%, white 20%);
+  --gradient-border-b: color-mix(in srgb, var(--color-brand) 70%, white 30%);
+  --gradient-border-c: color-mix(in srgb, var(--color-alert) 32%, var(--color-gold) 68%);
+  --gradient-border-speed: 7s;
+}
+
+.podium-gradient-brand {
+  --gradient-border-a: color-mix(in srgb, var(--color-brand) 82%, white 18%);
+  --gradient-border-b: color-mix(in srgb, var(--color-success) 46%, white 54%);
+  --gradient-border-c: color-mix(in srgb, var(--color-brand-dark) 76%, var(--color-brand-light) 24%);
+  --gradient-border-speed: 8s;
+}
+
+.podium-gradient-sand {
+  --gradient-border-a: color-mix(in srgb, var(--color-border) 45%, white 55%);
+  --gradient-border-b: color-mix(in srgb, var(--color-brand-light) 76%, white 24%);
+  --gradient-border-c: color-mix(in srgb, var(--color-ink-faint) 36%, var(--color-border) 64%);
+  --gradient-border-speed: 9s;
+}
+
+/* ── Legend (Lv.100) hero card & #1 leaderboard podium effects ── */
+.legend-glow {
+  box-shadow: 0 0 0 1.5px rgba(212, 164, 71, 0.65),
+              0 0 40px rgba(212, 164, 71, 0.22),
+              0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.legend-sweep {
+  position: absolute; inset: 0;
+  pointer-events: none; overflow: hidden; border-radius: inherit;
+}
+.legend-sweep::after {
+  content: ''; position: absolute; top: 0; left: 0;
+  width: 55%; height: 100%;
+  background: linear-gradient(90deg, transparent 15%, rgba(212, 164, 71, 0.20) 50%, transparent 85%);
+  animation: rarity-shimmer 6.5s linear infinite;
+}
+
+/* Pulsing gold crown for #1 leaderboard */
+@keyframes crown-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0px rgba(212, 164, 71, 0)); }
+  50%       { filter: drop-shadow(0 0 6px rgba(212, 164, 71, 0.80)); }
+}
+.crown-pulse {
+  animation: crown-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rarity-common::before,
+  .rarity-uncommon::before,
+  .rarity-rare::before,
+  .rarity-epic::before,
+  .rarity-legendary::before,
+  .animated-gradient-border::before,
+  .legend-sweep::after,
+  .crown-pulse {
+    animation: none;
+  }
+}

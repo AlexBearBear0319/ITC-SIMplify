@@ -95,15 +95,13 @@ export default function MyRewardsPage() {
       setError(null);
       setLoading(false);
 
+      // Keep the currently open pass open only if it's still pending.
+      // Do NOT auto-open any pass — the user must click "Show QR" explicitly.
       setOpenPassId((current) => {
         if (current && nextPasses.some((pass) => pass.id === current && isRewardPending(pass.status))) {
           return current;
         }
-
-        const firstPending = nextPasses.find(
-          (pass) => isRewardPending(pass.status) && pass.claim_token,
-        );
-        return firstPending?.id ?? null;
+        return null;
       });
     },
     [supabase, userId],

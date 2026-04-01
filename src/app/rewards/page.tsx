@@ -174,7 +174,7 @@ function BalanceCard({ user, points, exp }: { user: UserRewards; points: number;
               }}
             />
           </div>
-          <p className="text-right text-xs text-surface/40 mt-1">{level.progress}% to {LEVELS[LEVELS.findIndex(l => l.name === level.name) + 1]?.name ?? "max"}</p>
+          <p className="text-right text-xs text-surface/40 mt-1">{level.progress}% to Lv. {level.level + 1}</p>
         </div>
       ) : (
         <div className="mt-4 flex items-center gap-2 text-gold text-sm font-medium">
@@ -517,10 +517,12 @@ export default function RewardsPage() {
     }
 
     // 1. Create redemption row first so we never show a fake success without a pass.
+    // Generate a claim_token here so the QR code works immediately on My Rewards page.
+    const claimToken = crypto.randomUUID();
     const { data: newRedemption, error: redemptionError } = await supabase
       .from("user_redemptions")
-      .insert({ user_id: userId, item_id: selectedItem.id, status: "pending" })
-      .select("id, redeemed_at, status, redemption_items(name)")
+      .insert({ user_id: userId, item_id: selectedItem.id, status: "pending", claim_token: claimToken })
+      .select("id, redeemed_at, status, claim_token, redemption_items(name)")
       .single();
 
     if (redemptionError || !newRedemption) {

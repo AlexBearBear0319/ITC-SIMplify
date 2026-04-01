@@ -42,7 +42,7 @@ type PodiumCfg = {
 const PODIUM_CFG: Record<1 | 2 | 3, PodiumCfg> = {
   1: {
     mt: "",
-    cardClass:   "bg-gold-light border border-gold/40 ring-2 ring-gold/25 shadow-md",
+    cardClass:   "bg-gold-light border border-transparent shadow-md animated-gradient-border podium-gradient-gold",
     avatarClass: "bg-gold/20 text-ink ring-2 ring-gold/40",
     pointsClass: "text-gold",
     avatarSize:  "w-16 h-16 text-xl",
@@ -51,7 +51,7 @@ const PODIUM_CFG: Record<1 | 2 | 3, PodiumCfg> = {
   },
   2: {
     mt: "mt-5",
-    cardClass:   "bg-brand-faint border border-brand/30",
+    cardClass:   "bg-brand-faint border border-transparent animated-gradient-border podium-gradient-brand",
     avatarClass: "bg-brand-light text-ink",
     pointsClass: "text-brand-dark",
     avatarSize:  "w-12 h-12 text-base",
@@ -60,7 +60,7 @@ const PODIUM_CFG: Record<1 | 2 | 3, PodiumCfg> = {
   },
   3: {
     mt: "mt-9",
-    cardClass:   "bg-canvas border border-border",
+    cardClass:   "bg-canvas border border-transparent animated-gradient-border podium-gradient-sand",
     avatarClass: "bg-border text-ink-muted",
     pointsClass: "text-ink-muted",
     avatarSize:  "w-12 h-12 text-base",
@@ -257,16 +257,16 @@ export default function LeaderboardPage() {
                   initial="hidden"
                   animate="visible"
                   className={[
-                    "flex-1 flex flex-col items-center gap-2 rounded-2xl p-4 text-center",
+                    "relative overflow-hidden flex-1 flex flex-col items-center gap-2 rounded-2xl p-4 text-center",
                     cfg.cardClass,
                     cfg.mt,
-                    entry.is_current_user ? "ring-2 ring-brand!" : "",
+                    entry.is_current_user ? "ring-2 ring-brand/60" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                 >
                   {cfg.showCrown && (
-                    <Crown size={18} className="text-gold fill-gold/30" />
+                    <Crown size={18} className="crown-pulse text-gold fill-gold/50" />
                   )}
 
                   <span className="text-2xl leading-none">{cfg.medal}</span>
