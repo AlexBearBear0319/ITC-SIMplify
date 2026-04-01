@@ -16,7 +16,8 @@ type UserProfile = {
 };
 
 const PAGE_TITLES: Record<string, string> = {
-  "/":            "Dashboard",
+  "/":            "Welcome",
+  "/dashboard":   "Dashboard",
   "/location":    "Locations",
   "/finder":      "Study Buddy",
   "/events":      "Events",

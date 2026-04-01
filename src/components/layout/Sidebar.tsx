@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 
 const NAV_MAIN = [
-  { icon: LayoutDashboard, label: "Dashboard",   href: "/" },
+  { icon: LayoutDashboard, label: "Dashboard",   href: "/dashboard" },
   { icon: Users,           label: "Study Buddy", href: "/finder" },
   { icon: CalendarDays,    label: "Events",      href: "/events" },
   { icon: Gift,            label: "Rewards",     href: "/rewards" },
@@ -125,7 +125,7 @@ export default function Sidebar() {
       >
         {/* ── Logo row — X button lives here on mobile ── */}
         <div className="px-6 h-16 border-b border-border dark:border-slate-700 flex items-center shrink-0">
-          <Link href="/" className="flex items-center gap-3 group flex-1 min-w-0">
+          <Link href="/dashboard" className="flex items-center gap-3 group flex-1 min-w-0">
             <div className="w-11 h-11 rounded-xl bg-surface border border-border flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-200 shrink-0 overflow-hidden">
               <Image
                 src="/SIMplify_logo_light.svg?v=20260330-1"

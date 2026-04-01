@@ -404,7 +404,7 @@ function LoginPageContent() {
                   transition={{ duration: 0.2, ease: "easeInOut" }}
                 >
                   {mode === "login" ? (
-                    <LoginForm onSuccess={() => { window.location.href = "/"; }} />
+                    <LoginForm onSuccess={() => { window.location.href = "/dashboard"; }} />
                   ) : (
                     <SignUpForm onSuccess={(msg) => setSignupSuccess(msg)} />
                   )}
