@@ -1212,7 +1212,7 @@ function UsersTab() {
 
 // ── Image Upload component ───────────────────────────────────────────────────
 
-const IMG_MAX_MB    = 5;
+const IMG_MAX_MB    = 20;
 const IMG_MAX_BYTES = IMG_MAX_MB * 1024 * 1024;
 const IMG_TYPES     = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 const IMG_ACCEPT    = IMG_TYPES.join(",");

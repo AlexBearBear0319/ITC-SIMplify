@@ -25,6 +25,8 @@ type R = { error: string | null };
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 const BUCKET = "location-images";
+const LOCATION_IMG_MAX_MB = 20;
+const LOCATION_IMG_MAX_BYTES = LOCATION_IMG_MAX_MB * 1024 * 1024;
 
 export async function adminUploadLocationImage(
   formData: FormData,
@@ -37,7 +39,9 @@ export async function adminUploadLocationImage(
 
   const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
   if (!allowed.includes(file.type)) return { url: null, error: "Only JPG, PNG, WEBP or GIF allowed" };
-  if (file.size > 10 * 1024 * 1024) return { url: null, error: "File must be under 10 MB" };
+  if (file.size > LOCATION_IMG_MAX_BYTES) {
+    return { url: null, error: `File must be under ${LOCATION_IMG_MAX_MB} MB` };
+  }
 
   try {
     const db = createAdminClient();
