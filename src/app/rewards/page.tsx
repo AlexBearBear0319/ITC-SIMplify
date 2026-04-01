@@ -126,9 +126,9 @@ function BalanceCard({ user, points }: { user: UserRewards; points: number }) {
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-surface/50 leading-none mb-0.5">Welcome back,</p>
+            <p className="text-xs text-surface/50 leading-none mb-1">Welcome back,</p>
             <p className="font-semibold text-surface leading-tight truncate">{user.username}</p>
-            <span className={`inline-block mt-1 text-xs font-medium px-2 py-0.5 rounded-full ${level.badgeClass}`}>
+            <span className={`inline-block mt-1 text-xs font-medium px-2 py-1 rounded-full ${level.badgeClass}`}>
               {level.emoji} {level.name}
             </span>
           </div>
@@ -136,7 +136,7 @@ function BalanceCard({ user, points }: { user: UserRewards; points: number }) {
 
         {/* Points balance — re-animates on change via key */}
         <div className="shrink-0 text-right">
-          <p className="text-xs text-surface/50 uppercase tracking-wider mb-0.5">Points Balance</p>
+          <p className="text-xs text-surface/50 uppercase tracking-wider mb-1">Points Balance</p>
           <AnimatePresence mode="wait">
             <motion.p
               key={points}
@@ -148,14 +148,14 @@ function BalanceCard({ user, points }: { user: UserRewards; points: number }) {
               {points.toLocaleString()}
             </motion.p>
           </AnimatePresence>
-          <p className="text-xs text-surface/40 mt-0.5">pts</p>
+          <p className="text-xs text-surface/40 mt-1">pts</p>
         </div>
       </div>
 
       {/* Level progress bar */}
       {level.nextPts !== Infinity ? (
         <div className="relative mt-5">
-          <div className="flex justify-between text-xs text-surface/50 mb-1.5">
+          <div className="flex justify-between text-xs text-surface/50 mb-2">
             <span>{level.emoji} {level.name}</span>
             <span>{ptsToNext.toLocaleString()} pts to next level</span>
           </div>
@@ -212,7 +212,7 @@ function RedemptionItemCard({
         <div className="w-12 h-12 rounded-xl bg-gold-light flex items-center justify-center text-gold shrink-0">
           <Icon size={22} />
         </div>
-        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${catCfg.pill}`}>
+        <span className={`text-xs font-medium px-3 py-1 rounded-full ${catCfg.pill}`}>
           {catCfg.label}
         </span>
       </div>
@@ -231,7 +231,7 @@ function RedemptionItemCard({
             <span>{item.cost.toLocaleString()} pts</span>
           </div>
           <p
-            className={`text-xs mt-0.5 ${
+            className={`text-xs mt-1 ${
               outOfStock ? "text-alert" : lowStock ? "text-gold" : "text-ink-faint"
             }`}
           >
@@ -314,7 +314,7 @@ function CheckoutDialog({
             {step === "confirm" && (
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 p-1.5 rounded-full text-ink-muted hover:bg-canvas transition-colors"
+                className="absolute top-4 right-4 p-2 rounded-full text-ink-muted hover:bg-canvas transition-colors"
               >
                 <X size={16} />
               </button>
@@ -338,7 +338,7 @@ function CheckoutDialog({
                       <Dialog.Title className="font-semibold text-ink leading-snug">
                         {item.name}
                       </Dialog.Title>
-                      <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+                      <p className="text-xs text-ink-muted mt-1 leading-relaxed">
                         {item.description}
                       </p>
                     </div>
@@ -456,7 +456,7 @@ function RedemptionConfirmModal({
             {step === "confirm" && (
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 p-1.5 rounded-full text-ink-muted hover:bg-canvas transition-colors"
+                className="absolute top-4 right-4 p-2 rounded-full text-ink-muted hover:bg-canvas transition-colors"
               >
                 <X size={16} />
               </button>
@@ -479,7 +479,7 @@ function RedemptionConfirmModal({
                       <Dialog.Title className="font-semibold text-ink leading-snug">
                         {redemption.redemption_items?.name ?? "Unknown item"}
                       </Dialog.Title>
-                      <p className="text-xs text-ink-muted mt-0.5">
+                      <p className="text-xs text-ink-muted mt-1">
                         Redeem this item for the student?
                       </p>
                     </div>
@@ -678,7 +678,7 @@ export default function RewardsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-full bg-canvas px-3 py-3 md:px-4 md:py-4 lg:px-5 lg:py-5">
+      <div className="min-h-full bg-canvas px-4 py-4 md:px-6 md:py-6 lg:px-8 lg:py-8">
         <div className="max-w-6xl mx-auto space-y-8">
           <div>
             <h1 className="text-2xl font-extrabold text-ink">Rewards Store</h1>
@@ -704,7 +704,7 @@ export default function RewardsPage() {
   }
 
   return (
-    <div className="min-h-full bg-canvas px-3 py-3 md:px-4 md:py-4 lg:px-5 lg:py-5">
+    <div className="min-h-full bg-canvas px-4 py-4 md:px-6 md:py-6 lg:px-8 lg:py-8">
       <div className="max-w-6xl mx-auto space-y-8">
 
         {/* Page header */}
@@ -779,7 +779,7 @@ export default function RewardsPage() {
                 return (
                   <div
                     key={r.id}
-                    className={`flex items-center gap-3 px-4 py-3.5 ${idx < redemptions.length - 1 ? "border-b border-border" : ""}`}
+                    className={`flex items-center gap-3 px-4 py-4 ${idx < redemptions.length - 1 ? "border-b border-border" : ""}`}
                   >
                     <div className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center ${
                       isClaimed ? "bg-success-light" : isCancelled ? "bg-alert-light" : "bg-gold-light"
@@ -806,12 +806,12 @@ export default function RewardsPage() {
                           setSelectedRedemption(r);
                           setRedemptionModalOpen(true);
                         }}
-                        className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-gold-light text-gold hover:bg-gold hover:text-surface transition-colors"
+                        className="shrink-0 text-xs font-semibold px-3 py-2 rounded-full bg-gold-light text-gold hover:bg-gold hover:text-surface transition-colors"
                       >
                         Redeem
                       </button>
                     ) : (
-                      <span className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                      <span className={`shrink-0 text-xs font-semibold px-3 py-1 rounded-full ${
                         isClaimed   ? "bg-success-light text-success" :
                         isCancelled ? "bg-alert-light text-alert"     :
                                       "bg-gold-light text-gold"

@@ -423,7 +423,7 @@ export default function ProfilePage() {
 
   if (loading || !profile) {
     return (
-      <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
+      <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="h-36 rounded-2xl bg-surface border border-border animate-pulse" />
           <div className="h-52 rounded-2xl bg-surface border border-border animate-pulse" />
@@ -445,7 +445,7 @@ export default function ProfilePage() {
   });
 
   return (
-    <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
+    <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
       {/* Floating points earned animation */}
       <AnimatePresence>
         {pointsDelta !== null && (
@@ -454,7 +454,7 @@ export default function ProfilePage() {
             initial={{ opacity: 1, y: 0, scale: 0.9 }}
             animate={{ opacity: 0, y: -60, scale: 1.15 }}
             transition={{ duration: 2.2, ease: "easeOut" }}
-            className="fixed top-24 right-4 z-50 flex items-center gap-1.5 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
+            className="fixed top-24 right-4 z-50 flex items-center gap-2 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
           >
             <Coins size={16} />
             +{pointsDelta} pts
@@ -504,7 +504,7 @@ export default function ProfilePage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 mt-3">
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${level.badgeClass}`}>
+                <span className={`text-xs font-medium px-3 py-1 rounded-full ${level.badgeClass}`}>
                   {level.emoji} {level.name}
                 </span>
                 {profile.equipped_badge_id && (() => {
@@ -513,7 +513,7 @@ export default function ProfilePage() {
                   const rCfg = RARITY_CONFIG[b.rarity];
                   const Icon = b.icon;
                   return (
-                    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${rCfg.bg} ${rCfg.iconClass}`}>
+                    <span className={`inline-flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full ${rCfg.bg} ${rCfg.iconClass}`}>
                       <Icon size={11} />
                       {b.name}
                     </span>
@@ -526,7 +526,7 @@ export default function ProfilePage() {
 
               {/* School / major / education info */}
               {(profile.education_level || profile.semester_term) && (
-                <p className="text-xs text-ink-faint mt-1.5">
+                <p className="text-xs text-ink-faint mt-2">
                   {[profile.education_level, profile.semester_term]
                     .filter(Boolean)
                     .join(" · ")}
@@ -606,12 +606,12 @@ export default function ProfilePage() {
                         {achievement.name}
                       </p>
                       {achievement.unlocked && (
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${rCfg.bg} ${rCfg.iconClass}`}>
+                        <span className={`text-[10px] font-medium px-2 py-1 rounded-full ${rCfg.bg} ${rCfg.iconClass}`}>
                           {rCfg.label}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+                    <p className="text-xs text-ink-muted mt-1 leading-relaxed">
                       {achievement.description}
                     </p>
                     {achievement.unlocked && achievement.unlockedAt && (
@@ -623,13 +623,13 @@ export default function ProfilePage() {
                   </div>
 
                   {achievement.unlocked && (
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <div className="flex flex-col items-end gap-2 shrink-0">
                       <CheckCircle2 size={16} className="text-success" />
                       {profile.equipped_badge_id === achievement.id ? (
                         <button
                           onClick={() => handleEquipBadge(achievement.id)}
                           disabled={equippingBadgeId === achievement.id}
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gold text-ink disabled:opacity-50"
+                          className="text-[10px] font-semibold px-2 py-1 rounded-full bg-gold text-ink disabled:opacity-50"
                         >
                           Equipped
                         </button>
@@ -637,7 +637,7 @@ export default function ProfilePage() {
                         <button
                           onClick={() => handleEquipBadge(achievement.id)}
                           disabled={equippingBadgeId === achievement.id}
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-border text-ink-muted hover:bg-canvas hover:text-ink transition-colors disabled:opacity-50"
+                          className="text-[10px] font-semibold px-2 py-1 rounded-full border border-border text-ink-muted hover:bg-canvas hover:text-ink transition-colors disabled:opacity-50"
                         >
                           {equippingBadgeId === achievement.id ? "…" : "Equip"}
                         </button>
@@ -672,7 +672,7 @@ export default function ProfilePage() {
                 return (
                   <div
                     key={item.id}
-                    className={`flex items-center gap-3 px-4 py-3.5 ${
+                    className={`flex items-center gap-3 px-4 py-4 ${
                       index < activity.length - 1 ? "border-b border-border" : ""
                     }`}
                   >

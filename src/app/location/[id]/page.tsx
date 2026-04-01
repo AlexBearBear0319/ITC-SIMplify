@@ -569,7 +569,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-gold text-ink font-semibold text-sm rounded-full shadow-lg pointer-events-none whitespace-nowrap"
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-3 bg-gold text-ink font-semibold text-sm rounded-full shadow-lg pointer-events-none whitespace-nowrap"
           >
             🏅 Badge unlocked: {newBadgeName}!
           </motion.div>
@@ -584,7 +584,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             initial={{ opacity: 1, y: 0, scale: 0.9 }}
             animate={{ opacity: 0, y: -60, scale: 1.15 }}
             transition={{ duration: 2.2, ease: "easeOut" }}
-            className="fixed top-24 right-4 z-50 flex items-center gap-1.5 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
+            className="fixed top-24 right-4 z-50 flex items-center gap-2 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
           >
             <Coins size={16} />
             +{pointsDelta} pts
@@ -605,7 +605,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             )}
             <div className="absolute inset-0 bg-linear-to-t from-ink/65 via-ink/15 to-transparent" />
 
-            <Link href="/location" className="absolute top-4 left-4 flex items-center gap-1.5 bg-surface/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-medium text-ink border border-border/50 hover:bg-surface transition-colors shadow-sm">
+            <Link href="/location" className="absolute top-4 left-4 flex items-center gap-2 bg-surface/90 backdrop-blur-sm px-3 py-2 rounded-full text-xs font-medium text-ink border border-border/50 hover:bg-surface transition-colors shadow-sm">
               <ChevronLeft size={13} />
               Back
             </Link>
@@ -613,13 +613,13 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             <div className="absolute bottom-0 left-0 right-0 p-5 md:p-6">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 {location.category && (
-                  <span className="px-2.5 py-0.5 bg-surface/90 backdrop-blur-sm rounded-full text-xs font-semibold text-ink-muted border border-border/50">{location.category}</span>
+                  <span className="px-3 py-1 bg-surface/90 backdrop-blur-sm rounded-full text-xs font-semibold text-ink-muted border border-border/50">{location.category}</span>
                 )}
                 <CrowdMeter status={activeStatus} />
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${s.bg} ${s.text} border ${s.border}`}>● {s.label}</span>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${s.bg} ${s.text} border ${s.border}`}>● {s.label}</span>
               </div>
               <h1 className="text-2xl md:text-3xl font-bold text-surface leading-tight">{location.name}</h1>
-              <p className="text-sm text-surface/75 mt-1 flex items-center gap-1.5">
+              <p className="text-sm text-surface/75 mt-1 flex items-center gap-2">
                 <MapPin size={12} className="shrink-0" />
                 {[location.location_text, location.total_seats ? `Capacity ${location.total_seats}` : null].filter(Boolean).join(" · ")}
               </p>
@@ -667,7 +667,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               }}
               disabled={isBlocked || checkInDone}
               title={blockReason ?? undefined}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {checkInDone ? (
                 <><CheckCircle2 size={16} /> Checked In</>
@@ -676,7 +676,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
               )}
             </button>
 
-            <button aria-label="Share location" className="p-2.5 bg-canvas border border-border rounded-full text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-200">
+            <button aria-label="Share location" className="p-3 bg-canvas border border-border rounded-full text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-200">
               <Share2 size={16} />
             </button>
           </div>
@@ -692,18 +692,18 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="flex items-start gap-3 px-4 py-3.5 bg-gold-light border border-gold/30 rounded-2xl"
+                className="flex items-start gap-3 px-4 py-4 bg-gold-light border border-gold/30 rounded-2xl"
               >
-                <AlertCircle size={16} className="text-gold shrink-0 mt-0.5" />
+                <AlertCircle size={16} className="text-gold shrink-0 mt-1" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-ink">Session already active</p>
-                  <p className="text-xs text-ink-muted mt-0.5">{blockReason}</p>
+                  <p className="text-xs text-ink-muted mt-1">{blockReason}</p>
                 </div>
                 {existingSession && existingSession.location_id === locationId && (
                   <button
                     onClick={handleEndSession}
                     disabled={endingSession}
-                    className="shrink-0 flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors disabled:opacity-50"
+                    className="shrink-0 flex items-center gap-1 px-3 py-2 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors disabled:opacity-50"
                   >
                     <LogOut size={12} />
                     {endingSession ? "Ending…" : "End Session"}
@@ -734,7 +734,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                 <button
                   onClick={handleEndSession}
                   disabled={endingSession}
-                  className="shrink-0 flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors disabled:opacity-50"
+                  className="shrink-0 flex items-center gap-1 px-3 py-2 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors disabled:opacity-50"
                 >
                   <LogOut size={12} />
                   {endingSession ? "Ending…" : "Check Out"}
@@ -776,7 +776,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                 ].map(({ value, label, icon }) => (
                   <Tabs.Trigger
                     key={value} value={value}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium rounded-lg text-ink-muted transition-all duration-200 data-[state=active]:bg-surface data-[state=active]:text-ink data-[state=active]:shadow-sm hover:text-ink"
+                    className="flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg text-ink-muted transition-all duration-200 data-[state=active]:bg-surface data-[state=active]:text-ink data-[state=active]:shadow-sm hover:text-ink"
                   >
                     {icon}{label}
                   </Tabs.Trigger>
@@ -788,7 +788,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                 <div className={`bg-surface rounded-2xl border ${s.border} p-5 shadow-sm`}>
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest">Current Occupancy</p>
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${s.bg} ${s.text}`}>● {s.label}</span>
+                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${s.bg} ${s.text}`}>● {s.label}</span>
                   </div>
                   {/* Real occupancy bar based on active_sessions vs total_seats */}
                   {location.total_seats ? (
@@ -799,7 +799,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                           style={{ width: `${Math.min(100, Math.round((seatsOccupied / location.total_seats) * 100))}%` }}
                         />
                       </div>
-                      <div className="flex justify-between text-[10px] text-ink-faint mt-1.5 mb-2">
+                      <div className="flex justify-between text-[10px] text-ink-faint mt-2 mb-2">
                         <span>{seatsOccupied} occupied</span>
                         <span>{location.total_seats} total</span>
                       </div>
@@ -814,7 +814,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                       <div className="h-3 bg-canvas rounded-full overflow-hidden border border-border">
                         <div className={`h-full rounded-full transition-all duration-700 ${s.dot} ${s.barWidth}`} />
                       </div>
-                      <div className="flex justify-between text-[10px] text-ink-faint mt-1.5">
+                      <div className="flex justify-between text-[10px] text-ink-faint mt-2">
                         <span>Empty</span><span>Full</span>
                       </div>
                     </>
@@ -834,11 +834,11 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                 {location.power_outlets && location.power_outlets > 0 && (
                   <div className="bg-surface rounded-2xl border border-border p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest flex items-center gap-1.5">
+                      <p className="text-xs font-semibold text-ink-faint uppercase tracking-widest flex items-center gap-2">
                         <Zap size={12} className="text-gold" />
                         Power Outlets
                       </p>
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                      <span className={`text-xs font-bold px-3 py-1 rounded-full ${
                         (location.power_outlets - powerOutletsUsed) <= 0
                           ? "bg-alert-light text-alert"
                           : (location.power_outlets - powerOutletsUsed) <= (location.power_outlets * 0.3)
@@ -854,7 +854,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                         style={{ width: `${Math.min(100, Math.round((powerOutletsUsed / location.power_outlets) * 100))}%` }}
                       />
                     </div>
-                    <div className="flex justify-between text-[10px] text-ink-faint mt-1.5 mb-2">
+                    <div className="flex justify-between text-[10px] text-ink-faint mt-2 mb-2">
                       <span>{powerOutletsUsed} in use</span>
                       <span>{location.power_outlets} total</span>
                     </div>
@@ -896,7 +896,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                 )}
 
                 <div>
-                  <p className="text-xs font-semibold text-ink-muted mb-3 flex items-center gap-1.5">
+                  <p className="text-xs font-semibold text-ink-muted mb-3 flex items-center gap-2">
                     <Coins size={12} className="text-gold" />
                     Update crowd status · Earn <span className="text-gold font-bold">+10 pts</span>
                   </p>
@@ -906,7 +906,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                         key={value}
                         onClick={() => handleStatusUpdate(value)}
                         disabled={submitState === "submitting"}
-                        className={`relative flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 text-center font-semibold transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${activeStatus === value ? activeClasses : inactiveClasses}`}
+                        className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl border-2 text-center font-semibold transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${activeStatus === value ? activeClasses : inactiveClasses}`}
                       >
                         <span className="text-xl leading-none">{emoji}</span>
                         <span className="text-sm">{label}</span>
@@ -931,7 +931,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${logS.dot}`} />
                             <div className="flex-1 min-w-0">
                               <span className={`text-xs font-semibold ${logS.text}`}>{logS.label}</span>
-                              <span className="text-xs text-ink-muted ml-1.5">by <span className="font-medium text-ink">@{log.profiles.username}</span></span>
+                              <span className="text-xs text-ink-muted ml-2">by <span className="font-medium text-ink">@{log.profiles.username}</span></span>
                             </div>
                             <div className="flex items-center gap-1 text-[10px] text-ink-faint shrink-0">
                               <Clock size={10} />{timeAgo(log.created_at)}
@@ -970,10 +970,10 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-semibold text-ink truncate leading-tight">{group.subject}</p>
-                              <p className="text-xs text-ink-muted mt-0.5 flex items-center gap-1.5"><UserCircle size={11} />Host: @{group.profiles.username}</p>
+                              <p className="text-xs text-ink-muted mt-1 flex items-center gap-2"><UserCircle size={11} />Host: @{group.profiles.username}</p>
                             </div>
                             <div className="shrink-0 text-right">
-                              <div className="flex items-center gap-1 text-xs text-ink-muted mb-1.5"><Users size={11} />{group.current_members}/{group.max_members}</div>
+                              <div className="flex items-center gap-1 text-xs text-ink-muted mb-2"><Users size={11} />{group.current_members}/{group.max_members}</div>
                               <Link
                                 href={`/finder?locationId=${locationId}`}
                                 className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${full ? "bg-canvas text-ink-faint border border-border pointer-events-none" : "bg-brand hover:bg-brand-dark text-ink"}`}
@@ -1015,7 +1015,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                                 <StarRating rating={review.rating} />
                               </div>
                             </div>
-                            <span className="text-[10px] text-ink-faint shrink-0 flex items-center gap-1 mt-0.5"><Clock size={10} />{timeAgo(review.created_at)}</span>
+                            <span className="text-[10px] text-ink-faint shrink-0 flex items-center gap-1 mt-1"><Clock size={10} />{timeAgo(review.created_at)}</span>
                           </div>
                           <p className="text-sm text-ink-muted leading-relaxed">{review.comment}</p>
                         </div>

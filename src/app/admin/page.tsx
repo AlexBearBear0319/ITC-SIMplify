@@ -33,13 +33,13 @@ import type { LucideIcon } from "lucide-react";
 // ── Shared form styles ──────────────────────────────────────────────────────
 
 const INPUT = [
-  "w-full px-3 py-2.5 rounded-xl border border-border bg-canvas text-ink text-sm",
+  "w-full px-3 py-3 rounded-xl border border-border bg-canvas text-ink text-sm",
   "placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand/40",
   "transition-colors resize-none",
 ].join(" ");
-const LABEL    = "block text-xs font-semibold text-ink-muted mb-1.5";
-const BTN_PRI  = "flex items-center gap-1.5 px-4 py-2 bg-ink text-surface text-sm font-medium rounded-full hover:bg-ink/80 active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed";
-const BTN_GHOST = "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors";
+const LABEL    = "block text-xs font-semibold text-ink-muted mb-2";
+const BTN_PRI  = "flex items-center gap-2 px-4 py-2 bg-ink text-surface text-sm font-medium rounded-full hover:bg-ink/80 active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed";
+const BTN_GHOST = "flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors";
 
 // ── Error context ────────────────────────────────────────────────────────────
 
@@ -121,7 +121,7 @@ function Modal({ open, onClose, title, children }: {
         >
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <Dialog.Title className="text-sm font-bold text-ink">{title}</Dialog.Title>
-            <Dialog.Close className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-canvas transition-colors">
+            <Dialog.Close className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-canvas transition-colors">
               <X size={15} />
             </Dialog.Close>
           </div>
@@ -143,13 +143,13 @@ function DeleteBtn({ id, confirmId, setConfirmId, onDelete }: {
       <div className="flex items-center gap-1">
         <button
           onClick={() => { onDelete(id); setConfirmId(null); }}
-          className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-alert text-surface hover:bg-alert/80 transition-colors"
+          className="px-3 py-1 text-[10px] font-bold rounded-lg bg-alert text-surface hover:bg-alert/80 transition-colors"
         >
           Confirm
         </button>
         <button
           onClick={() => setConfirmId(null)}
-          className="px-2.5 py-1 text-[10px] font-medium rounded-lg border border-border text-ink-muted hover:text-ink transition-colors"
+          className="px-3 py-1 text-[10px] font-medium rounded-lg border border-border text-ink-muted hover:text-ink transition-colors"
         >
           No
         </button>
@@ -159,7 +159,7 @@ function DeleteBtn({ id, confirmId, setConfirmId, onDelete }: {
   return (
     <button
       onClick={() => setConfirmId(id)}
-      className="p-1.5 rounded-lg text-ink-faint hover:text-alert hover:bg-alert-light transition-colors"
+      className="p-2 rounded-lg text-ink-faint hover:text-alert hover:bg-alert-light transition-colors"
       title="Delete"
     >
       <Trash2 size={13} />
@@ -183,7 +183,7 @@ function MiniToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 
 function Stars({ n }: { n: number | null }) {
   return (
-    <div className="flex gap-0.5">
+    <div className="flex gap-1">
       {[1, 2, 3, 4, 5].map((i) => (
         <Star key={i} size={11} className={i <= (n ?? 0) ? "text-gold fill-gold" : "text-border"} />
       ))}
@@ -196,7 +196,7 @@ function SectionHeader({ title, sub, onAdd }: { title: string; sub: string; onAd
     <div className="flex items-start justify-between gap-4 mb-4">
       <div>
         <h2 className="text-base font-bold text-ink">{title}</h2>
-        <p className="text-xs text-ink-muted mt-0.5">{sub}</p>
+        <p className="text-xs text-ink-muted mt-1">{sub}</p>
       </div>
       {onAdd && (
         <button onClick={onAdd} className={BTN_PRI}>
@@ -389,7 +389,7 @@ function OverviewTab() {
               {ready ? value.toLocaleString() : <span className="opacity-40">—</span>}
             </p>
             <p className="text-xs font-medium text-ink-muted mt-1">{label}</p>
-            <p className="text-[11px] text-ink-faint mt-0.5">{sub}</p>
+            <p className="text-[11px] text-ink-faint mt-1">{sub}</p>
           </div>
         ))}
       </div>
@@ -398,7 +398,7 @@ function OverviewTab() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         {/* Peak hours bar */}
         <div className="lg:col-span-3 bg-surface rounded-2xl border border-border shadow-sm p-5">
-          <h3 className="text-sm font-bold text-ink mb-0.5">Peak Hours (Campus-wide)</h3>
+          <h3 className="text-sm font-bold text-ink mb-1">Peak Hours (Campus-wide)</h3>
           <p className="text-xs text-ink-muted mb-4">Crowd density % by time of day · today</p>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
@@ -426,7 +426,7 @@ function OverviewTab() {
 
         {/* Category donut */}
         <div className="lg:col-span-2 bg-surface rounded-2xl border border-border shadow-sm p-5">
-          <h3 className="text-sm font-bold text-ink mb-0.5">Popular Areas</h3>
+          <h3 className="text-sm font-bold text-ink mb-1">Popular Areas</h3>
           <p className="text-xs text-ink-muted mb-4">Check-in breakdown by library area · last 7 days</p>
           <div className="relative h-40">
             <ResponsiveContainer width="100%" height="100%">
@@ -450,14 +450,14 @@ function OverviewTab() {
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="text-center">
                 <p className="text-xl font-extrabold text-ink leading-none">{weeklyTotal}</p>
-                <p className="text-[10px] text-ink-muted mt-0.5">7-day total</p>
+                <p className="text-[10px] text-ink-muted mt-1">7-day total</p>
               </div>
             </div>
           </div>
           {catSlices.length > 0 ? (
             <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
               {catSlices.map((c) => (
-                <div key={c.name} className="flex items-center gap-1.5">
+                <div key={c.name} className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
                   <span className="text-[11px] text-ink-muted truncate flex-1">{c.name}</span>
                   <span className="text-[11px] font-semibold text-ink">{c.value}%</span>
@@ -478,14 +478,14 @@ function OverviewTab() {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-ink">AI Trend Alert</p>
           {aiLoading && !aiInsight ? (
-            <div className="mt-1.5 space-y-1.5">
+            <div className="mt-2 space-y-2">
               <div className="h-3 bg-gold/20 rounded animate-pulse w-full" />
               <div className="h-3 bg-gold/20 rounded animate-pulse w-4/5" />
             </div>
           ) : (
-            <p className="text-sm text-ink-muted mt-0.5 leading-relaxed">
+            <p className="text-sm text-ink-muted mt-1 leading-relaxed">
               {aiInsight}
-              {aiLoading && <span className="inline-block w-1 h-3.5 bg-gold/60 ml-0.5 animate-pulse rounded-sm align-middle" />}
+              {aiLoading && <span className="inline-block w-1 h-3.5 bg-gold/60 ml-1 animate-pulse rounded-sm align-middle" />}
             </p>
           )}
         </div>
@@ -588,7 +588,7 @@ function EventsTab() {
               <TD className="text-ink-muted text-xs">{e.locations?.name ?? "—"}</TD>
               <TD>
                 {e.is_peak_alert ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-alert-light text-alert text-[10px] font-semibold">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-alert-light text-alert text-[10px] font-semibold">
                     <AlertTriangle size={9} /> Peak
                   </span>
                 ) : (
@@ -597,7 +597,7 @@ function EventsTab() {
               </TD>
               <TD className="text-right">
                 <div className="flex items-center justify-end gap-1">
-                  <button onClick={() => openEdit(e)} className="p-1.5 rounded-lg text-ink-faint hover:text-brand-dark hover:bg-brand-faint transition-colors">
+                  <button onClick={() => openEdit(e)} className="p-2 rounded-lg text-ink-faint hover:text-brand-dark hover:bg-brand-faint transition-colors">
                     <Pencil size={13} />
                   </button>
                   <DeleteBtn id={e.id} confirmId={confirmId} setConfirmId={setConfirmId} onDelete={handleDelete} />
@@ -632,7 +632,7 @@ function EventsTab() {
               {locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           </div>
-          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+          <label className="flex items-center gap-3 cursor-pointer select-none">
             <input
               type="checkbox" checked={form.is_peak_alert}
               onChange={(e) => set("is_peak_alert", e.target.checked)}
@@ -749,7 +749,7 @@ function RewardsTab() {
                 </span>
               </TD>
               <TD>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => adjustStock(r, -1)}
                     className="w-6 h-6 rounded-full border border-border flex items-center justify-center text-ink-muted hover:bg-canvas transition-colors"
@@ -777,7 +777,7 @@ function RewardsTab() {
               </TD>
               <TD className="text-right">
                 <div className="flex items-center justify-end gap-1">
-                  <button onClick={() => openEdit(r)} className="p-1.5 rounded-lg text-ink-faint hover:text-brand-dark hover:bg-brand-faint transition-colors">
+                  <button onClick={() => openEdit(r)} className="p-2 rounded-lg text-ink-faint hover:text-brand-dark hover:bg-brand-faint transition-colors">
                     <Pencil size={13} />
                   </button>
                   <DeleteBtn id={r.id} confirmId={confirmId} setConfirmId={setConfirmId} onDelete={handleDelete} />
@@ -815,7 +815,7 @@ function RewardsTab() {
             <label className={LABEL}>Image URL</label>
             <input type="text" value={form.image_url} onChange={(e) => set("image_url", e.target.value)} className={INPUT} placeholder="https://…" />
           </div>
-          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+          <label className="flex items-center gap-3 cursor-pointer select-none">
             <input
               type="checkbox" checked={form.is_active}
               onChange={(e) => set("is_active", e.target.checked)}
@@ -915,7 +915,7 @@ function UsersTab() {
               <TD>
                 <button
                   onClick={() => toggleAdmin(u)}
-                  className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
+                  className={`flex items-center gap-2 text-xs font-medium px-3 py-1 rounded-full border transition-colors ${
                     u.is_admin
                       ? "bg-brand-faint border-brand/30 text-brand-dark"
                       : "bg-canvas border-border text-ink-faint hover:border-brand/30 hover:text-brand-dark"
@@ -928,7 +928,7 @@ function UsersTab() {
               <TD className="text-right">
                 <button
                   onClick={() => { setEditingPts(u); setPtsVal(String(u.points ?? 0)); }}
-                  className="p-1.5 rounded-lg text-ink-faint hover:text-brand-dark hover:bg-brand-faint transition-colors"
+                  className="p-2 rounded-lg text-ink-faint hover:text-brand-dark hover:bg-brand-faint transition-colors"
                   title="Edit points"
                 >
                   <Pencil size={13} />
@@ -1058,18 +1058,18 @@ function ImageUpload({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={url} alt={label} className="w-full h-36 object-cover" />
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200" />
-          <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             <button
               type="button"
               onClick={openPicker}
-              className="flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-white/95 text-ink hover:bg-white shadow-sm transition-colors"
+              className="flex items-center gap-2 text-[11px] font-semibold px-3 py-2 rounded-lg bg-white/95 text-ink hover:bg-white shadow-sm transition-colors"
             >
               <Upload size={11} /> Replace
             </button>
             <button
               type="button"
               onClick={() => { onChange(""); setUploadErr(null); }}
-              className="p-1.5 rounded-lg bg-white/95 text-alert hover:bg-white shadow-sm transition-colors"
+              className="p-2 rounded-lg bg-white/95 text-alert hover:bg-white shadow-sm transition-colors"
               title="Remove image"
             >
               <Trash2 size={12} />
@@ -1107,7 +1107,7 @@ function ImageUpload({
               <span className="w-7 h-7 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
               <div>
                 <p className="text-sm font-medium text-ink">Uploading…</p>
-                <p className="text-xs text-ink-muted mt-0.5 max-w-[180px] truncate">{fileName}</p>
+                <p className="text-xs text-ink-muted mt-1 max-w-[180px] truncate">{fileName}</p>
               </div>
             </>
           ) : (
@@ -1122,7 +1122,7 @@ function ImageUpload({
                 <p className="text-xs text-ink-faint mt-1">{IMG_LABELS}</p>
                 <p className="text-xs text-ink-faint">Max {IMG_MAX_MB} MB per image</p>
                 {recommendedSize && (
-                  <p className="text-[11px] font-semibold text-brand-dark mt-1.5">
+                  <p className="text-[11px] font-semibold text-brand-dark mt-2">
                     Recommended: {recommendedSize}
                   </p>
                 )}
@@ -1137,20 +1137,20 @@ function ImageUpload({
       {/* ── Error panel ── */}
       {uploadErr && (
         <div className="rounded-xl border border-alert/30 bg-alert-light overflow-hidden">
-          <div className="flex items-start gap-2.5 px-3.5 py-3">
-            <AlertTriangle size={14} className="shrink-0 text-alert mt-0.5" />
+          <div className="flex items-start gap-3 px-4 py-3">
+            <AlertTriangle size={14} className="shrink-0 text-alert mt-1" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-alert">Upload failed</p>
-              <p className="text-xs text-alert/80 mt-0.5 leading-relaxed">{uploadErr}</p>
+              <p className="text-xs text-alert/80 mt-1 leading-relaxed">{uploadErr}</p>
               <p className="text-[10px] text-ink-faint mt-2 leading-relaxed">
                 If this keeps happening, copy the error below and send it to the IT team.
               </p>
             </div>
-            <button onClick={() => setUploadErr(null)} className="shrink-0 text-alert/40 hover:text-alert transition-colors mt-0.5">
+            <button onClick={() => setUploadErr(null)} className="shrink-0 text-alert/40 hover:text-alert transition-colors mt-1">
               <X size={13} />
             </button>
           </div>
-          <div className="border-t border-alert/20 px-3.5 py-2 flex items-center justify-between bg-alert/5">
+          <div className="border-t border-alert/20 px-4 py-2 flex items-center justify-between bg-alert/5">
             <p className="text-[10px] font-mono text-alert/60 truncate max-w-[70%]">{uploadErr}</p>
             <button
               onClick={copyError}
@@ -1261,7 +1261,7 @@ function CampusMapTab() {
                 <p className="text-[11px] text-ink-muted">
                   Last updated: {new Date(currentMap.uploaded_at).toLocaleString()}
                 </p>
-                <span className="text-[10px] font-semibold text-success bg-success/10 px-2 py-0.5 rounded-full border border-success/20">
+                <span className="text-[10px] font-semibold text-success bg-success/10 px-2 py-1 rounded-full border border-success/20">
                   Active
                 </span>
               </div>
@@ -1312,7 +1312,7 @@ function CampusMapTab() {
                 <span className="w-7 h-7 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
                 <div>
                   <p className="text-sm font-medium text-ink">Uploading map…</p>
-                  <p className="text-xs text-ink-muted mt-0.5 max-w-[220px] truncate">{fileName}</p>
+                  <p className="text-xs text-ink-muted mt-1 max-w-[220px] truncate">{fileName}</p>
                 </div>
               </>
             ) : success ? (
@@ -1336,7 +1336,7 @@ function CampusMapTab() {
                     {dragOver ? "Drop to upload" : currentMap ? "Click or drag to replace map" : "Click or drag & drop"}
                   </p>
                   <p className="text-xs text-ink-faint mt-1">JPG · JPEG · PNG · WEBP &nbsp;·&nbsp; Max {MAP_MAX_MB} MB</p>
-                  <p className="text-[11px] font-semibold text-brand-dark mt-1.5">Recommended: 1200 × 800 px or wider</p>
+                  <p className="text-[11px] font-semibold text-brand-dark mt-2">Recommended: 1200 × 800 px or wider</p>
                 </div>
               </>
             )}
@@ -1353,23 +1353,23 @@ function CampusMapTab() {
           {/* ── Error panel (same design as ImageUpload) ── */}
           {uploadErr && (
             <div className="mt-3 rounded-xl border border-alert/30 bg-alert-light overflow-hidden">
-              <div className="flex items-start gap-2.5 px-3.5 py-3">
-                <AlertTriangle size={14} className="shrink-0 text-alert mt-0.5" />
+              <div className="flex items-start gap-3 px-4 py-3">
+                <AlertTriangle size={14} className="shrink-0 text-alert mt-1" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-alert">Upload failed</p>
-                  <p className="text-xs text-alert/80 mt-0.5 leading-relaxed">{uploadErr}</p>
+                  <p className="text-xs text-alert/80 mt-1 leading-relaxed">{uploadErr}</p>
                   <p className="text-[10px] text-ink-faint mt-2 leading-relaxed">
                     If this keeps happening, copy the error and report it to the IT team.
                   </p>
                 </div>
                 <button
                   onClick={() => setUploadErr(null)}
-                  className="shrink-0 text-alert/40 hover:text-alert transition-colors mt-0.5"
+                  className="shrink-0 text-alert/40 hover:text-alert transition-colors mt-1"
                 >
                   <X size={13} />
                 </button>
               </div>
-              <div className="border-t border-alert/20 px-3.5 py-2 flex items-center justify-between bg-alert/5">
+              <div className="border-t border-alert/20 px-4 py-2 flex items-center justify-between bg-alert/5">
                 <p className="text-[10px] font-mono text-alert/60 truncate max-w-[70%]">{uploadErr}</p>
                 <button
                   onClick={copyError}
@@ -1454,7 +1454,7 @@ function FullSizeMapPinModal({
             <Dialog.Title className="text-lg font-bold text-ink">Pin Location on Campus Map</Dialog.Title>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-brand-faint transition-colors"
+              className="p-2 rounded-lg text-ink-faint hover:text-ink hover:bg-brand-faint transition-colors"
               title="Close"
             >
               <X size={20} />
@@ -1719,7 +1719,7 @@ function LocationsTab() {
               <TD className="text-ink-muted">{l.power_outlets ?? "—"}</TD>
               <TD className="text-right">
                 <div className="flex items-center justify-end gap-1">
-                  <button onClick={() => openEdit(l)} className="p-1.5 rounded-lg text-ink-faint hover:text-brand-dark hover:bg-brand-faint transition-colors">
+                  <button onClick={() => openEdit(l)} className="p-2 rounded-lg text-ink-faint hover:text-brand-dark hover:bg-brand-faint transition-colors">
                     <Pencil size={13} />
                   </button>
                   <DeleteBtn id={l.id} confirmId={confirmId} setConfirmId={setConfirmId} onDelete={handleDelete} />
@@ -1906,7 +1906,7 @@ function ReviewsTab() {
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <h2 className="text-base font-bold text-ink">Reviews</h2>
-          <p className="text-xs text-ink-muted mt-0.5">
+          <p className="text-xs text-ink-muted mt-1">
             {filtered.length} review{filtered.length !== 1 ? "s" : ""}
             {locFilter !== "all" && ` · avg ${avg} ★`}
           </p>
@@ -2013,7 +2013,7 @@ function PointRulesTab() {
           {rules.map((r, i) => (
             <TR key={r.id} alt={i % 2 === 1}>
               <TD>
-                <code className="text-xs px-1.5 py-0.5 rounded-md bg-canvas border border-border text-ink-muted font-mono">
+                <code className="text-xs px-2 py-1 rounded-md bg-canvas border border-border text-ink-muted font-mono">
                   {r.action_name}
                 </code>
               </TD>
@@ -2032,7 +2032,7 @@ function PointRulesTab() {
                 </div>
               </TD>
               <TD className="text-right">
-                <button onClick={() => openEdit(r)} className="p-1.5 rounded-lg text-ink-faint hover:text-brand-dark hover:bg-brand-faint transition-colors">
+                <button onClick={() => openEdit(r)} className="p-2 rounded-lg text-ink-faint hover:text-brand-dark hover:bg-brand-faint transition-colors">
                   <Pencil size={13} />
                 </button>
               </TD>
@@ -2089,10 +2089,10 @@ function SmallDeleteBtn({ onAsk, onConfirm, onCancel, asking }: {
   if (asking) {
     return (
       <div className="flex items-center gap-1">
-        <button onClick={onConfirm} className="px-2 py-0.5 text-[10px] font-bold rounded-lg bg-alert text-surface hover:bg-alert/80">
+        <button onClick={onConfirm} className="px-2 py-1 text-[10px] font-bold rounded-lg bg-alert text-surface hover:bg-alert/80">
           Confirm
         </button>
-        <button onClick={onCancel} className="px-2 py-0.5 text-[10px] font-medium rounded-lg border border-border text-ink-muted hover:text-ink">
+        <button onClick={onCancel} className="px-2 py-1 text-[10px] font-medium rounded-lg border border-border text-ink-muted hover:text-ink">
           No
         </button>
       </div>
@@ -2272,7 +2272,7 @@ function SchoolsTab() {
 
               {/* ── School row ── */}
               <div
-                className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-canvas/40 transition-colors"
+                className="flex items-center gap-3 px-4 py-4 cursor-pointer hover:bg-canvas/40 transition-colors"
                 onClick={() => toggleSchool(school.id)}
               >
                 <ChevronRight
@@ -2280,7 +2280,7 @@ function SchoolsTab() {
                   className={`text-ink-faint shrink-0 transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
                 />
                 <span className="font-bold text-ink flex-1 leading-tight">{school.name}</span>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-faint text-brand-dark shrink-0">
+                <span className="text-xs font-bold px-2 py-1 rounded-full bg-brand-faint text-brand-dark shrink-0">
                   {school.abbr}
                 </span>
                 <span className="text-xs text-ink-faint shrink-0">
@@ -2314,10 +2314,10 @@ function SchoolsTab() {
                       <div key={level} className="border-b border-border/60 last:border-0">
 
                         {/* Level header */}
-                        <div className="flex items-center justify-between px-5 py-2.5 bg-canvas/30">
+                        <div className="flex items-center justify-between px-5 py-3 bg-canvas/30">
                           <div className="flex items-center gap-2">
                             <GraduationCap size={13} className="text-ink-faint" />
-                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${EDU_BADGE[level]}`}>
+                            <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${EDU_BADGE[level]}`}>
                               {level}
                             </span>
                             <span className="text-xs text-ink-faint">
@@ -2346,7 +2346,7 @@ function SchoolsTab() {
 
                                   {/* Major row */}
                                   <div
-                                    className="flex items-center gap-2 py-2.5 cursor-pointer"
+                                    className="flex items-center gap-2 py-3 cursor-pointer"
                                     onClick={() => toggleMajor(major.id)}
                                   >
                                     <ChevronRight
@@ -2382,10 +2382,10 @@ function SchoolsTab() {
                                         <p className="text-xs text-ink-faint italic py-1">No subjects added yet.</p>
                                       ) : (
                                         majorSubs.map((sub) => (
-                                          <div key={sub.id} className="flex items-center gap-2.5 py-1">
+                                          <div key={sub.id} className="flex items-center gap-3 py-1">
                                             <BookOpen size={11} className="text-ink-faint shrink-0" />
                                             {sub.course_code ? (
-                                              <code className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-canvas border border-border text-ink-muted shrink-0">
+                                              <code className="text-[10px] font-mono font-bold px-2 py-1 rounded-md bg-canvas border border-border text-ink-muted shrink-0">
                                                 {sub.course_code}
                                               </code>
                                             ) : (
@@ -2569,7 +2569,7 @@ function AdminPageContent() {
 
   return (
     <AdminErrorCtx.Provider value={setErr}>
-      <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
+      <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
         <div className="max-w-6xl mx-auto space-y-6">
 
           <div>
@@ -2586,7 +2586,7 @@ function AdminPageContent() {
                 initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
                 className="flex items-start gap-3 rounded-xl border border-alert/30 bg-alert-light px-4 py-3 text-sm text-alert"
               >
-                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                <AlertTriangle size={16} className="shrink-0 mt-1" />
                 <span className="flex-1">{err}</span>
                 <button onClick={() => setErr(null)} className="shrink-0 text-alert/60 hover:text-alert transition-colors">
                   <X size={14} />
@@ -2596,13 +2596,13 @@ function AdminPageContent() {
           </AnimatePresence>
 
           {/* Tab navigation */}
-          <div className="flex gap-1 overflow-x-auto pb-0.5">
+          <div className="flex gap-1 overflow-x-auto pb-1">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => switchTab(id)}
                 className={[
-                  "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150",
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150",
                   tab === id
                     ? "bg-ink text-surface shadow-sm"
                     : "text-ink-muted hover:text-ink hover:bg-surface",

@@ -100,7 +100,7 @@ export default function FeedbackModal({ open, locationName, onOpenChange, onSubm
                 <p className="text-sm text-ink-muted mt-1">
                   Your feedback keeps the map accurate for everyone.
                 </p>
-                <div className="flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-gold-light rounded-full border border-gold/30">
+                <div className="flex items-center gap-2 mt-3 px-3 py-2 bg-gold-light rounded-full border border-gold/30">
                   <Coins size={13} className="text-gold" />
                   <span className="text-sm font-bold text-gold">+15 pts earned</span>
                 </div>
@@ -114,11 +114,11 @@ export default function FeedbackModal({ open, locationName, onOpenChange, onSubm
                     <Dialog.Title className="text-base font-bold text-ink">
                       How was your visit?
                     </Dialog.Title>
-                    <p id="feedback-desc" className="text-xs text-ink-muted mt-0.5 truncate max-w-55">
+                    <p id="feedback-desc" className="text-xs text-ink-muted mt-1 truncate max-w-55">
                       {locationName}
                     </p>
                   </div>
-                  <Dialog.Close className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors">
+                  <Dialog.Close className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors">
                     <X size={16} />
                   </Dialog.Close>
                 </div>
@@ -136,7 +136,7 @@ export default function FeedbackModal({ open, locationName, onOpenChange, onSubm
                           key={value}
                           type="button"
                           onClick={() => setCrowdStatus(value)}
-                          className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 font-semibold transition-all duration-150 ${
+                          className={`flex flex-col items-center gap-2 py-3 rounded-xl border-2 font-semibold transition-all duration-150 ${
                             crowdStatus === value
                               ? `${activeBg} ${activeText}`
                               : "bg-canvas border-border text-ink-muted hover:border-brand hover:text-ink"
@@ -161,7 +161,7 @@ export default function FeedbackModal({ open, locationName, onOpenChange, onSubm
                       onChange={(e) => setComment(e.target.value)}
                       placeholder="How was the noise level? Power outlets working? Tips for others?"
                       maxLength={200}
-                      className="w-full px-3 py-2.5 bg-canvas border border-border rounded-xl text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition-colors resize-none"
+                      className="w-full px-3 py-3 bg-canvas border border-border rounded-xl text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition-colors resize-none"
                     />
                     <p className="text-[10px] text-ink-faint text-right mt-1">
                       {comment.length}/200
