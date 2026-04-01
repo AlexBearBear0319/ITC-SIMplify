@@ -547,20 +547,31 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       return;
     }
 
-    // Create active session
-    await supabase.from("active_sessions").insert({
-      user_id:          currentUserId,
-      location_id:      locationId,
-      seats_taken:      1,
-      activity:         "solo_study",
-      duration_minutes: 60,
-      needs_power:      false,
-      is_active:        true,
-    });
+    // Create active session and keep the real session id for reliable check-out.
+    const { data: newSession, error: createSessionError } = await supabase
+      .from("active_sessions")
+      .insert({
+        user_id:          currentUserId,
+        location_id:      locationId,
+        seats_taken:      1,
+        activity:         "solo_study",
+        duration_minutes: 60,
+        needs_power:      false,
+        is_active:        true,
+      })
+      .select("id, location_id, check_in_time, duration_minutes, activity")
+      .single();
+
+    if (createSessionError || !newSession) {
+      console.error("[check-in] Failed to create active session:", createSessionError?.message);
+      setBlockToast("Check-in failed. Please try again.");
+      setTimeout(() => setBlockToast(null), 4000);
+      return;
+    }
 
     // Mark as checked in locally
     setCheckInDone(true);
-    setExistingSession({ id: -1, location_id: locationId, check_in_time: new Date().toISOString(), duration_minutes: 60, activity: "solo_study" });
+    setExistingSession(newSession as ActiveSessionInfo);
 
     // Daily cooldown: only award points + update streak once per day
     if (!alreadyEarnedToday) {
