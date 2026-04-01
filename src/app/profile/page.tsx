@@ -44,6 +44,7 @@ type UserProfile = {
   username: string;
   avatar_url: string | null;
   points: number;
+  exp: number;
   streak_days: number;
   total_checkins: number;
   joined_at: string;
@@ -199,8 +200,6 @@ const cardVariants = {
 // Page
 // ─────────────────────────────────────────────
 
-type SaveState = "idle" | "saving" | "saved" | "error";
-
 export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -212,14 +211,8 @@ export default function ProfilePage() {
   const prevPointsRef  = useRef<number | null>(null);
   const [pointsDelta,  setPointsDelta]  = useState<number | null>(null);
 
-  const [saveState,       setSaveState]       = useState<SaveState>("idle");
-  const [saveError,       setSaveError]       = useState<string | null>(null);
-
   // Featured badges
   const [featuredIds, setFeaturedIds] = useState<number[]>([]);
-
-  const setEdit = <K extends keyof EditForm>(k: K, v: EditForm[K]) =>
-    setEditForm((f) => ({ ...f, [k]: v }));
 
   // ── Initial data load ──
   useEffect(() => {
@@ -237,7 +230,7 @@ export default function ProfilePage() {
       ] = await Promise.all([
         supabase
           .from("profiles")
-          .select("id, full_name, username, avatar_url, points, exp, streak_days, age, school_id, major_id, education_level, semester_term, featured_achievement_ids")
+          .select("id, full_name, username, avatar_url, points, exp, streak_days, age, school_id, major_id, education_level, semester_term, equipped_badge_id, featured_achievement_ids")
           .eq("id", user.id)
           .single(),
         supabase
@@ -456,71 +449,6 @@ export default function ProfilePage() {
         .then(() => {});
       return next;
     });
-  }
-
-  // ── Avatar upload ──
-  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 1 * 1024 * 1024) {
-      setSaveError("File must be under 1 MB"); setSaveState("error"); return;
-    }
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setSaveError("Only JPEG, PNG, or WebP allowed"); setSaveState("error"); return;
-    }
-
-    setAvatarPreview(URL.createObjectURL(file));
-    setAvatarUploading(true);
-
-    const formData = new FormData();
-    formData.append("avatar", file);
-    const { url, error } = await uploadAvatar(formData);
-
-    setAvatarUploading(false);
-    if (error || !url) {
-      setAvatarPreview(null);
-      setSaveError(error ?? "Upload failed"); setSaveState("error"); return;
-    }
-    setProfile((prev) => prev ? { ...prev, avatar_url: url } : prev);
-    setAvatarPreview(null);
-  }
-
-  // ── Save profile edits ──
-  async function handleSaveProfile(e: React.FormEvent) {
-    e.preventDefault();
-    if (!profile) return;
-    setSaveState("saving");
-    setSaveError(null);
-
-    const updatedFields = {
-      full_name:       editForm.full_name.trim(),
-      username:        editForm.username.trim(),
-      age:             editForm.age ? Number(editForm.age) : null,
-      school_id:       editForm.school_id || null,
-      major_id:        editForm.major_id  || null,
-      education_level: editForm.education_level || null,
-      semester_term:   editForm.semester_term.trim() || null,
-    };
-
-    // Snapshot for rollback, then apply immediately so the UI updates at once.
-    const snapshotProfile = profile;
-    setProfile((prev) => prev ? { ...prev, ...updatedFields } : prev);
-
-    const { error } = await supabase
-      .from("profiles")
-      .update(updatedFields)
-      .eq("id", profile.id);
-
-    if (error) {
-      setProfile(snapshotProfile); // rollback
-      setSaveState("error");
-      setSaveError(error.message);
-      return;
-    }
-
-    setSaveState("saved");
-    setTimeout(() => setSaveState("idle"), 2500);
   }
 
   if (loading || !profile) {
