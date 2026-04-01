@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
-import { getLevel } from "@/lib/levels";
+import { getLevelNumber } from "@/lib/levels";
 import {
   motion,
   AnimatePresence,
@@ -25,11 +25,11 @@ import {
   Gift,
   Settings,
   CheckCircle2,
-  XCircle,
   Zap,
   Shield,
   Compass,
   Award,
+  Target,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -69,23 +69,22 @@ type Achievement = {
   progress?: string;
 };
 
-type ActivityType = "checkin" | "redemption" | "group" | "event" | "badge";
-
-type SessionEntry = {
-  id: number;
-  activity: string;
-  module: string | null;
-  duration_minutes: number;
-  check_in_time: string;
-  is_active: boolean;
-  location_name: string;
-};
+type ActivityType =
+  | "checkin"
+  | "redemption"
+  | "collection"
+  | "group"
+  | "event"
+  | "badge"
+  | "session"
+  | "mission"
+  | "level_up";
 
 type ActivityItem = {
-  id: number;
+  id: string;
   type: ActivityType;
   description: string;
-  time: string;
+  created_at: string;
 };
 
 // ─────────────────────────────────────────────
@@ -103,9 +102,13 @@ const RARITY_CONFIG: Record<AchievementRarity, { bg: string; iconClass: string; 
 const ACTIVITY_CONFIG: Record<ActivityType, { icon: LucideIcon; bg: string; iconClass: string }> = {
   checkin:    { icon: MapPin,       bg: "bg-brand-faint",   iconClass: "text-brand-dark" },
   redemption: { icon: Gift,         bg: "bg-gold-light",    iconClass: "text-gold"       },
+  collection: { icon: CheckCircle2, bg: "bg-success-light", iconClass: "text-success"    },
   group:      { icon: Users,        bg: "bg-success-light", iconClass: "text-success"    },
   event:      { icon: CalendarDays, bg: "bg-alert-light",   iconClass: "text-alert"      },
   badge:      { icon: Trophy,       bg: "bg-brand-light",   iconClass: "text-brand-dark" },
+  session:    { icon: BookOpen,     bg: "bg-brand-faint",   iconClass: "text-brand-dark" },
+  mission:    { icon: Target,       bg: "bg-gold-light",    iconClass: "text-gold"       },
+  level_up:   { icon: Zap,          bg: "bg-success-light", iconClass: "text-success"    },
 };
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -137,15 +140,35 @@ const DEFAULT_PROFILE_ICON = "/profile_default.png";
 // Helpers
 // ─────────────────────────────────────────────
 
-function timeAgo(dateStr: string): string {
-  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60_000);
-  if (mins < 1)  return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24)  return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days === 1) return "Yesterday";
-  return `${days} days ago`;
+function formatTimelineTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleString("en-SG", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function mapActivityType(rawType: string, description: string): ActivityType {
+  const type = rawType.toLowerCase();
+  const text = description.toLowerCase();
+  if (type === "checkin") return "checkin";
+  if (type === "redemption") return /collect|claim/.test(text) ? "collection" : "redemption";
+  if (type === "group") return "group";
+  if (type === "event") return "event";
+  if (type === "badge" || type === "achievement") return "badge";
+  if (type === "mission") return "mission";
+  if (type === "level_up" || type === "levelup" || type === "level") return "level_up";
+  if (type === "session") return "session";
+
+  if (/mission/.test(text)) return "mission";
+  if (/level/.test(text)) return "level_up";
+  if (/collect|claim/.test(text)) return "collection";
+  if (/redeem|reward/.test(text)) return "redemption";
+  if (/badge|achievement/.test(text)) return "badge";
+  if (/group/.test(text)) return "group";
+  if (/check.?in|check.?out|leave|session/.test(text)) return "session";
+  return "event";
 }
 
 // ─────────────────────────────────────────────
@@ -206,7 +229,6 @@ export default function ProfilePage() {
   const [profile,      setProfile]      = useState<UserProfile | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [activity,     setActivity]     = useState<ActivityItem[]>([]);
-  const [sessions,     setSessions]     = useState<SessionEntry[]>([]);
   const [loading,      setLoading]      = useState(true);
   const prevPointsRef  = useRef<number | null>(null);
   const [pointsDelta,  setPointsDelta]  = useState<number | null>(null);
@@ -228,6 +250,7 @@ export default function ProfilePage() {
         { data: userAchievements },
         { data: activityData },
         { data: sessionsData },
+        { data: userRedemptionsData },
       ] = await Promise.all([
         supabase
           .from("profiles")
@@ -263,6 +286,12 @@ export default function ProfilePage() {
           .not("check_in_time", "is", null)
           .order("check_in_time", { ascending: false })
           .limit(10),
+        supabase
+          .from("user_redemptions")
+          .select("id, redeemed_at, claimed_at, status, redemption_items(name)")
+          .eq("user_id", user.id)
+          .order("redeemed_at", { ascending: false })
+          .limit(20),
       ]);
 
       if (prof) {
@@ -303,6 +332,8 @@ export default function ProfilePage() {
               progress = `${streak} / ${a.unlock_threshold} days`;
             else if (a.unlock_type === "points")
               progress = `${pts.toLocaleString()} / ${a.unlock_threshold.toLocaleString()} pts`;
+            else if (a.unlock_type === "exp")
+              progress = `${(prof.exp ?? 0).toLocaleString()} / ${a.unlock_threshold.toLocaleString()} EXP`;
             else if (a.unlock_type === "checkins")
               progress = `${count ?? 0} / ${a.unlock_threshold} check-ins`;
             else if (a.unlock_type === "groups")
@@ -325,26 +356,77 @@ export default function ProfilePage() {
         setAchievements(mapped);
       }
 
-      setActivity(
-        (activityData ?? []).map((a) => ({
-          id:          a.id,
-          type:        a.type as ActivityType,
+      const activityItems: ActivityItem[] = (activityData ?? [])
+        .filter((a) => (a.type ?? "").toLowerCase() !== "redemption")
+        .map((a) => ({
+          id:          `log-${a.id}`,
+          type:        mapActivityType(a.type, a.description),
           description: a.description,
-          time:        timeAgo(a.created_at),
-        }))
-      );
+          created_at:  a.created_at,
+        }));
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setSessions(
-        (sessionsData ?? []).map((s: any) => ({
-          id:               s.id,
-          activity:         s.activity,
-          module:           s.module,
-          duration_minutes: s.duration_minutes,
-          check_in_time:    s.check_in_time,
-          is_active:        s.is_active ?? false,
-          location_name:    s.locations?.name ?? "Unknown location",
-        }))
+      const sessionItems: ActivityItem[] = (sessionsData ?? []).map((s: any) => {
+        const startedAt = s.check_in_time ? new Date(s.check_in_time) : null;
+        const leaveAt = startedAt
+          ? new Date(startedAt.getTime() + (s.duration_minutes ?? 0) * 60_000)
+          : null;
+        const locationName = s.locations?.name ?? "Unknown location";
+        const rawActivity = String(s.activity ?? "").toLowerCase();
+        const sessionType =
+          rawActivity === "study_group"
+            ? "Group study session"
+            : rawActivity === "solo_study"
+            ? "Solo study session"
+            : rawActivity === "study"
+            ? "Study session"
+            : rawActivity === "eating"
+            ? "Meal session"
+            : "Session";
+        const moduleLabel = s.module ? ` · ${s.module}` : "";
+        const leaveLabel = leaveAt
+          ? `Leave at ${leaveAt.toLocaleString("en-SG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+          : "Leave time unavailable";
+
+        return {
+          id:         `session-${s.id}`,
+          type:       "session",
+          description: `${sessionType} at ${locationName}${moduleLabel} · ${s.duration_minutes ?? 0} min · ${leaveLabel}`,
+          created_at: s.check_in_time ?? new Date().toISOString(),
+        };
+      });
+
+      const redemptionItems: ActivityItem[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const redemption of (userRedemptionsData ?? []) as any[]) {
+        // Supabase relation can return object or one-element array depending on typing.
+        const itemRef = redemption.redemption_items;
+        const itemName = Array.isArray(itemRef) ? itemRef[0]?.name : itemRef?.name;
+        const rewardName = itemName ?? "reward";
+
+        if (redemption.redeemed_at) {
+          redemptionItems.push({
+            id: `redeem-${redemption.id}`,
+            type: "redemption",
+            description: `Redeemed "${rewardName}"`,
+            created_at: redemption.redeemed_at,
+          });
+        }
+
+        if (redemption.status === "claimed" && redemption.claimed_at) {
+          redemptionItems.push({
+            id: `collect-${redemption.id}`,
+            type: "collection",
+            description: `Collected "${rewardName}"`,
+            created_at: redemption.claimed_at,
+          });
+        }
+      }
+
+      setActivity(
+        [...activityItems, ...sessionItems, ...redemptionItems]
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 25)
       );
 
       setLoading(false);
@@ -486,7 +568,7 @@ export default function ProfilePage() {
     );
   }
 
-  const level      = getLevel(profile.exp ?? 0);
+  const levelNumber = getLevelNumber(profile.exp ?? 0);
   const joinedLabel = new Date(profile.joined_at).toLocaleDateString("en-SG", {
     month: "short",
     year: "numeric",
@@ -561,8 +643,8 @@ export default function ProfilePage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 mt-3">
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${level.badgeClass}`}>
-                  {level.emoji} {level.name}
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-faint text-brand-dark border border-brand/20">
+                  Level {levelNumber}
                 </span>
                 {profile.equipped_badge_id && (() => {
                   const b = achievements.find((a) => a.id === profile.equipped_badge_id);
@@ -750,47 +832,6 @@ export default function ProfilePage() {
           </motion.div>
         </section>
 
-        {/* ── Session History ── */}
-        {sessions.length > 0 && (
-          <section>
-            <h2 className="text-base font-bold text-ink mb-3">Session History</h2>
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] as [number, number, number, number], delay: 0.1 }}
-              className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden"
-            >
-              {sessions.map((session, index) => (
-                <div
-                  key={session.id}
-                  className={`flex items-center gap-3 px-4 py-3.5 ${index < sessions.length - 1 ? "border-b border-border" : ""}`}
-                >
-                  <div className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center ${session.activity === "study_group" ? "bg-success-light" : "bg-brand-faint"}`}>
-                    {session.activity === "study_group"
-                      ? <Users size={14} className="text-success" />
-                      : <MapPin size={14} className="text-brand-dark" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-ink leading-snug truncate">
-                      {session.location_name}
-                      {session.module && <span className="text-ink-muted"> · {session.module}</span>}
-                    </p>
-                    <p className="text-xs text-ink-faint mt-0.5">
-                      {session.activity === "study_group" ? "Study Group" : "Solo Study"} · {session.duration_minutes} min
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-xs text-ink-faint whitespace-nowrap">{timeAgo(session.check_in_time)}</p>
-                    <p className={`text-[10px] font-medium mt-0.5 ${session.is_active ? "text-success" : "text-ink-faint"}`}>
-                      {session.is_active ? "Active" : "Completed"}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </motion.div>
-          </section>
-        )}
-
         {/* ── Recent Activity ── */}
         <section>
           <h2 className="text-base font-bold text-ink mb-3">Recent Activity</h2>
@@ -824,7 +865,7 @@ export default function ProfilePage() {
                       {item.description}
                     </p>
                     <p className="shrink-0 text-xs text-ink-faint whitespace-nowrap">
-                      {item.time}
+                      {formatTimelineTime(item.created_at)}
                     </p>
                   </div>
                 );

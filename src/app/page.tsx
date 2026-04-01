@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import InteractiveMap from "@/components/features/InteractiveMap";
@@ -97,7 +97,7 @@ type DashboardProfile = {
   full_name: string | null;
   username: string | null;
   points: number;
-  level: number;
+  exp: number;
   streak_days: number;
 };
 
@@ -528,6 +528,7 @@ export default function DashboardPage() {
   const [locError, setLocError]     = useState<string | null>(null);
   const [mapImageUrl, setMapImageUrl] = useState<string | undefined>(undefined);
   const locationsRef = useRef<DashboardLocation[]>([]);
+  const userIdRef = useRef<string | null>(null);
 
   // Daily mission
   const [mission, setMission]           = useState<Mission | null>(null);
@@ -673,6 +674,101 @@ export default function DashboardPage() {
     locationsRef.current = locations;
   }, [locations]);
 
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
+
+  // Source of truth for active banners:
+  // only keep local activeSession/activeGroup when DB rows are still active and not expired.
+  const syncActiveContextFromDb = useCallback(async (uid: string) => {
+    const supabase = createClient();
+
+    const { data: existing } = await supabase
+      .from("active_sessions")
+      .select("id, location_id, activity, module, duration_minutes, seats_taken, check_in_time")
+      .eq("user_id", uid)
+      .eq("is_active", true)
+      .order("check_in_time", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!existing) {
+      setActiveSession(null);
+      setActiveSessionId(null);
+    } else {
+      const restoredEndsAt = new Date(
+        new Date(existing.check_in_time).getTime() +
+        existing.duration_minutes * 60_000
+      );
+
+      if (restoredEndsAt.getTime() <= Date.now()) {
+        await supabase.from("active_sessions").update({ is_active: false }).eq("id", existing.id);
+        setActiveSession(null);
+        setActiveSessionId(null);
+      } else {
+        const cachedLoc = locationsRef.current.find((l) => l.id === existing.location_id);
+        let locationName = cachedLoc?.name ?? "Unknown";
+        if (!cachedLoc) {
+          const { data: locRow } = await supabase
+            .from("locations")
+            .select("name")
+            .eq("id", existing.location_id)
+            .single();
+          locationName = locRow?.name ?? "Unknown";
+        }
+
+        setActiveSessionId(existing.id);
+        setActiveSession({
+          locationId:       existing.location_id,
+          locationName,
+          seats_needed:     existing.seats_taken ?? 1,
+          activity:         (existing.activity as ActiveSession["activity"]) ?? "study",
+          module:           existing.module ?? "",
+          duration_minutes: existing.duration_minutes,
+          endsAt:           restoredEndsAt,
+        });
+      }
+    }
+
+    const { data: memberships } = await supabase
+      .from("study_group_members")
+      .select("group_id, study_groups(id, subject, location_id, is_active, host_id, expires_at)")
+      .eq("user_id", uid);
+
+    const activeMembership = (memberships ?? []).find((row) => {
+      const sgRaw = (row as any)?.study_groups;
+      const sg = Array.isArray(sgRaw) ? sgRaw[0] : sgRaw;
+      if (!sg?.is_active) return false;
+      if (sg?.expires_at && new Date(sg.expires_at).getTime() <= Date.now()) return false;
+      return true;
+    });
+
+    const sgRaw = (activeMembership as any)?.study_groups;
+    const sg = Array.isArray(sgRaw) ? sgRaw[0] : sgRaw;
+    if (!sg) {
+      setActiveGroup(null);
+      return;
+    }
+
+    const cachedLoc = locationsRef.current.find((l) => l.id === sg.location_id);
+    let locationName = cachedLoc?.name ?? "Study spot";
+    if (!cachedLoc) {
+      const { data: locRow } = await supabase
+        .from("locations")
+        .select("name")
+        .eq("id", sg.location_id)
+        .single();
+      locationName = locRow?.name ?? "Study spot";
+    }
+
+    setActiveGroup({
+      id: sg.id,
+      subject: sg.subject ?? "Study Group",
+      locationName,
+      isHost: sg.host_id === uid,
+    });
+  }, []);
+
   // Fetches profile and restores any active session that survived a page refresh.
   useEffect(() => {
     const supabase = createClient();
@@ -686,7 +782,7 @@ export default function DashboardPage() {
 
       const { data } = await supabase
         .from("profiles")
-        .select("full_name, username, points, level, streak_days")
+        .select("full_name, username, points, exp, streak_days")
         .eq("id", user.id)
         .single();
 
@@ -701,68 +797,7 @@ export default function DashboardPage() {
         setUserRank((count ?? 0) + 1);
       }
 
-      // Restore any session the user had before a page refresh
-      const { data: existing } = await supabase
-        .from("active_sessions")
-        .select("id, location_id, activity, module, duration_minutes, seats_taken, check_in_time")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (existing) {
-        const restoredEndsAt = new Date(
-          new Date(existing.check_in_time).getTime() +
-          existing.duration_minutes * 60_000
-        );
-        if (restoredEndsAt.getTime() <= Date.now()) {
-          // Clean up stale active_sessions rows so map status and banners stay accurate.
-          await supabase.from("active_sessions").update({ is_active: false }).eq("id", existing.id);
-        } else {
-          // Fetch the location name directly so the banner never shows "Loading…"
-          const { data: locRow } = await supabase
-            .from("locations")
-            .select("name")
-            .eq("id", existing.location_id)
-            .single();
-
-          setActiveSessionId(existing.id);
-          setActiveSession({
-            locationId:       existing.location_id,
-            locationName:     locRow?.name ?? "Unknown",
-            seats_needed:     existing.seats_taken ?? 1,
-            activity:         (existing.activity as ActiveSession["activity"]) ?? "study",
-            module:           existing.module ?? "",
-            duration_minutes: existing.duration_minutes,
-            endsAt:           restoredEndsAt,
-          });
-        }
-      }
-
-      // Restore any active study group membership (host or member)
-      const { data: membership } = await supabase
-        .from("study_group_members")
-        .select("group_id, study_groups(id, subject, location_id, is_active, host_id, expires_at)")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
-
-      const sg = (membership as any)?.study_groups;
-      const groupNotExpired = !sg?.expires_at || new Date(sg.expires_at).getTime() > Date.now();
-      if (sg?.is_active && groupNotExpired) {
-        const { data: locRow } = await supabase
-          .from("locations")
-          .select("name")
-          .eq("id", sg.location_id)
-          .single();
-        setActiveGroup({
-          id: sg.id,
-          subject: sg.subject ?? "Study Group",
-          locationName: locRow?.name ?? "Study spot",
-          isHost: sg.host_id === user.id,
-        });
-      } else {
-        setActiveGroup(null);
-      }
+      await syncActiveContextFromDb(user.id);
     }
 
     loadProfile();
@@ -868,7 +903,7 @@ export default function DashboardPage() {
 
       supabase
         .from("profiles")
-        .select("full_name, username, points, level, avatar_url")
+        .select("full_name, username, points, exp, avatar_url")
         .order("points", { ascending: false })
         .limit(3)
         .then(({ data }) => {
@@ -879,7 +914,7 @@ export default function DashboardPage() {
               name:       p.full_name ?? p.username ?? "Student",
               initials:   getInitials(p.full_name ?? p.username ?? "ST"),
               points:     p.points ?? 0,
-              level:      p.level ?? getLevelNumber(p.points ?? 0),
+              level:      getLevelNumber(p.exp ?? 0),
               avatar_url: p.avatar_url ?? null,
             }))
           );
@@ -949,7 +984,7 @@ export default function DashboardPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "active_sessions" },
-        () => {
+        (payload) => {
           supabase
             .from("active_sessions")
             .select("location_id, seats_taken, needs_power")
@@ -957,11 +992,90 @@ export default function DashboardPage() {
             .then(({ data: sessions }) => {
               applyLiveStats(sessions);
             });
+
+          const affectedUserId = (payload.new as any)?.user_id ?? (payload.old as any)?.user_id;
+          if (affectedUserId && userIdRef.current && affectedUserId === userIdRef.current) {
+            void syncActiveContextFromDb(userIdRef.current);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "study_group_members" },
+        (payload) => {
+          const affectedUserId = (payload.new as any)?.user_id ?? (payload.old as any)?.user_id;
+          if (affectedUserId && userIdRef.current && affectedUserId === userIdRef.current) {
+            void syncActiveContextFromDb(userIdRef.current);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "study_groups" },
+        () => {
+          if (userIdRef.current) {
+            void syncActiveContextFromDb(userIdRef.current);
+          }
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
+  }, [syncActiveContextFromDb]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fallback sync so banners cannot stay stale when realtime events are missed.
+  useEffect(() => {
+    if (!userId) return;
+
+    const syncNow = () => { void syncActiveContextFromDb(userId); };
+    syncNow();
+
+    const intervalId = window.setInterval(syncNow, 15_000);
+    const onFocus = () => syncNow();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") syncNow();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [userId, syncActiveContextFromDb]);
+
+  // Fallback refresh for global occupancy cards/alerts when realtime events are missed.
+  useEffect(() => {
+    const supabase = createClient();
+
+    const refreshLiveStats = () => {
+      supabase
+        .from("active_sessions")
+        .select("location_id, seats_taken, needs_power")
+        .eq("is_active", true)
+        .then(({ data: sessions }) => {
+          applyLiveStats(sessions);
+        });
+    };
+
+    refreshLiveStats();
+
+    const intervalId = window.setInterval(refreshLiveStats, 15_000);
+    const onFocus = () => refreshLiveStats();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refreshLiveStats();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredLocations = statusFilter
@@ -1707,7 +1821,7 @@ export default function DashboardPage() {
                 {profile === null ? (
                   <span className="inline-block h-4 w-12 bg-brand/20 rounded animate-pulse" />
                 ) : (
-                  `Level ${profile.level ?? 1}`
+                  `Level ${getLevelNumber(profile.exp ?? 0)}`
                 )}
               </span>
             </div>

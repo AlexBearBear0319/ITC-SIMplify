@@ -11,7 +11,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Coins, Crown } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
-import { getLevelEmoji } from "@/lib/levels";
+import { getLevelNumber } from "@/lib/levels";
 
 // ── Types ───────────────────────────────────────
 
@@ -21,6 +21,7 @@ type LeaderboardEntry = {
   username: string | null;
   avatar_url: string | null;
   points: number;
+  exp: number;
   is_current_user?: boolean;
 };
 
@@ -143,7 +144,7 @@ export default function LeaderboardPage() {
     const [{ data: profiles }, { data: { user } }] = await Promise.all([
       supabase
         .from("profiles")
-        .select("id, full_name, username, avatar_url, points")
+        .select("id, full_name, username, avatar_url, points, exp")
         .order("points", { ascending: false })
         .limit(50),
       supabase.auth.getUser(),
@@ -237,8 +238,8 @@ export default function LeaderboardPage() {
                 {me.points.toLocaleString()} pts — keep checking in to climb!
               </p>
             </div>
-            <span className="text-xl shrink-0">
-              {getLevelEmoji(me.points)}
+            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-brand-faint text-brand-dark border border-brand/20 shrink-0">
+              Level {getLevelNumber(me.exp ?? 0)}
             </span>
           </motion.div>
         )}
@@ -277,13 +278,14 @@ export default function LeaderboardPage() {
                     extraClass={cfg.avatarClass}
                   />
 
-                  <div className="w-full">
-                    <p className="text-sm font-bold text-ink leading-tight truncate">
-                      {getDisplayName(entry)}
-                    </p>
-                    {entry.is_current_user && (
-                      <span className="text-[10px] font-medium text-ink-muted">(you)</span>
-                    )}
+                    <div className="w-full">
+                      <p className="text-sm font-bold text-ink leading-tight truncate">
+                        {getDisplayName(entry)}
+                      </p>
+                      <p className="text-[10px] text-ink-muted mt-0.5">Level {getLevelNumber(entry.exp ?? 0)}</p>
+                      {entry.is_current_user && (
+                        <span className="text-[10px] font-medium text-ink-muted">(you)</span>
+                      )}
                     <p
                       className={`text-xs font-semibold mt-1 flex items-center justify-center gap-1 ${cfg.pointsClass}`}
                     >
@@ -311,7 +313,6 @@ export default function LeaderboardPage() {
             {rest.map((entry, i) => {
               const rank         = i + 4;
               const isCurrent    = !!entry.is_current_user;
-              const levelEmoji   = getLevelEmoji(entry.points);
 
               return (
                 <motion.div
@@ -353,7 +354,9 @@ export default function LeaderboardPage() {
                       <p className="text-sm font-semibold text-ink leading-tight truncate">
                         {getDisplayName(entry)}
                       </p>
-                      <span className="text-sm leading-none">{levelEmoji}</span>
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-brand-faint text-brand-dark border border-brand/20 leading-none">
+                        Level {getLevelNumber(entry.exp ?? 0)}
+                      </span>
                       {isCurrent && (
                         <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-brand text-ink leading-none">
                           You

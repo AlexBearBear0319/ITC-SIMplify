@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
-import { type LevelTier, LEVELS, getLevel } from "@/lib/levels";
+import { type LevelTier, LEVELS, getLevel, getLevelNumber } from "@/lib/levels";
 
 // ─────────────────────────────────────────────
 // Types  (shapes match Supabase schema)
@@ -109,13 +109,15 @@ const cardVariants = {
 
 function BalanceCard({ user, points, exp }: { user: UserRewards; points: number; exp: number }) {
   const level = getLevel(exp);
+  const levelNumber = getLevelNumber(exp);
   const expToNext = level.nextPts === Infinity ? 0 : level.nextPts - exp;
+  const nextLevelNumber = Math.min(LEVELS.length, levelNumber + 1);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-ink text-surface p-6 shadow-md">
+    <div className="relative overflow-hidden rounded-2xl bg-surface border border-border p-6 shadow-sm">
       {/* Ambient blobs */}
-      <div className="pointer-events-none absolute -top-8 -right-8 w-40 h-40 rounded-full bg-gold opacity-15 blur-2xl" />
-      <div className="pointer-events-none absolute bottom-0 left-8 w-28 h-28 rounded-full bg-brand opacity-10 blur-xl" />
+      <div className="pointer-events-none absolute -top-8 -right-8 w-40 h-40 rounded-full bg-gold opacity-20 blur-2xl" />
+      <div className="pointer-events-none absolute bottom-0 left-8 w-28 h-28 rounded-full bg-brand-light opacity-30 blur-xl" />
 
       <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
         {/* Avatar + name + level badge */}
@@ -129,40 +131,40 @@ function BalanceCard({ user, points, exp }: { user: UserRewards; points: number;
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-surface/50 leading-none mb-0.5">Welcome back,</p>
-            <p className="font-semibold text-surface leading-tight truncate">{user.username}</p>
-            <span className={`inline-block mt-1 text-xs font-medium px-2 py-0.5 rounded-full ${level.badgeClass}`}>
-              {level.emoji} {level.name}
+            <p className="text-xs text-ink-faint leading-none mb-0.5">Welcome back,</p>
+            <p className="font-semibold text-ink leading-tight truncate">{user.username}</p>
+            <span className="inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-faint text-brand-dark border border-brand/20">
+              Level {levelNumber}
             </span>
           </div>
         </div>
 
         {/* Points balance — re-animates on change via key */}
         <div className="shrink-0 text-right">
-          <p className="text-xs text-surface/50 uppercase tracking-wider mb-0.5">Points Balance</p>
+          <p className="text-xs text-ink-faint uppercase tracking-wider mb-0.5">Points Balance</p>
           <AnimatePresence mode="wait">
             <motion.p
               key={points}
-              initial={{ scale: 1.25, color: "#E2C044" }}
-              animate={{ scale: 1, color: "#FFFFFF" }}
+              initial={{ scale: 1.18, color: "#E2C044" }}
+              animate={{ scale: 1 }}
               transition={{ duration: 0.45, ease: "easeOut" }}
-              className="text-3xl font-extrabold leading-none"
+              className="text-3xl font-extrabold leading-none text-ink"
             >
               {points.toLocaleString()}
             </motion.p>
           </AnimatePresence>
-          <p className="text-xs text-surface/40 mt-0.5">pts</p>
+          <p className="text-xs text-ink-faint mt-0.5">pts</p>
         </div>
       </div>
 
       {/* Level progress bar */}
       {level.nextPts !== Infinity ? (
         <div className="relative mt-5">
-          <div className="flex justify-between text-xs text-surface/50 mb-1.5">
-            <span>{level.emoji} {level.name}</span>
+          <div className="flex justify-between text-xs text-ink-muted mb-1.5">
+            <span>Level {levelNumber}</span>
             <span>{expToNext.toLocaleString()} EXP to next level</span>
           </div>
-          <div className="h-2 rounded-full bg-surface/10 overflow-hidden">
+          <div className="h-2 rounded-full bg-canvas border border-border overflow-hidden">
             <motion.div
               className="h-full rounded-full bg-gold"
               initial={{ width: 0 }}
@@ -174,12 +176,12 @@ function BalanceCard({ user, points, exp }: { user: UserRewards; points: number;
               }}
             />
           </div>
-          <p className="text-right text-xs text-surface/40 mt-1">{level.progress}% to {LEVELS[LEVELS.findIndex(l => l.name === level.name) + 1]?.name ?? "max"}</p>
+          <p className="text-right text-xs text-ink-faint mt-1">{level.progress}% to Level {nextLevelNumber}</p>
         </div>
       ) : (
         <div className="mt-4 flex items-center gap-2 text-gold text-sm font-medium">
           <Star size={14} className="fill-gold" />
-          <span>Maximum level reached — you&apos;re a Legend! 🎉</span>
+          <span>Maximum level reached. 🎉</span>
         </div>
       )}
     </div>
