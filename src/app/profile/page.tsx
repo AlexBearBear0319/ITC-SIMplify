@@ -91,12 +91,12 @@ type ActivityItem = {
 // Config maps
 // ─────────────────────────────────────────────
 
-const RARITY_CONFIG: Record<AchievementRarity, { bg: string; iconClass: string; label: string }> = {
-  common:    { bg: "bg-brand-faint",   iconClass: "text-brand-dark", label: "Common"    },
-  uncommon:  { bg: "bg-success-light", iconClass: "text-success",    label: "Uncommon"  },
-  rare:      { bg: "bg-gold-light",    iconClass: "text-gold",       label: "Rare"      },
-  epic:      { bg: "bg-alert-light",   iconClass: "text-alert",      label: "Epic"      },
-  legendary: { bg: "bg-brand-light",   iconClass: "text-brand",      label: "Legendary" },
+const RARITY_CONFIG: Record<AchievementRarity, { bg: string; iconClass: string; label: string; shineClass: string }> = {
+  common:    { bg: "bg-brand-faint",   iconClass: "text-brand-dark", label: "Common",    shineClass: "rarity-common"    },
+  uncommon:  { bg: "bg-success-light", iconClass: "text-success",    label: "Uncommon",  shineClass: "rarity-uncommon"  },
+  rare:      { bg: "bg-gold-light",    iconClass: "text-gold",       label: "Rare",      shineClass: "rarity-rare"      },
+  epic:      { bg: "bg-alert-light",   iconClass: "text-alert",      label: "Epic",      shineClass: "rarity-epic"      },
+  legendary: { bg: "bg-brand-light",   iconClass: "text-brand",      label: "Legendary", shineClass: "rarity-legendary" },
 };
 
 const ACTIVITY_CONFIG: Record<ActivityType, { icon: LucideIcon; bg: string; iconClass: string }> = {
@@ -204,7 +204,7 @@ function CountUp({
 
 const containerVariants = {
   hidden: {},
-  visible: { transition: { staggerChildren: 0.07 } },
+  visible: { transition: { staggerChildren: 0.1 } },
 };
 
 const cardVariants = {
@@ -213,7 +213,7 @@ const cardVariants = {
     opacity: 1,
     y: 0,
     transition: {
-      duration: 0.35,
+      duration: 0.48,
       ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
     },
   },
@@ -296,6 +296,7 @@ export default function ProfilePage() {
 
       if (prof) {
         const pts    = prof.points      ?? 0;
+        const expVal = prof.exp         ?? 0;
         const streak = prof.streak_days ?? 0;
 
         const loaded: UserProfile = {
@@ -333,7 +334,7 @@ export default function ProfilePage() {
             else if (a.unlock_type === "points")
               progress = `${pts.toLocaleString()} / ${a.unlock_threshold.toLocaleString()} pts`;
             else if (a.unlock_type === "exp")
-              progress = `${(prof.exp ?? 0).toLocaleString()} / ${a.unlock_threshold.toLocaleString()} EXP`;
+              progress = `${expVal.toLocaleString()} / ${a.unlock_threshold.toLocaleString()} exp`;
             else if (a.unlock_type === "checkins")
               progress = `${count ?? 0} / ${a.unlock_threshold} check-ins`;
             else if (a.unlock_type === "groups")
@@ -598,13 +599,26 @@ export default function ProfilePage() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{
-            duration: 0.4,
+            duration: 0.58,
             ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
           }}
-          className="relative overflow-hidden bg-surface rounded-2xl p-6 shadow-sm border border-border"
+          className={`relative overflow-hidden bg-surface rounded-2xl p-6 shadow-sm border ${
+            level.level === 100 ? "border-gold/45 legend-glow" : "border-border"
+          }`}
         >
-          <div className="pointer-events-none absolute -top-8 -left-8 w-36 h-36 rounded-full bg-brand opacity-20 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-4 right-6 w-28 h-28 rounded-full bg-brand-light opacity-30 blur-xl" />
+          {level.level === 100 ? (
+            <>
+              <div className="pointer-events-none absolute -top-10 -left-10 w-52 h-52 rounded-full bg-gold opacity-20 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-6 right-4 w-44 h-44 rounded-full bg-gold opacity-15 blur-2xl" />
+              <div className="pointer-events-none absolute top-0 right-1/3 w-24 h-24 rounded-full bg-gold-light opacity-40 blur-2xl" />
+              <div className="legend-sweep" />
+            </>
+          ) : (
+            <>
+              <div className="pointer-events-none absolute -top-8 -left-8 w-36 h-36 rounded-full bg-brand opacity-20 blur-2xl" />
+              <div className="pointer-events-none absolute -bottom-4 right-6 w-28 h-28 rounded-full bg-brand-light opacity-30 blur-xl" />
+            </>
+          )}
 
           <div className="relative flex flex-col sm:flex-row sm:items-start gap-4">
             <div className="relative shrink-0 w-20 h-20 rounded-full bg-brand-light flex items-center justify-center text-3xl font-extrabold text-ink shadow-sm select-none overflow-hidden">
@@ -618,12 +632,68 @@ export default function ProfilePage() {
 
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
-                <div>
+                {/* Left column: name, username, badges, education — all flow together */}
+                <div className="min-w-0">
                   <h1 className="text-xl font-extrabold text-ink leading-tight">
                     {profile.full_name}
                   </h1>
                   <p className="text-sm text-ink-muted">@{profile.username}</p>
+
+                  {/* Level + equipped badge + member since — directly below username */}
+                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${level.badgeClass}`}>
+                      {level.emoji} {level.name}
+                    </span>
+                    {profile.equipped_badge_id && (() => {
+                      const b = achievements.find((a) => a.id === profile.equipped_badge_id);
+                      if (!b) return null;
+                      const rCfg = RARITY_CONFIG[b.rarity];
+                      const Icon = b.icon;
+                      return (
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${rCfg.bg} ${rCfg.iconClass}`}>
+                          <Icon size={11} />
+                          {b.name}
+                        </span>
+                      );
+                    })()}
+                    <span className="text-xs text-ink-faint">
+                      Member since {joinedLabel}
+                    </span>
+                  </div>
+
+                  {/* Featured badges */}
+                  {featuredIds.length > 0 && (
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {featuredIds.map((fid) => {
+                        const badge = achievements.find((a) => a.id === fid);
+                        if (!badge) return null;
+                        const rCfg = RARITY_CONFIG[badge.rarity];
+                        const Icon = badge.icon;
+                        return (
+                          <div
+                            key={fid}
+                            title={badge.name}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium ${rCfg.bg} ${rCfg.iconClass}`}
+                          >
+                            <Icon size={11} />
+                            {badge.name}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* School / major / education info */}
+                  {(profile.education_level || profile.semester_term) && (
+                    <p className="text-xs text-ink-faint mt-1">
+                      {[profile.education_level, profile.semester_term]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
                 </div>
+
+                {/* Right column: action buttons */}
                 <div className="shrink-0 flex flex-col items-stretch gap-2">
                   <Link
                     href="/profile/edit"
@@ -641,58 +711,6 @@ export default function ProfilePage() {
                   </Link>
                 </div>
               </div>
-
-              <div className="flex flex-wrap items-center gap-2 mt-3">
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-faint text-brand-dark border border-brand/20">
-                  Level {levelNumber}
-                </span>
-                {profile.equipped_badge_id && (() => {
-                  const b = achievements.find((a) => a.id === profile.equipped_badge_id);
-                  if (!b) return null;
-                  const rCfg = RARITY_CONFIG[b.rarity];
-                  const Icon = b.icon;
-                  return (
-                    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${rCfg.bg} ${rCfg.iconClass}`}>
-                      <Icon size={11} />
-                      {b.name}
-                    </span>
-                  );
-                })()}
-                <span className="text-xs text-ink-faint">
-                  Member since {joinedLabel}
-                </span>
-              </div>
-
-              {/* Featured badges */}
-              {featuredIds.length > 0 && (
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  {featuredIds.map((fid) => {
-                    const badge = achievements.find((a) => a.id === fid);
-                    if (!badge) return null;
-                    const rCfg = RARITY_CONFIG[badge.rarity];
-                    const Icon = badge.icon;
-                    return (
-                      <div
-                        key={fid}
-                        title={badge.name}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium ${rCfg.bg} ${rCfg.iconClass}`}
-                      >
-                        <Icon size={11} />
-                        {badge.name}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* School / major / education info */}
-              {(profile.education_level || profile.semester_term) && (
-                <p className="text-xs text-ink-faint mt-1.5">
-                  {[profile.education_level, profile.semester_term]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-              )}
             </div>
           </div>
         </motion.div>
@@ -744,10 +762,10 @@ export default function ProfilePage() {
                 <motion.div
                   key={achievement.id}
                   variants={cardVariants}
-                  className={`flex items-start gap-3 p-4 rounded-2xl border ${
+                  className={`flex gap-3 p-4 rounded-2xl border ${
                     achievement.unlocked
-                      ? "bg-surface border-border"
-                      : "bg-surface/60 border-border/50 opacity-55"
+                      ? `items-start bg-surface border-transparent ${rCfg.shineClass}`
+                      : "items-center bg-surface/60 border-border/50 opacity-55"
                   }`}
                 >
                   <div
