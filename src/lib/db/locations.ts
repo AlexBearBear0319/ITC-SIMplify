@@ -3,6 +3,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { DbResult, Location, LocationStatus } from '@/lib/types/database'
+import { deriveLocationStatus } from '@/lib/location-status'
 
 // ─── FILTER OPTIONS ──────────────────────────────────────────────────────────
 
@@ -143,9 +144,6 @@ export async function recalculateLocationStatus(
   seatsTaken: number,
   totalSeats: number,
 ): Promise<DbResult<Location>> {
-  const fillPct = totalSeats > 0 ? (seatsTaken / totalSeats) * 100 : 0
-  const status: LocationStatus =
-    fillPct === 0 ? 'empty' : fillPct <= 60 ? 'empty' : fillPct <= 90 ? 'busy' : 'full'
-
+  const status: LocationStatus = deriveLocationStatus(seatsTaken, totalSeats)
   return updateLocationStatus(supabase, id, status)
 }

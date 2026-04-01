@@ -15,7 +15,7 @@ import { useChat } from "@ai-sdk/react";
 import { isTextUIPart } from "ai";
 import { DayPicker } from "react-day-picker";
 import type { DayButtonProps } from "react-day-picker";
-import { format, isSameDay, parseISO, startOfMonth, endOfMonth } from "date-fns";
+import { format, isSameDay, parseISO, startOfMonth, endOfMonth, startOfDay, endOfDay } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
@@ -41,7 +41,7 @@ import { createClient } from "@/utils/supabase/client";
 type CalendarEvent = {
   id: number;
   title: string;
-  description: string;
+  description: string | null;
   event_date: string;      // ISO 8601 string
   location_id: number | null;
   is_peak_alert: boolean;
@@ -358,6 +358,7 @@ export default function EventsPage() {
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [events, setEvents]             = useState<CalendarEvent[]>([]);
   const [loading, setLoading]           = useState(true);
+  const [eventsError, setEventsError]   = useState<string | null>(null);
   const [suggestionSpots, setSuggestionSpots] = useState<SuggestionSpot[]>([]);
 
   // Fetch available study locations once on mount (for suggestion chip buttons)
@@ -382,14 +383,51 @@ export default function EventsPage() {
   useEffect(() => {
     const supabase = createClient();
     setLoading(true);
+    setEventsError(null);
+
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const queryStart = new Date(startOfDay(monthStart));
+    const queryEnd = new Date(endOfDay(monthEnd));
+    // Include a one-day UTC buffer on both edges to avoid timezone cutoff misses.
+    queryStart.setDate(queryStart.getDate() - 1);
+    queryEnd.setDate(queryEnd.getDate() + 1);
+
     supabase
       .from("events")
       .select("id, title, description, event_date, location_id, is_peak_alert")
-      .gte("event_date", startOfMonth(currentMonth).toISOString())
-      .lte("event_date", endOfMonth(currentMonth).toISOString())
+      .gte("event_date", queryStart.toISOString())
+      .lte("event_date", queryEnd.toISOString())
       .order("event_date")
-      .then(({ data }) => {
-        setEvents((data ?? []) as CalendarEvent[]);
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("[events] Failed to load events:", error.message);
+          setEvents([]);
+          setEventsError("Could not load events right now. Please try again.");
+          setLoading(false);
+          return;
+        }
+
+        const monthEvents = ((data ?? []) as CalendarEvent[])
+          .filter((event) => {
+            const date = parseISO(event.event_date);
+            return date.getFullYear() === currentMonth.getFullYear() && date.getMonth() === currentMonth.getMonth();
+          })
+          .map((event) => ({ ...event, is_peak_alert: Boolean(event.is_peak_alert) }));
+
+        setEvents(monthEvents);
+        setSelectedDate((prev) => {
+          const isPrevInMonth =
+            prev.getFullYear() === currentMonth.getFullYear() &&
+            prev.getMonth() === currentMonth.getMonth();
+          const prevHasEvent =
+            isPrevInMonth &&
+            monthEvents.some((event) => isSameDay(parseISO(event.event_date), prev));
+
+          if (prevHasEvent) return prev;
+          if (monthEvents.length > 0) return parseISO(monthEvents[0].event_date);
+          return monthStart;
+        });
         setLoading(false);
       });
   }, [currentMonth]);
@@ -523,6 +561,12 @@ export default function EventsPage() {
                 exit="exit"
                 className="space-y-3"
               >
+                {eventsError && (
+                  <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl border border-alert/30 bg-alert-light">
+                    <AlertCircle size={14} className="text-alert shrink-0 mt-0.5" />
+                    <p className="text-xs text-ink-muted">{eventsError}</p>
+                  </div>
+                )}
                 {dayEvents.length > 0 ? (
                   <>
                     {dayEvents.map((event) => {

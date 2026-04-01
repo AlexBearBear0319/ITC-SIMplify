@@ -20,6 +20,8 @@ import {
 } from "@/app/admin/actions";
 import RewardClaimScannerModal from "@/components/features/RewardClaimScannerModal";
 import { getLevelEmoji } from "@/lib/levels";
+import { deriveLocationStatus } from "@/lib/location-status";
+import type { LocationStatus } from "@/lib/types/database";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
@@ -254,15 +256,44 @@ const CAT_COLORS  = ["#B3D2D5", "#E5989B", "#E2C044", "#7BC99A", "#A89FD5", "#F4
 const OPEN_HOURS  = [9,10,11,12,13,14,15,16,17,18,19,20,21];
 function hourLabel(h: number) { return h === 12 ? "12PM" : h < 12 ? `${h}AM` : `${h-12}PM`; }
 
+type ZoneDebugRow = {
+  id: number;
+  name: string;
+  occupiedSeats: number;
+  totalSeats: number;
+  fillPct: number;
+  powerUsed: number;
+  powerTotal: number;
+  derivedStatus: LocationStatus;
+  storedStatus: LocationStatus | null;
+  inSync: boolean;
+};
+
+const STATUS_BADGE_CLASS: Record<LocationStatus, string> = {
+  empty: "bg-success-light text-success border-success/30",
+  busy: "bg-gold-light text-gold border-gold/30",
+  full: "bg-alert-light text-alert border-alert/30",
+};
+
+function normalizeStatus(status: string | null): LocationStatus | null {
+  if (!status) return null;
+  const lowered = status.toLowerCase();
+  if (lowered === "empty" || lowered === "busy" || lowered === "full") return lowered;
+  return null;
+}
+
 function OverviewTab() {
   const supabase = createClient();
+  const setErr = useAdminError();
   const [kpi, setKpi] = useState({ users: 0, checkins: 0, groups: 0, redemptions: 0 });
   const [weeklyTotal, setWeeklyTotal] = useState(0);
   const [catSlices, setCatSlices] = useState<{ name: string; value: number; color: string }[]>([]);
   const [peakHours, setPeakHours] = useState<{ hour: string; density: number }[]>(OPEN_HOURS.map(h => ({ hour: hourLabel(h), density: 0 })));
+  const [zoneRows, setZoneRows] = useState<ZoneDebugRow[]>([]);
   const [ready, setReady] = useState(false);
   const [aiInsight, setAiInsight] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const generateInsight = async (snapshot: Record<string, unknown>) => {
     setAiInsight("");
@@ -291,11 +322,16 @@ function OverviewTab() {
     }
   };
 
-  useEffect(() => {
+  const loadOverview = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    Promise.all([
+
+    setRefreshing(true);
+    try {
+      const [
+        u, c, g, r, w, cat, hourly, locRows, liveRows,
+      ] = await Promise.all([
       supabase.from("profiles").select("id", { count: "exact", head: true }),
       supabase.from("active_sessions")
         .select("id", { count: "exact", head: true })
@@ -316,7 +352,16 @@ function OverviewTab() {
         .select("check_in_time")
         .gte("check_in_time", today.toISOString())
         .not("check_in_time", "is", null),
-    ]).then(([u, c, g, r, w, cat, hourly]) => {
+      supabase
+        .from("locations")
+        .select("id, name, current_status, total_seats, power_outlets")
+        .order("name"),
+      supabase
+        .from("active_sessions")
+        .select("location_id, seats_taken, needs_power")
+        .eq("is_active", true),
+    ]);
+
       const kpiData = {
         users: u.count ?? 0,
         checkins: c.count ?? 0,
@@ -353,10 +398,47 @@ function OverviewTab() {
         density: Math.round(((buckets[h] ?? 0) / maxCount) * 100),
       }));
 
+      // Build per-zone occupancy debug rows
+      const occupancyByLocation: Record<number, { occupiedSeats: number; powerUsed: number }> = {};
+      for (const s of liveRows.data ?? []) {
+        const row = s as { location_id: number | null; seats_taken: number | null; needs_power: boolean | null };
+        if (row.location_id == null) continue;
+        if (!occupancyByLocation[row.location_id]) {
+          occupancyByLocation[row.location_id] = { occupiedSeats: 0, powerUsed: 0 };
+        }
+        const seats = row.seats_taken ?? 1;
+        occupancyByLocation[row.location_id].occupiedSeats += seats;
+        if (row.needs_power) occupancyByLocation[row.location_id].powerUsed += seats * 2;
+      }
+
+      const zoneDebugRows: ZoneDebugRow[] = (locRows.data ?? []).map((loc) => {
+        const occupancy = occupancyByLocation[loc.id] ?? { occupiedSeats: 0, powerUsed: 0 };
+        const totalSeats = Math.max(0, loc.total_seats ?? 0);
+        const fillPct = totalSeats > 0
+          ? Math.min(100, Math.round((occupancy.occupiedSeats / totalSeats) * 100))
+          : 0;
+        const derivedStatus = deriveLocationStatus(occupancy.occupiedSeats, totalSeats);
+        const storedStatus = normalizeStatus(loc.current_status);
+
+        return {
+          id: loc.id,
+          name: loc.name,
+          occupiedSeats: occupancy.occupiedSeats,
+          totalSeats,
+          fillPct,
+          powerUsed: occupancy.powerUsed,
+          powerTotal: Math.max(0, loc.power_outlets ?? 0),
+          derivedStatus,
+          storedStatus,
+          inSync: storedStatus === derivedStatus,
+        };
+      }).sort((a, b) => b.fillPct - a.fillPct || a.name.localeCompare(b.name));
+
       setKpi(kpiData);
       setWeeklyTotal(wTotal);
       setCatSlices(slices);
       setPeakHours(liveHours);
+      setZoneRows(zoneDebugRows);
       setReady(true);
       void generateInsight({
         checkinsToday:      kpiData.checkins,
@@ -368,7 +450,16 @@ function OverviewTab() {
         topCategory:        slices[0]?.name,
         topCategoryPct:     slices[0]?.value,
       });
-    }).catch(console.error);
+    } catch {
+      setErr("Failed to load overview stats.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadOverview();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const cards = [
@@ -377,6 +468,7 @@ function OverviewTab() {
     { label: "Active Study Groups",    value: kpi.groups,      sub: "currently running",          icon: Users,     bg: "bg-gold-light",    cls: "text-gold"       },
     { label: "Pending Redemptions",    value: kpi.redemptions, sub: "awaiting claim",             icon: Gift,      bg: "bg-alert-light",   cls: "text-alert"      },
   ];
+  const outOfSyncCount = zoneRows.filter((r) => !r.inSync).length;
 
   return (
     <div className="space-y-6">
@@ -469,6 +561,90 @@ function OverviewTab() {
           ) : (
             <p className="mt-3 text-[11px] text-ink-faint text-center">No check-in data for the past 7 days</p>
           )}
+        </div>
+      </div>
+
+      {/* Zone status debug */}
+      <div className="bg-surface rounded-2xl border border-border shadow-sm p-5">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h3 className="text-sm font-bold text-ink mb-0.5">Zone Status Debug</h3>
+            <p className="text-xs text-ink-muted">
+              Rule: 0-60% = empty, 61-90% = busy, 91%+ = full
+            </p>
+          </div>
+          <button
+            onClick={() => { void loadOverview(); }}
+            disabled={refreshing}
+            className={`${BTN_GHOST} disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+
+        <div className="mb-3 flex items-center gap-2">
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${outOfSyncCount > 0 ? "bg-alert-light text-alert border-alert/30" : "bg-success-light text-success border-success/30"}`}>
+            {outOfSyncCount > 0 ? `${outOfSyncCount} mismatch${outOfSyncCount > 1 ? "es" : ""}` : "All synced"}
+          </span>
+          <span className="text-[11px] text-ink-faint">
+            compares stored `current_status` vs derived live occupancy status
+          </span>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[760px] text-xs">
+            <thead>
+              <tr className="border-b border-border bg-canvas/40">
+                <th className="px-3 py-2 text-left font-semibold text-ink-faint">Zone</th>
+                <th className="px-3 py-2 text-left font-semibold text-ink-faint">Seats</th>
+                <th className="px-3 py-2 text-left font-semibold text-ink-faint">Fill</th>
+                <th className="px-3 py-2 text-left font-semibold text-ink-faint">Derived</th>
+                <th className="px-3 py-2 text-left font-semibold text-ink-faint">Stored</th>
+                <th className="px-3 py-2 text-left font-semibold text-ink-faint">Sync</th>
+                <th className="px-3 py-2 text-left font-semibold text-ink-faint">Power</th>
+              </tr>
+            </thead>
+            <tbody>
+              {zoneRows.map((row) => (
+                <tr key={row.id} className={`border-b border-border last:border-0 ${row.inSync ? "" : "bg-alert-light/30"}`}>
+                  <td className="px-3 py-2 font-medium text-ink">{row.name}</td>
+                  <td className="px-3 py-2 text-ink-muted">
+                    {row.totalSeats > 0 ? `${row.occupiedSeats}/${row.totalSeats}` : `${row.occupiedSeats}/-`}
+                  </td>
+                  <td className="px-3 py-2 text-ink-muted">{row.fillPct}%</td>
+                  <td className="px-3 py-2">
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-semibold capitalize ${STATUS_BADGE_CLASS[row.derivedStatus]}`}>
+                      {row.derivedStatus}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    {row.storedStatus ? (
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-semibold capitalize ${STATUS_BADGE_CLASS[row.storedStatus]}`}>
+                        {row.storedStatus}
+                      </span>
+                    ) : (
+                      <span className="text-ink-faint">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${row.inSync ? "bg-success-light text-success" : "bg-alert-light text-alert"}`}>
+                      {row.inSync ? "OK" : "Mismatch"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-ink-muted">
+                    {row.powerTotal > 0 ? `${row.powerUsed}/${row.powerTotal}` : "—"}
+                  </td>
+                </tr>
+              ))}
+              {zoneRows.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-6 text-center text-ink-faint">
+                    No locations found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

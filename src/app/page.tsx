@@ -13,6 +13,7 @@ import { createClient } from "@/utils/supabase/client";
 import { getLevelNumber } from "@/lib/levels";
 import { trackMissionProgress, POINT_ACTIONS } from "@/lib/db/points";
 import { leaveStudyGroup } from "@/lib/db/study-groups";
+import { deriveLocationStatus } from "@/lib/location-status";
 import {
   MapPin,
   Flame,
@@ -602,9 +603,7 @@ export default function DashboardPage() {
           (sum, s) => sum + (s.seats_taken ?? 1), 0
         );
         const totalSeats = loc.total_seats ?? 0;
-        const fillPct    = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
-        const newStatus: LocationStatus =
-          fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+        const newStatus: LocationStatus = deriveLocationStatus(totalOccupied, totalSeats);
 
         await supabase
           .from("locations")
@@ -1266,10 +1265,7 @@ export default function DashboardPage() {
       (sum, s) => sum + (s.seats_taken ?? 1), 0
     );
     const totalSeats = selectedLocation.total_seats ?? 0;
-    const fillPct    = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
-    // 0% = empty, up to 60% = still empty, 61–90% = busy, 91%+ = full
-    const newStatus: LocationStatus =
-      fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+    const newStatus: LocationStatus = deriveLocationStatus(totalOccupied, totalSeats);
 
     await supabase
       .from("locations")
@@ -1413,9 +1409,7 @@ export default function DashboardPage() {
 
     const totalOccupied = (activeSessions ?? []).reduce((sum, s) => sum + (s.seats_taken ?? 1), 0);
     const totalSeats    = selectedLocation.total_seats ?? 0;
-    const fillPct       = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
-    const newStatus: LocationStatus =
-      fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+    const newStatus: LocationStatus = deriveLocationStatus(totalOccupied, totalSeats);
 
     await supabase
       .from("locations")
@@ -1518,9 +1512,7 @@ export default function DashboardPage() {
       (sum, s) => sum + (s.seats_taken ?? 1), 0
     );
     const totalSeats = snapshotLocation.total_seats ?? 0;
-    const fillPct    = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
-    const newStatus: LocationStatus =
-      fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+    const newStatus: LocationStatus = deriveLocationStatus(totalOccupied, totalSeats);
 
     await supabase
       .from("locations")
@@ -1599,9 +1591,7 @@ export default function DashboardPage() {
           (sum, s) => sum + (s.seats_taken ?? 1), 0
         );
         const totalSeats = sourceLoc.total_seats ?? 0;
-        const fillPct    = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
-        const newStatus: LocationStatus =
-          fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+        const newStatus: LocationStatus = deriveLocationStatus(totalOccupied, totalSeats);
 
         await supabase
           .from("locations")

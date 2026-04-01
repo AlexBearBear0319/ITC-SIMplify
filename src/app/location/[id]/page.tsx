@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/utils/supabase/client";
 import { awardPoints, POINT_ACTIONS, trackMissionProgress } from "@/lib/db/points";
 import { leaveStudyGroup } from "@/lib/db/study-groups";
+import { deriveLocationStatus } from "@/lib/location-status";
 import QRScannerModal from "@/components/features/QRScannerModal";
 import ActionChoiceModal from "@/components/features/ActionChoiceModal";
 import StudyBuddyModal, { type StudyBuddyData } from "@/components/features/StudyBuddyModal";
@@ -232,9 +233,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
 
         // Auto-derive status from actual fill %
         const totalSeats = loc.total_seats ?? 0;
-        const fillPct    = totalSeats > 0 ? (occupied / totalSeats) * 100 : 0;
-        const derivedStatus: LocationStatus =
-          fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+        const derivedStatus: LocationStatus = deriveLocationStatus(occupied, totalSeats);
 
         setLocation(loc);
         setActiveStatus(derivedStatus);
@@ -358,9 +357,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
             setPowerOutletsUsed(powerUsed);
 
             const totalSeats = location?.total_seats ?? 0;
-            const fillPct = totalSeats > 0 ? (occupied / totalSeats) * 100 : 0;
-            const derivedStatus: LocationStatus =
-              fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+            const derivedStatus: LocationStatus = deriveLocationStatus(occupied, totalSeats);
 
             setActiveStatus(derivedStatus);
             setLocation((prev) => (prev ? { ...prev, current_status: derivedStatus } : prev));
@@ -524,11 +521,18 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
 
   // ── Status update ─────────────────────────────────────────
   const handleStatusUpdate = async (newStatus: LocationStatus) => {
-    if (!location || newStatus === activeStatus) return;
+    if (!location) return;
     setSubmitState("submitting");
-    await supabase.from("status_logs").insert({ location_id: locationId, user_id: currentUserId, status: newStatus });
-    await supabase.from("locations").update({ current_status: newStatus }).eq("id", locationId);
-    setActiveStatus(newStatus);
+    const { error } = await supabase
+      .from("status_logs")
+      .insert({ location_id: locationId, user_id: currentUserId, status: newStatus });
+    if (error) {
+      setSubmitState("idle");
+      setBlockToast("Status report failed. Please try again.");
+      setTimeout(() => setBlockToast(null), 4000);
+      return;
+    }
+
     setStatusLogs((prev) => [
       { id: Date.now(), status: newStatus, created_at: new Date().toISOString(), profiles: { username: "you" } },
       ...prev,
@@ -969,7 +973,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                 <div>
                   <p className="text-xs font-semibold text-ink-muted mb-3 flex items-center gap-1.5">
                     <Coins size={12} className="text-gold" />
-                    Update crowd status · Earn <span className="text-gold font-bold">+10 pts</span>
+                    Report crowd status · Earn <span className="text-gold font-bold">+10 pts</span>
                   </p>
                   <div className="grid grid-cols-3 gap-3">
                     {STATUS_UPDATE_OPTIONS.map(({ value, label, description, emoji, activeClasses, inactiveClasses }) => (
@@ -987,7 +991,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
                     ))}
                   </div>
                   {submitState === "submitting" && <p className="text-xs text-ink-muted text-center mt-3 animate-pulse">Saving…</p>}
-                  {submitState === "done"       && <p className="text-xs text-success text-center mt-3 font-medium">✓ Status updated!</p>}
+                  {submitState === "done"       && <p className="text-xs text-success text-center mt-3 font-medium">✓ Report saved. Live status syncs from active check-ins.</p>}
                 </div>
 
                 {statusLogs.length > 0 && (

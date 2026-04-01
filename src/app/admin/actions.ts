@@ -37,7 +37,7 @@ export async function adminUploadLocationImage(
 
   const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
   if (!allowed.includes(file.type)) return { url: null, error: "Only JPG, PNG, WEBP or GIF allowed" };
-  if (file.size > 5 * 1024 * 1024) return { url: null, error: "File must be under 5 MB" };
+  if (file.size > 10 * 1024 * 1024) return { url: null, error: "File must be under 10 MB" };
 
   try {
     const db = createAdminClient();
