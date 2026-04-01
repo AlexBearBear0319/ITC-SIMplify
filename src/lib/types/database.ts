@@ -46,6 +46,7 @@ export type Profile = {
   username: string | null
   avatar_url: string | null
   points: number | null
+  exp: number | null                 // Total EXP earned — never decreases, drives the level system
   level: number | null               // 1–5, mirrors the LEVELS tiers in src/lib/levels.ts
   updated_at: string | null
   full_name: string | null
@@ -106,7 +107,7 @@ export type PointRule = {
   is_active: boolean | null
 }
 
-/** Matches the `redemption_items` table. Note: no `category` column in DB yet. */
+/** Matches the `redemption_items` table. */
 export type RedemptionItem = {
   id: number
   name: string
@@ -115,6 +116,7 @@ export type RedemptionItem = {
   stock: number | null
   is_active: boolean | null
   image_url: string | null
+  category: string | null
 }
 
 /** Matches the `reviews` table. */
@@ -174,7 +176,10 @@ export type UserRedemption = {
   user_id: string | null
   item_id: number | null
   redeemed_at: string | null
+  claim_token: string | null
   status: string | null              // "pending" → "claimed" or "cancelled"
+  claimed_at: string | null
+  claimed_by: string | null
 }
 
 // ─── HELPER TYPE ─────────────────────────────────────────────────────────────

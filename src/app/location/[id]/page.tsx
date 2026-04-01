@@ -25,6 +25,7 @@ import {
   LogOut,
   AlertCircle,
   Zap,
+  Trophy,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -651,12 +652,14 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
         {newBadgeName && (
           <motion.div
             key="badge-toast"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 bg-gold text-ink font-semibold text-sm rounded-full shadow-lg pointer-events-none whitespace-nowrap"
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0,  scale: 1    }}
+            exit={{    opacity: 0, y: -16, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gold text-ink text-xs font-semibold px-4 py-2 rounded-full shadow-lg pointer-events-none whitespace-nowrap"
           >
-            🏅 Badge unlocked: {newBadgeName}!
+            <Trophy size={13} />
+            Badge unlocked: {newBadgeName}!
           </motion.div>
         )}
       </AnimatePresence>

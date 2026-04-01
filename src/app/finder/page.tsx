@@ -20,12 +20,14 @@ import {
   Clock,
   ChevronDown,
   Coins,
+  Zap,
   CheckCircle2,
   UserCircle,
   SlidersHorizontal,
   LogOut,
   QrCode,
   AlertCircle,
+  Trophy,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -111,7 +113,7 @@ function getCapacityInfo(current: number, max: number) {
 // GroupDetailDialog
 // ─────────────────────────────────────────────
 
-function MemberAvatar({ username, isHost }: { username: string; isHost?: boolean }) {
+function MemberAvatar({ username, avatarUrl, isHost }: { username: string; avatarUrl?: string | null; isHost?: boolean }) {
   const [showTip, setShowTip] = useState(false);
   const tipRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initials = username.slice(0, 2).toUpperCase();
@@ -123,9 +125,14 @@ function MemberAvatar({ username, isHost }: { username: string; isHost?: boolean
       onTouchStart={() => setShowTip((v) => !v)}
     >
       <div
-        className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border-2 border-surface shadow-sm ${isHost ? "bg-brand text-ink" : "bg-canvas text-ink-muted"}`}
+        className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border-2 border-surface shadow-sm overflow-hidden ${isHost ? "bg-brand text-ink" : "bg-canvas text-ink-muted"}`}
       >
-        {initials}
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatarUrl} alt={username} className="w-full h-full object-cover" />
+        ) : (
+          initials
+        )}
       </div>
       {showTip && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 bg-ink text-surface text-[11px] font-medium rounded-lg whitespace-nowrap shadow-md pointer-events-none z-10">
@@ -240,8 +247,13 @@ function GroupDetailDialog({
             {/* Meta */}
             <div className="space-y-2.5">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-brand-light flex items-center justify-center text-[10px] font-bold text-ink shrink-0">
-                  {hostInitials}
+                <div className="w-7 h-7 rounded-full bg-brand-light flex items-center justify-center text-[10px] font-bold text-ink shrink-0 overflow-hidden">
+                  {group.profiles.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={group.profiles.avatar_url} alt={group.profiles.username} className="w-full h-full object-cover" />
+                  ) : (
+                    hostInitials
+                  )}
                 </div>
                 <span className="text-xs text-ink-muted">
                   Hosted by{" "}
@@ -265,14 +277,15 @@ function GroupDetailDialog({
               </p>
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Host */}
-                <MemberAvatar username={group.profiles.username} isHost />
+                <MemberAvatar username={group.profiles.username} avatarUrl={group.profiles.avatar_url} isHost />
                 {/* Other members (excluding host) */}
                 {members
                   .filter((m) => m.user_id !== group.host_id)
                   .map((m) => (
                     <MemberAvatar
                       key={m.user_id}
-                      username={(m.profiles as unknown as { username: string }).username}
+                      username={(m.profiles as unknown as { username: string; avatar_url: string | null }).username}
+                      avatarUrl={(m.profiles as unknown as { username: string; avatar_url: string | null }).avatar_url}
                     />
                   ))
                 }
@@ -332,7 +345,7 @@ function GroupDetailDialog({
                 className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
               >
                 <Plus size={15} />
-                Join Session · +5 pts
+                Join Session · +5 pts &amp; +5 exp
               </button>
             )}
           </div>
@@ -459,8 +472,13 @@ function StudyGroupCard({
         {/* Host + location */}
         <div className="flex flex-col gap-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-brand-light flex items-center justify-center text-[9px] font-bold text-ink shrink-0">
-              {initials}
+            <div className="w-5 h-5 rounded-full bg-brand-light flex items-center justify-center text-[9px] font-bold text-ink shrink-0 overflow-hidden">
+              {group.profiles.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={group.profiles.avatar_url} alt={group.profiles.username} className="w-full h-full object-cover" />
+              ) : (
+                initials
+              )}
             </div>
             <span className="text-xs text-ink-muted truncate">@{group.profiles.username}</span>
           </div>
@@ -589,7 +607,10 @@ function CreateGroupDialog({
               </p>
               <div className="flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-gold-light rounded-full border border-gold/30">
                 <Coins size={13} className="text-gold" />
-                <span className="text-sm font-bold text-gold">+20 pts earned</span>
+                <span className="text-sm font-bold text-gold">+20 pts</span>
+                <span className="text-sm text-gold/60">·</span>
+                <Zap size={12} className="text-gold/80" />
+                <span className="text-sm font-bold text-gold/80">+20 exp earned</span>
               </div>
             </div>
           ) : (
@@ -602,6 +623,8 @@ function CreateGroupDialog({
                   <Dialog.Description id="create-dialog-desc" className="text-xs text-ink-muted mt-0.5">
                     Create a group and earn{" "}
                     <span className="text-gold font-semibold">+20 pts</span>
+                    {" "}&amp;{" "}
+                    <span className="text-gold font-semibold">+20 exp</span>
                   </Dialog.Description>
                 </div>
                 <Dialog.Close className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors mt-0.5">
@@ -758,7 +781,7 @@ function CreateGroupDialog({
                   ) : (
                     <>
                       <Coins size={14} className="text-gold" />
-                      Start Session · +20 pts
+                      Start Session · +20 pts &amp; +20 exp
                     </>
                   )}
                 </button>
@@ -992,6 +1015,7 @@ function FinderPageContent() {
   const [existingSoloSession,  setExistingSoloSession]  = useState(false);   // user has an active solo check-in
   const [alreadyEarnedToday,   setAlreadyEarnedToday]   = useState(false);   // daily cooldown for group points
   const [blockToast,           setBlockToast]           = useState<string | null>(null); // inline message
+  const [newBadgeName,         setNewBadgeName]         = useState<string | null>(null);
   const [countdownNow,         setCountdownNow]         = useState(() => new Date());
 
   useEffect(() => {
@@ -1061,6 +1085,12 @@ function FinderPageContent() {
     }
   };
 
+  useEffect(() => {
+    if (!newBadgeName) return;
+    const t = setTimeout(() => setNewBadgeName(null), 3000);
+    return () => clearTimeout(t);
+  }, [newBadgeName]);
+
   const showBlockToast = (msg: string) => {
     setBlockToast(msg);
     setTimeout(() => setBlockToast(null), 4000);
@@ -1094,12 +1124,29 @@ function FinderPageContent() {
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.JOIN_GROUP);
+    trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.CHECK_IN); // study groups are in the library, counts as a check-in
+    const joinedGroup = groups.find((g) => g.id === id);
+    supabase.from("activity_log").insert({
+      user_id: currentUser.id,
+      type: "group",
+      description: `Joined a study group: ${joinedGroup?.subject ?? "Study Session"}`,
+    });
+
+    // Check for newly unlocked achievements
+    const { data: before } = await supabase.from("user_achievements").select("achievement_id").eq("user_id", currentUser.id);
+    const beforeIds = new Set((before ?? []).map((r: { achievement_id: number }) => r.achievement_id));
+    await supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUser.id });
+    const { data: after } = await supabase.from("user_achievements").select("achievement_id, achievements(name)").eq("user_id", currentUser.id);
+    const newlyUnlocked = (after ?? []).filter((r: { achievement_id: number }) => !beforeIds.has(r.achievement_id));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (newlyUnlocked.length > 0) setNewBadgeName((newlyUnlocked[0] as any).achievements?.name ?? "Badge");
     setActiveGroupId(id);
     await fetchGroups();
   };
 
   const handleLeaveGroup = async (id: number) => {
-    if (!currentUser || activeGroupId !== id) return;
+    const isHost = groups.some((g) => g.id === id && g.host_id === currentUser?.id);
+    if (!currentUser || (activeGroupId !== id && !isHost)) return;
     const { error } = await leaveStudyGroup(supabase, id, currentUser.id);
     if (error) { console.error("[handleLeaveGroup]", error); return; }
     // Clean up any study_group active_sessions row the host may have
@@ -1172,6 +1219,21 @@ function FinderPageContent() {
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);
+    trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.CHECK_IN); // study groups are in the library, counts as a check-in
+    supabase.from("activity_log").insert({
+      user_id: currentUser.id,
+      type: "group",
+      description: `Created a study group: ${form.subject}`,
+    });
+
+    // Check for newly unlocked achievements
+    const { data: cBefore } = await supabase.from("user_achievements").select("achievement_id").eq("user_id", currentUser.id);
+    const cBeforeIds = new Set((cBefore ?? []).map((r: { achievement_id: number }) => r.achievement_id));
+    await supabase.rpc("check_and_unlock_achievements", { p_user_id: currentUser.id });
+    const { data: cAfter } = await supabase.from("user_achievements").select("achievement_id, achievements(name)").eq("user_id", currentUser.id);
+    const cNewlyUnlocked = (cAfter ?? []).filter((r: { achievement_id: number }) => !cBeforeIds.has(r.achievement_id));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (cNewlyUnlocked.length > 0) setNewBadgeName((cNewlyUnlocked[0] as any).achievements?.name ?? "Badge");
     setActiveGroupId(data.id);
     await fetchGroups();
   };
@@ -1203,6 +1265,26 @@ function FinderPageContent() {
           >
             <Coins size={16} />
             +{pointsDelta} pts
+            <span className="opacity-60 font-normal text-sm">·</span>
+            <Zap size={14} />
+            +{pointsDelta} exp
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Badge unlock toast */}
+      <AnimatePresence>
+        {newBadgeName && (
+          <motion.div
+            key="badge-toast"
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0,  scale: 1    }}
+            exit={{    opacity: 0, y: -16, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gold text-ink text-xs font-semibold px-4 py-2 rounded-full shadow-lg pointer-events-none whitespace-nowrap"
+          >
+            <Trophy size={13} />
+            Badge unlocked: {newBadgeName}!
           </motion.div>
         )}
       </AnimatePresence>

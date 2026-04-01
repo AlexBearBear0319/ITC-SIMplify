@@ -215,21 +215,11 @@ export default function ProfilePage() {
   const [saveState,       setSaveState]       = useState<SaveState>("idle");
   const [saveError,       setSaveError]       = useState<string | null>(null);
 
-  // Equipped badge
-  const [equippingBadgeId, setEquippingBadgeId] = useState<number | null>(null);
+  // Featured badges
+  const [featuredIds, setFeaturedIds] = useState<number[]>([]);
 
-  async function handleEquipBadge(achievementId: number) {
-    if (!profile) return;
-    // Tapping an already-equipped badge un-equips it
-    const next = profile.equipped_badge_id === achievementId ? null : achievementId;
-    setEquippingBadgeId(achievementId);
-    setProfile((p) => p ? { ...p, equipped_badge_id: next } : p);
-    await supabase
-      .from("profiles")
-      .update({ equipped_badge_id: next })
-      .eq("id", profile.id);
-    setEquippingBadgeId(null);
-  }
+  const setEdit = <K extends keyof EditForm>(k: K, v: EditForm[K]) =>
+    setEditForm((f) => ({ ...f, [k]: v }));
 
   // ── Initial data load ──
   useEffect(() => {
@@ -247,7 +237,7 @@ export default function ProfilePage() {
       ] = await Promise.all([
         supabase
           .from("profiles")
-          .select("id, full_name, username, avatar_url, points, streak_days, age, school_id, major_id, education_level, semester_term, equipped_badge_id")
+          .select("id, full_name, username, avatar_url, points, exp, streak_days, age, school_id, major_id, education_level, semester_term, featured_achievement_ids")
           .eq("id", user.id)
           .single(),
         supabase
@@ -303,6 +293,7 @@ export default function ProfilePage() {
         };
         setProfile(loaded);
         prevPointsRef.current = pts;
+        setFeaturedIds((prof.featured_achievement_ids as number[]) ?? []);
 
         const unlockedMap = new Map(
           (userAchievements ?? []).map((ua) => [ua.achievement_id, ua.unlocked_at])
@@ -453,6 +444,85 @@ export default function ProfilePage() {
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id, supabase]);
 
+  // ── Featured badges ──
+  function handleToggleFeatured(id: number) {
+    setFeaturedIds((prev) => {
+      const next = prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : prev.length < 3 ? [...prev, id] : prev;
+      supabase.from("profiles")
+        .update({ featured_achievement_ids: next })
+        .eq("id", profile!.id)
+        .then(() => {});
+      return next;
+    });
+  }
+
+  // ── Avatar upload ──
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1 * 1024 * 1024) {
+      setSaveError("File must be under 1 MB"); setSaveState("error"); return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setSaveError("Only JPEG, PNG, or WebP allowed"); setSaveState("error"); return;
+    }
+
+    setAvatarPreview(URL.createObjectURL(file));
+    setAvatarUploading(true);
+
+    const formData = new FormData();
+    formData.append("avatar", file);
+    const { url, error } = await uploadAvatar(formData);
+
+    setAvatarUploading(false);
+    if (error || !url) {
+      setAvatarPreview(null);
+      setSaveError(error ?? "Upload failed"); setSaveState("error"); return;
+    }
+    setProfile((prev) => prev ? { ...prev, avatar_url: url } : prev);
+    setAvatarPreview(null);
+  }
+
+  // ── Save profile edits ──
+  async function handleSaveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    if (!profile) return;
+    setSaveState("saving");
+    setSaveError(null);
+
+    const updatedFields = {
+      full_name:       editForm.full_name.trim(),
+      username:        editForm.username.trim(),
+      age:             editForm.age ? Number(editForm.age) : null,
+      school_id:       editForm.school_id || null,
+      major_id:        editForm.major_id  || null,
+      education_level: editForm.education_level || null,
+      semester_term:   editForm.semester_term.trim() || null,
+    };
+
+    // Snapshot for rollback, then apply immediately so the UI updates at once.
+    const snapshotProfile = profile;
+    setProfile((prev) => prev ? { ...prev, ...updatedFields } : prev);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update(updatedFields)
+      .eq("id", profile.id);
+
+    if (error) {
+      setProfile(snapshotProfile); // rollback
+      setSaveState("error");
+      setSaveError(error.message);
+      return;
+    }
+
+    setSaveState("saved");
+    setTimeout(() => setSaveState("idle"), 2500);
+  }
+
   if (loading || !profile) {
     return (
       <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
@@ -470,7 +540,7 @@ export default function ProfilePage() {
     );
   }
 
-  const level      = getLevel(profile.points);
+  const level      = getLevel(profile.exp ?? 0);
   const joinedLabel = new Date(profile.joined_at).toLocaleDateString("en-SG", {
     month: "short",
     year: "numeric",
@@ -526,13 +596,22 @@ export default function ProfilePage() {
                   </h1>
                   <p className="text-sm text-ink-muted">@{profile.username}</p>
                 </div>
-                <Link
-                  href="/profile/edit"
-                  className="shrink-0 flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors duration-150"
-                >
-                  <Settings size={14} />
-                  Edit Profile
-                </Link>
+                <div className="shrink-0 flex flex-col items-stretch gap-2">
+                  <Link
+                    href="/profile/edit"
+                    className="flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors duration-150"
+                  >
+                    <Settings size={14} />
+                    Edit Profile
+                  </Link>
+                  <Link
+                    href="/profile/rewards"
+                    className="flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2 rounded-full bg-gold-light text-gold border border-gold/30 hover:bg-gold hover:text-ink transition-colors duration-150"
+                  >
+                    <Gift size={14} />
+                    My Rewards
+                  </Link>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -556,6 +635,28 @@ export default function ProfilePage() {
                 </span>
               </div>
 
+              {/* Featured badges */}
+              {featuredIds.length > 0 && (
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  {featuredIds.map((fid) => {
+                    const badge = achievements.find((a) => a.id === fid);
+                    if (!badge) return null;
+                    const rCfg = RARITY_CONFIG[badge.rarity];
+                    const Icon = badge.icon;
+                    return (
+                      <div
+                        key={fid}
+                        title={badge.name}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium ${rCfg.bg} ${rCfg.iconClass}`}
+                      >
+                        <Icon size={11} />
+                        {badge.name}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* School / major / education info */}
               {(profile.education_level || profile.semester_term) && (
                 <p className="text-xs text-ink-faint mt-1.5">
@@ -573,11 +674,12 @@ export default function ProfilePage() {
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          className="grid grid-cols-3 gap-3"
+          className="grid grid-cols-2 sm:grid-cols-4 gap-3"
         >
           {(
             [
               { label: "Total Points", value: profile.points,         suffix: "",      icon: Coins,  iconClass: "text-gold",       bg: "bg-gold-light"  },
+              { label: "Total EXP",    value: profile.exp,            suffix: "",      icon: Zap,    iconClass: "text-success",    bg: "bg-success-light" },
               { label: "Study Streak", value: profile.streak_days,    suffix: " days", icon: Flame,  iconClass: "text-alert",      bg: "bg-alert-light" },
               { label: "Check-ins",    value: profile.total_checkins, suffix: "",      icon: MapPin, iconClass: "text-brand-dark", bg: "bg-brand-faint" },
             ] as const
@@ -655,25 +757,29 @@ export default function ProfilePage() {
                   </div>
 
                   {achievement.unlocked && (
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <CheckCircle2 size={16} className="text-success" />
-                      {profile.equipped_badge_id === achievement.id ? (
-                        <button
-                          onClick={() => handleEquipBadge(achievement.id)}
-                          disabled={equippingBadgeId === achievement.id}
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gold text-ink disabled:opacity-50"
-                        >
-                          Equipped
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleEquipBadge(achievement.id)}
-                          disabled={equippingBadgeId === achievement.id}
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-border text-ink-muted hover:bg-canvas hover:text-ink transition-colors disabled:opacity-50"
-                        >
-                          {equippingBadgeId === achievement.id ? "…" : "Equip"}
-                        </button>
-                      )}
+                    <div className="flex flex-col items-center gap-1">
+                      <CheckCircle2 size={16} className="shrink-0 text-success" />
+                      <button
+                        type="button"
+                        onClick={() => handleToggleFeatured(achievement.id)}
+                        title={
+                          featuredIds.includes(achievement.id)
+                            ? "Remove from profile"
+                            : featuredIds.length >= 3
+                            ? "Remove a badge first"
+                            : "Show on profile"
+                        }
+                        disabled={!featuredIds.includes(achievement.id) && featuredIds.length >= 3}
+                        className={`shrink-0 transition-colors ${
+                          featuredIds.includes(achievement.id)
+                            ? "text-gold"
+                            : featuredIds.length >= 3
+                            ? "text-ink-faint cursor-not-allowed"
+                            : "text-ink-faint hover:text-gold"
+                        }`}
+                      >
+                        <Star size={15} fill={featuredIds.includes(achievement.id) ? "currentColor" : "none"} />
+                      </button>
                     </div>
                   )}
                 </motion.div>
