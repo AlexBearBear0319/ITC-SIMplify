@@ -44,6 +44,7 @@ type UserProfile = {
   username: string;
   avatar_url: string | null;
   points: number;
+  exp: number;
   streak_days: number;
   total_checkins: number;
   joined_at: string;
@@ -69,6 +70,16 @@ type Achievement = {
 };
 
 type ActivityType = "checkin" | "redemption" | "group" | "event" | "badge";
+
+type SessionEntry = {
+  id: number;
+  activity: string;
+  module: string | null;
+  duration_minutes: number;
+  check_in_time: string;
+  is_active: boolean;
+  location_name: string;
+};
 
 type ActivityItem = {
   id: number;
@@ -189,41 +200,25 @@ const cardVariants = {
 // Page
 // ─────────────────────────────────────────────
 
-type SaveState = "idle" | "saving" | "saved" | "error";
-
 export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [profile,      setProfile]      = useState<UserProfile | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [activity,     setActivity]     = useState<ActivityItem[]>([]);
+  const [sessions,     setSessions]     = useState<SessionEntry[]>([]);
   const [loading,      setLoading]      = useState(true);
   const prevPointsRef  = useRef<number | null>(null);
   const [pointsDelta,  setPointsDelta]  = useState<number | null>(null);
 
-  const [saveState,       setSaveState]       = useState<SaveState>("idle");
-  const [saveError,       setSaveError]       = useState<string | null>(null);
-
-  // Equipped badge
-  const [equippingBadgeId, setEquippingBadgeId] = useState<number | null>(null);
-
-  async function handleEquipBadge(achievementId: number) {
-    if (!profile) return;
-    // Tapping an already-equipped badge un-equips it
-    const next = profile.equipped_badge_id === achievementId ? null : achievementId;
-    setEquippingBadgeId(achievementId);
-    setProfile((p) => p ? { ...p, equipped_badge_id: next } : p);
-    await supabase
-      .from("profiles")
-      .update({ equipped_badge_id: next })
-      .eq("id", profile.id);
-    setEquippingBadgeId(null);
-  }
+  // Featured badges
+  const [featuredIds, setFeaturedIds] = useState<number[]>([]);
 
   // ── Initial data load ──
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
+      await supabase.rpc("check_and_unlock_achievements", { p_user_id: user.id });
 
       const [
         { data: prof },
@@ -232,10 +227,11 @@ export default function ProfilePage() {
         { data: allAchievements },
         { data: userAchievements },
         { data: activityData },
+        { data: sessionsData },
       ] = await Promise.all([
         supabase
           .from("profiles")
-          .select("id, full_name, username, avatar_url, points, streak_days, age, school_id, major_id, education_level, semester_term, equipped_badge_id")
+          .select("id, full_name, username, avatar_url, points, exp, streak_days, age, school_id, major_id, education_level, semester_term, equipped_badge_id, featured_achievement_ids")
           .eq("id", user.id)
           .single(),
         supabase
@@ -259,7 +255,14 @@ export default function ProfilePage() {
           .select("id, type, description, created_at")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
-          .limit(6),
+          .limit(10),
+        supabase
+          .from("active_sessions")
+          .select("id, activity, module, duration_minutes, check_in_time, is_active, locations(name)")
+          .eq("user_id", user.id)
+          .not("check_in_time", "is", null)
+          .order("check_in_time", { ascending: false })
+          .limit(10),
       ]);
 
       if (prof) {
@@ -284,6 +287,7 @@ export default function ProfilePage() {
         };
         setProfile(loaded);
         prevPointsRef.current = pts;
+        setFeaturedIds((prof.featured_achievement_ids as number[]) ?? []);
 
         const unlockedMap = new Map(
           (userAchievements ?? []).map((ua) => [ua.achievement_id, ua.unlocked_at])
@@ -327,6 +331,19 @@ export default function ProfilePage() {
           type:        a.type as ActivityType,
           description: a.description,
           time:        timeAgo(a.created_at),
+        }))
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setSessions(
+        (sessionsData ?? []).map((s: any) => ({
+          id:               s.id,
+          activity:         s.activity,
+          module:           s.module,
+          duration_minutes: s.duration_minutes,
+          check_in_time:    s.check_in_time,
+          is_active:        s.is_active ?? false,
+          location_name:    s.locations?.name ?? "Unknown location",
         }))
       );
 
@@ -421,6 +438,37 @@ export default function ProfilePage() {
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id, supabase]);
 
+  // ── Featured badges ──
+  function handleToggleFeatured(id: number) {
+    setFeaturedIds((prev) => {
+      const next = prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : prev.length < 3 ? [...prev, id] : prev;
+      supabase.from("profiles")
+        .update({ featured_achievement_ids: next })
+        .eq("id", profile!.id)
+        .then(() => {});
+      return next;
+    });
+  }
+
+  async function handleEquipBadge(id: number) {
+    if (!profile) return;
+    const previous = profile.equipped_badge_id;
+    const next = previous === id ? null : id;
+
+    setProfile((prev) => (prev ? { ...prev, equipped_badge_id: next } : prev));
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ equipped_badge_id: next })
+      .eq("id", profile.id);
+
+    if (error) {
+      setProfile((prev) => (prev ? { ...prev, equipped_badge_id: previous } : prev));
+    }
+  }
+
   if (loading || !profile) {
     return (
       <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
@@ -438,7 +486,7 @@ export default function ProfilePage() {
     );
   }
 
-  const level      = getLevel(profile.points);
+  const level      = getLevel(profile.exp ?? 0);
   const joinedLabel = new Date(profile.joined_at).toLocaleDateString("en-SG", {
     month: "short",
     year: "numeric",
@@ -494,13 +542,22 @@ export default function ProfilePage() {
                   </h1>
                   <p className="text-sm text-ink-muted">@{profile.username}</p>
                 </div>
-                <Link
-                  href="/profile/edit"
-                  className="shrink-0 flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors duration-150"
-                >
-                  <Settings size={14} />
-                  Edit Profile
-                </Link>
+                <div className="shrink-0 flex flex-col items-stretch gap-2">
+                  <Link
+                    href="/profile/edit"
+                    className="flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors duration-150"
+                  >
+                    <Settings size={14} />
+                    Edit Profile
+                  </Link>
+                  <Link
+                    href="/profile/rewards"
+                    className="flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2 rounded-full bg-gold-light text-gold border border-gold/30 hover:bg-gold hover:text-ink transition-colors duration-150"
+                  >
+                    <Gift size={14} />
+                    My Rewards
+                  </Link>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -524,6 +581,28 @@ export default function ProfilePage() {
                 </span>
               </div>
 
+              {/* Featured badges */}
+              {featuredIds.length > 0 && (
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  {featuredIds.map((fid) => {
+                    const badge = achievements.find((a) => a.id === fid);
+                    if (!badge) return null;
+                    const rCfg = RARITY_CONFIG[badge.rarity];
+                    const Icon = badge.icon;
+                    return (
+                      <div
+                        key={fid}
+                        title={badge.name}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium ${rCfg.bg} ${rCfg.iconClass}`}
+                      >
+                        <Icon size={11} />
+                        {badge.name}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* School / major / education info */}
               {(profile.education_level || profile.semester_term) && (
                 <p className="text-xs text-ink-faint mt-2">
@@ -541,11 +620,12 @@ export default function ProfilePage() {
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          className="grid grid-cols-3 gap-3"
+          className="grid grid-cols-2 sm:grid-cols-4 gap-3"
         >
           {(
             [
               { label: "Total Points", value: profile.points,         suffix: "",      icon: Coins,  iconClass: "text-gold",       bg: "bg-gold-light"  },
+              { label: "Total EXP",    value: profile.exp,            suffix: "",      icon: Zap,    iconClass: "text-success",    bg: "bg-success-light" },
               { label: "Study Streak", value: profile.streak_days,    suffix: " days", icon: Flame,  iconClass: "text-alert",      bg: "bg-alert-light" },
               { label: "Check-ins",    value: profile.total_checkins, suffix: "",      icon: MapPin, iconClass: "text-brand-dark", bg: "bg-brand-faint" },
             ] as const
@@ -623,25 +703,45 @@ export default function ProfilePage() {
                   </div>
 
                   {achievement.unlocked && (
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <CheckCircle2 size={16} className="text-success" />
-                      {profile.equipped_badge_id === achievement.id ? (
-                        <button
-                          onClick={() => handleEquipBadge(achievement.id)}
-                          disabled={equippingBadgeId === achievement.id}
-                          className="text-[10px] font-semibold px-2 py-1 rounded-full bg-gold text-ink disabled:opacity-50"
-                        >
-                          Equipped
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleEquipBadge(achievement.id)}
-                          disabled={equippingBadgeId === achievement.id}
-                          className="text-[10px] font-semibold px-2 py-1 rounded-full border border-border text-ink-muted hover:bg-canvas hover:text-ink transition-colors disabled:opacity-50"
-                        >
-                          {equippingBadgeId === achievement.id ? "…" : "Equip"}
-                        </button>
-                      )}
+                    <div className="flex flex-col items-center gap-1">
+                      <CheckCircle2 size={16} className="shrink-0 text-success" />
+                      <button
+                        type="button"
+                        onClick={() => handleEquipBadge(achievement.id)}
+                        title={
+                          profile.equipped_badge_id === achievement.id
+                            ? "Badge equipped"
+                            : "Equip badge"
+                        }
+                        className={`shrink-0 transition-colors ${
+                          profile.equipped_badge_id === achievement.id
+                            ? "text-brand-dark"
+                            : "text-ink-faint hover:text-brand-dark"
+                        }`}
+                      >
+                        <Crown size={15} fill={profile.equipped_badge_id === achievement.id ? "currentColor" : "none"} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleFeatured(achievement.id)}
+                        title={
+                          featuredIds.includes(achievement.id)
+                            ? "Remove from profile"
+                            : featuredIds.length >= 3
+                            ? "Remove a badge first"
+                            : "Show on profile"
+                        }
+                        disabled={!featuredIds.includes(achievement.id) && featuredIds.length >= 3}
+                        className={`shrink-0 transition-colors ${
+                          featuredIds.includes(achievement.id)
+                            ? "text-gold"
+                            : featuredIds.length >= 3
+                            ? "text-ink-faint cursor-not-allowed"
+                            : "text-ink-faint hover:text-gold"
+                        }`}
+                      >
+                        <Star size={15} fill={featuredIds.includes(achievement.id) ? "currentColor" : "none"} />
+                      </button>
                     </div>
                   )}
                 </motion.div>
@@ -649,6 +749,47 @@ export default function ProfilePage() {
             })}
           </motion.div>
         </section>
+
+        {/* ── Session History ── */}
+        {sessions.length > 0 && (
+          <section>
+            <h2 className="text-base font-bold text-ink mb-3">Session History</h2>
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] as [number, number, number, number], delay: 0.1 }}
+              className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden"
+            >
+              {sessions.map((session, index) => (
+                <div
+                  key={session.id}
+                  className={`flex items-center gap-3 px-4 py-3.5 ${index < sessions.length - 1 ? "border-b border-border" : ""}`}
+                >
+                  <div className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center ${session.activity === "study_group" ? "bg-success-light" : "bg-brand-faint"}`}>
+                    {session.activity === "study_group"
+                      ? <Users size={14} className="text-success" />
+                      : <MapPin size={14} className="text-brand-dark" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-ink leading-snug truncate">
+                      {session.location_name}
+                      {session.module && <span className="text-ink-muted"> · {session.module}</span>}
+                    </p>
+                    <p className="text-xs text-ink-faint mt-0.5">
+                      {session.activity === "study_group" ? "Study Group" : "Solo Study"} · {session.duration_minutes} min
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs text-ink-faint whitespace-nowrap">{timeAgo(session.check_in_time)}</p>
+                    <p className={`text-[10px] font-medium mt-0.5 ${session.is_active ? "text-success" : "text-ink-faint"}`}>
+                      {session.is_active ? "Active" : "Completed"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          </section>
+        )}
 
         {/* ── Recent Activity ── */}
         <section>

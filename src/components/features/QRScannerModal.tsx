@@ -37,6 +37,12 @@ export default function QRScannerModal({
   const [status,   setStatus]   = useState<ScanStatus>("scanning");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Keep callback refs stable so the scanner effect doesn't restart unnecessarily
+  const onSuccessRef    = useRef(onSuccess);
+  const onOpenChangeRef = useRef(onOpenChange);
+  useEffect(() => { onSuccessRef.current    = onSuccess; }, [onSuccess]);
+  useEffect(() => { onOpenChangeRef.current = onOpenChange; }, [onOpenChange]);
+
   // Holds stop/pause/resume handles for the live scanner instance
   const scannerRef = useRef<{
     stop:   () => Promise<void>;
@@ -51,6 +57,59 @@ export default function QRScannerModal({
     }
   }, []);
 
+  const startScanner = useCallback(async () => {
+    if (!document.getElementById("qr-live-region")) return;
+
+    const { Html5Qrcode } = await import("html5-qrcode");
+    const scanner = new Html5Qrcode("qr-live-region");
+
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 10 },
+      async (decodedText) => {
+        // Pause immediately so the same code isn't validated twice
+        scanner.pause();
+
+        const { data: location } = await getLocationByQRToken(supabase, decodedText);
+
+        if (location) {
+          // If requiredLocationId is set, verify the QR belongs to this spot
+          if (requiredLocationId !== undefined && location.id !== requiredLocationId) {
+            scanner.resume();
+            setStatus("error");
+            setErrorMsg("Wrong location QR. Scan the QR code posted at this spot.");
+            setTimeout(() => setStatus((s) => s === "error" ? "scanning" : s), 3000);
+            return;
+          }
+          await scanner.stop().catch(() => {});
+          scannerRef.current = null;
+          setStatus("verified");
+          setTimeout(() => {
+            setStatus("scanning");
+            onOpenChangeRef.current(false);
+            onSuccessRef.current(location.id);
+          }, 900);
+        } else {
+          // Invalid QR — resume so user can try another code
+          scanner.resume();
+          setStatus("error");
+          setErrorMsg("Invalid QR code. Scan the QR posted at this location.");
+          // Auto-clear error after 3 s
+          setTimeout(() => setStatus((s) => s === "error" ? "scanning" : s), 3000);
+        }
+      },
+      () => {
+        // Per-frame decode failures are normal (no QR visible) — ignore
+      }
+    );
+
+    scannerRef.current = {
+      stop:   () => scanner.stop(),
+      pause:  () => scanner.pause(),
+      resume: () => scanner.resume(),
+    };
+  }, [supabase, requiredLocationId]);
+
   // Start / stop the camera whenever `open` changes
   useEffect(() => {
     if (!open) {
@@ -63,66 +122,14 @@ export default function QRScannerModal({
     let cancelled = false;
 
     // Delay ensures the modal DOM element is mounted before we query it
-    const timer = setTimeout(async () => {
-      if (cancelled || !document.getElementById("qr-live-region")) return;
-
-      try {
-        const { Html5Qrcode } = await import("html5-qrcode");
-        if (cancelled) return;
-
-        const scanner = new Html5Qrcode("qr-live-region");
-
-        await scanner.start(
-          { facingMode: "environment" },
-          { fps: 10 },          // no qrbox — full-frame scan, our corner markers are decorative
-          async (decodedText) => {
-            // Pause immediately so the same code isn't validated twice
-            scanner.pause();
-
-            const { data: location } = await getLocationByQRToken(supabase, decodedText);
-
-            if (location) {
-              // If requiredLocationId is set, verify the QR belongs to this spot
-              if (requiredLocationId !== undefined && location.id !== requiredLocationId) {
-                scanner.resume();
-                setStatus("error");
-                setErrorMsg("Wrong location QR. Scan the QR code posted at this spot.");
-                setTimeout(() => setStatus((s) => s === "error" ? "scanning" : s), 3000);
-                return;
-              }
-              await scanner.stop().catch(() => {});
-              scannerRef.current = null;
-              setStatus("verified");
-              setTimeout(() => {
-                setStatus("scanning");
-                onOpenChange(false);
-                onSuccess(location.id);
-              }, 900);
-            } else {
-              // Invalid QR — resume so user can try another code
-              scanner.resume();
-              setStatus("error");
-              setErrorMsg("Invalid QR code. Scan the QR posted at this location.");
-              // Auto-clear error after 3 s
-              setTimeout(() => setStatus((s) => s === "error" ? "scanning" : s), 3000);
-            }
-          },
-          () => {
-            // Per-frame decode failures are normal (no QR visible) — ignore
-          }
-        );
-
-        scannerRef.current = {
-          stop:   () => scanner.stop(),
-          pause:  () => scanner.pause(),
-          resume: () => scanner.resume(),
-        };
-      } catch {
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      startScanner().catch(() => {
         if (!cancelled) {
           setStatus("error");
           setErrorMsg("Could not start camera. Please allow camera access and try again.");
         }
-      }
+      });
     }, 200);
 
     return () => {
@@ -130,7 +137,7 @@ export default function QRScannerModal({
       clearTimeout(timer);
       stopScanner();
     };
-  }, [open, supabase, onOpenChange, onSuccess, stopScanner, requiredLocationId]);
+  }, [open, startScanner, stopScanner]);
 
   const handleClose = () => {
     if (status === "verified") return;

@@ -219,6 +219,86 @@ export async function adminAdjustStock(id: number, stock: number): Promise<R> {
   }
 }
 
+type RewardClaimActionResult = {
+  error: string | null;
+  reward?: {
+    id: number;
+    name: string;
+    username: string | null;
+  } | null;
+  alreadyClaimed?: boolean;
+};
+
+export async function adminClaimRewardByToken(
+  claimToken: string,
+): Promise<RewardClaimActionResult> {
+  const authErr = await requireAdmin();
+  if (authErr) return { error: authErr, reward: null };
+
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const db = createAdminClient();
+    const { data: redemption, error: fetchError } = await db
+      .from("user_redemptions")
+      .select("id, user_id, status, redemption_items(name), profiles(username)")
+      .eq("claim_token", claimToken)
+      .maybeSingle();
+
+    if (fetchError) return { error: fetchError.message, reward: null };
+    if (!redemption) return { error: "Reward pass not found.", reward: null };
+
+    const reward = {
+      id: redemption.id,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      name: (redemption as any).redemption_items?.name ?? "Unknown reward",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      username: (redemption as any).profiles?.username ?? null,
+    };
+
+    if (redemption.status === "claimed") {
+      return {
+        error: `Reward #${reward.id} has already been collected.`,
+        reward,
+        alreadyClaimed: true,
+      };
+    }
+
+    if (redemption.status === "cancelled") {
+      return { error: `Reward #${reward.id} has been cancelled.`, reward };
+    }
+
+    const { error: updateError } = await db
+      .from("user_redemptions")
+      .update({
+        status: "claimed",
+        claimed_at: new Date().toISOString(),
+        claimed_by: user?.id ?? null,
+      })
+      .eq("id", redemption.id);
+
+    if (updateError) return { error: updateError.message, reward };
+
+    if (redemption.user_id) {
+      void db.from("activity_log").insert({
+        user_id: redemption.user_id,
+        type: "redemption",
+        description: `Collected "${reward.name}"`,
+      });
+    }
+
+    return { error: null, reward, alreadyClaimed: false };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Unexpected error",
+      reward: null,
+    };
+  }
+}
+
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 export async function adminToggleAdmin(userId: string, isAdmin: boolean): Promise<R> {

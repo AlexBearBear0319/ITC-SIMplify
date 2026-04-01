@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Coins,
@@ -22,6 +23,7 @@ import {
   Zap,
   CheckCircle2,
   Clock,
+  QrCode,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -47,7 +49,8 @@ type RedemptionItem = {
 type UserRewards = {
   username: string;
   avatar_url: string | null;
-  points: number;  // DB column name is "points" (not "points_balance")
+  points: number;  // Spendable balance — decreases when rewards are redeemed
+  exp: number;     // Total EXP earned — never decreases, drives the level system
 };
 
 type UserRedemption = {
@@ -104,9 +107,9 @@ const cardVariants = {
 // BalanceCard
 // ─────────────────────────────────────────────
 
-function BalanceCard({ user, points }: { user: UserRewards; points: number }) {
-  const level = getLevel(points);
-  const ptsToNext = level.nextPts === Infinity ? 0 : level.nextPts - points;
+function BalanceCard({ user, points, exp }: { user: UserRewards; points: number; exp: number }) {
+  const level = getLevel(exp);
+  const expToNext = level.nextPts === Infinity ? 0 : level.nextPts - exp;
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-ink text-surface p-6 shadow-md">
@@ -157,7 +160,7 @@ function BalanceCard({ user, points }: { user: UserRewards; points: number }) {
         <div className="relative mt-5">
           <div className="flex justify-between text-xs text-surface/50 mb-2">
             <span>{level.emoji} {level.name}</span>
-            <span>{ptsToNext.toLocaleString()} pts to next level</span>
+            <span>{expToNext.toLocaleString()} EXP to next level</span>
           </div>
           <div className="h-2 rounded-full bg-surface/10 overflow-hidden">
             <motion.div
@@ -264,6 +267,7 @@ function RedemptionItemCard({
 // ─────────────────────────────────────────────
 
 type CheckoutState = "confirm" | "success";
+type CheckoutResult = { ok: boolean; error?: string };
 
 function CheckoutDialog({
   item,
@@ -276,16 +280,37 @@ function CheckoutDialog({
   open: boolean;
   userPoints: number;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<CheckoutResult>;
 }) {
   const [step, setStep] = useState<CheckoutState>("confirm");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  function handleConfirm() {
+  useEffect(() => {
+    if (!open) {
+      setStep("confirm");
+      setSubmitting(false);
+      setSubmitError(null);
+    }
+  }, [open]);
+
+  async function handleConfirm() {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    const result = await onConfirm();
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setSubmitError(result.error ?? "Redemption failed. Please try again.");
+      return;
+    }
+
     setStep("success");
-    onConfirm(); // optimistic point deduction in parent
     setTimeout(() => {
       onClose();
       setStep("confirm"); // reset for next open (fires after dialog unmounts)
+      setSubmitError(null);
     }, 1600);
   }
 
@@ -295,7 +320,7 @@ function CheckoutDialog({
   const remaining = userPoints - item.cost;
 
   return (
-    <Dialog.Root open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+    <Dialog.Root open={open} onOpenChange={(v) => { if (!v && !submitting) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <Dialog.Content
@@ -313,8 +338,8 @@ function CheckoutDialog({
           >
             {step === "confirm" && (
               <button
-                onClick={onClose}
-                className="absolute top-4 right-4 p-2 rounded-full text-ink-muted hover:bg-canvas transition-colors"
+                onClick={() => { if (!submitting) onClose(); }}
+                className="absolute top-4 right-4 p-1.5 rounded-full text-ink-muted hover:bg-canvas transition-colors"
               >
                 <X size={16} />
               </button>
@@ -362,16 +387,21 @@ function CheckoutDialog({
 
                   <button
                     onClick={handleConfirm}
-                    className="w-full py-3 rounded-full bg-gold text-ink font-semibold hover:bg-gold/80 active:scale-95 transition-all duration-150"
+                    disabled={submitting}
+                    className="w-full py-3 rounded-full bg-gold text-ink font-semibold hover:bg-gold/80 active:scale-95 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Confirm Redemption
+                    {submitting ? "Redeeming..." : "Confirm Redemption"}
                   </button>
                   <button
                     onClick={onClose}
+                    disabled={submitting}
                     className="w-full py-2 text-sm text-ink-muted hover:text-ink transition-colors"
                   >
                     Cancel
                   </button>
+                  {submitError && (
+                    <p className="text-xs text-alert text-center">{submitError}</p>
+                  )}
                 </motion.div>
               ) : (
                 <motion.div
@@ -411,139 +441,6 @@ function CheckoutDialog({
 // RedemptionConfirmModal
 // ─────────────────────────────────────────────
 
-function RedemptionConfirmModal({
-  redemption,
-  open,
-  onClose,
-  onConfirm,
-}: {
-  redemption: UserRedemption | null;
-  open: boolean;
-  onClose: () => void;
-  onConfirm: (redemptionId: number) => void;
-}) {
-  const [step, setStep] = useState<"confirm" | "success">("confirm");
-
-  function handleConfirm() {
-    if (!redemption) return;
-    setStep("success");
-    onConfirm(redemption.id);
-    setTimeout(() => {
-      onClose();
-      setStep("confirm");
-    }, 1600);
-  }
-
-  if (!redemption) return null;
-
-  return (
-    <Dialog.Root open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <Dialog.Content
-          aria-describedby={undefined}
-          className="fixed z-50 inset-0 flex items-center justify-center p-4"
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{
-              duration: 0.2,
-              ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
-            }}
-            className="bg-surface rounded-2xl shadow-xl w-full max-w-sm p-6 relative"
-          >
-            {step === "confirm" && (
-              <button
-                onClick={onClose}
-                className="absolute top-4 right-4 p-2 rounded-full text-ink-muted hover:bg-canvas transition-colors"
-              >
-                <X size={16} />
-              </button>
-            )}
-
-            <AnimatePresence mode="wait">
-              {step === "confirm" ? (
-                <motion.div
-                  key="confirm"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex flex-col gap-4"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-gold-light flex items-center justify-center text-gold shrink-0">
-                      <Gift size={22} />
-                    </div>
-                    <div>
-                      <Dialog.Title className="font-semibold text-ink leading-snug">
-                        {redemption.redemption_items?.name ?? "Unknown item"}
-                      </Dialog.Title>
-                      <p className="text-xs text-ink-muted mt-1">
-                        Redeem this item for the student?
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl bg-canvas p-4 text-sm">
-                    <p className="text-ink-muted">
-                      Redeemed on:{" "}
-                      <span className="font-semibold text-ink">
-                        {new Date(redemption.redeemed_at).toLocaleDateString("en-SG", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={handleConfirm}
-                    className="w-full py-3 rounded-full bg-gold text-ink font-semibold hover:bg-gold/80 active:scale-95 transition-all duration-150"
-                  >
-                    Confirm & Mark Redeemed
-                  </button>
-                  <button
-                    onClick={onClose}
-                    className="w-full py-2 text-sm text-ink-muted hover:text-ink transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="success"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex flex-col items-center gap-4 py-4 text-center"
-                >
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                    className="w-16 h-16 rounded-full bg-success-light flex items-center justify-center text-success"
-                  >
-                    <CheckCircle2 size={32} />
-                  </motion.div>
-                  <div>
-                    <p className="font-bold text-ink text-lg">Item Redeemed!</p>
-                    <p className="text-sm text-ink-muted mt-1">
-                      Status updated to <span className="font-semibold text-success">claimed</span>.
-                    </p>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
 // ─────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────
@@ -554,12 +451,11 @@ export default function RewardsPage() {
   const [items, setItems]             = useState<RedemptionItem[]>([]);
   const [loading, setLoading]         = useState(true);
   const [points, setPoints]           = useState(0);
+  const [exp, setExp]                 = useState(0);
   const [activeCategory, setActiveCategory] = useState<ItemCategory | "all">("all");
   const [selectedItem, setSelectedItem]     = useState<RedemptionItem | null>(null);
   const [dialogOpen, setDialogOpen]         = useState(false);
   const [redemptions, setRedemptions]       = useState<UserRedemption[]>([]);
-  const [selectedRedemption, setSelectedRedemption] = useState<UserRedemption | null>(null);
-  const [redemptionModalOpen, setRedemptionModalOpen] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -569,7 +465,7 @@ export default function RewardsPage() {
       Promise.all([
         supabase
           .from("profiles")
-          .select("username, avatar_url, points")
+          .select("username, avatar_url, points, exp")
           .eq("id", authUser.id)
           .single(),
         supabase
@@ -587,6 +483,7 @@ export default function RewardsPage() {
         if (profile) {
           setUser(profile as UserRewards);
           setPoints((profile as UserRewards).points ?? 0);
+          setExp((profile as UserRewards).exp ?? 0);
         }
         if (itemsData) setItems(itemsData as RedemptionItem[]);
         if (redemptionData) setRedemptions(redemptionData as unknown as UserRedemption[]);
@@ -605,75 +502,78 @@ export default function RewardsPage() {
     setDialogOpen(true);
   }
 
-  async function handleConfirm() {
-    if (!selectedItem || !userId) return;
+  async function handleConfirm(): Promise<CheckoutResult> {
+    if (!selectedItem || !userId) {
+      return { ok: false, error: "Missing reward or user session." };
+    }
 
     const supabase = createClient();
     const cost = selectedItem.cost;
-
-    // Optimistic: deduct points and decrement stock in the UI immediately
-    setPoints((prev) => prev - cost);
-    setItems((prev) =>
-      prev.map((i) => i.id === selectedItem.id ? { ...i, stock: Math.max(0, i.stock - 1) } : i)
-    );
-
-    // 1. Deduct points from the DB
-    const { error: pointsError } = await supabase.rpc("increment_points", {
-      user_id: userId,
-      amount:  -cost,
-    });
-
-    if (pointsError) {
-      // Rollback both optimistic updates
-      setPoints((prev) => prev + cost);
-      setItems((prev) =>
-        prev.map((i) => i.id === selectedItem.id ? { ...i, stock: i.stock + 1 } : i)
-      );
-      console.error("[redeem] Failed to deduct points:", pointsError.message);
-      return;
+    if (points < cost) {
+      return { ok: false, error: "Not enough points for this reward." };
+    }
+    if ((selectedItem.stock ?? 0) <= 0) {
+      return { ok: false, error: "This reward is out of stock." };
     }
 
-    // 2. Atomically decrement stock (prevents negative stock under concurrent redemptions)
-    await supabase.rpc("decrement_item_stock", { p_item_id: selectedItem.id });
-
-    // 3. Record the redemption for admin tracking
-    const { data: newRedemption } = await supabase
+    // 1. Create redemption row first so we never show a fake success without a pass.
+    const { data: newRedemption, error: redemptionError } = await supabase
       .from("user_redemptions")
       .insert({ user_id: userId, item_id: selectedItem.id, status: "pending" })
       .select("id, redeemed_at, status, redemption_items(name)")
       .single();
 
-    if (newRedemption) {
-      setRedemptions((prev) => [newRedemption as unknown as UserRedemption, ...prev]);
+    if (redemptionError || !newRedemption) {
+      return { ok: false, error: redemptionError?.message ?? "Could not create redemption pass." };
     }
 
-    // 4. Write activity log (fire-and-forget)
+    const cancelRedemption = async () => {
+      await supabase
+        .from("user_redemptions")
+        .update({ status: "cancelled" })
+        .eq("id", newRedemption.id);
+    };
+
+    // 2. Deduct points from DB.
+    const { error: pointsError } = await supabase.rpc("increment_points", {
+      user_id: userId,
+      amount: -cost,
+    });
+    if (pointsError) {
+      await cancelRedemption();
+      return { ok: false, error: pointsError.message };
+    }
+
+    // 3. Decrement stock atomically.
+    const { error: stockError } = await supabase.rpc("decrement_item_stock", {
+      p_item_id: selectedItem.id,
+    });
+    if (stockError) {
+      await supabase.rpc("increment_points", { user_id: userId, amount: cost });
+      await cancelRedemption();
+      return { ok: false, error: stockError.message };
+    }
+
+    // 4. Apply UI updates only after DB operations succeed.
+    setPoints((prev) => prev - cost);
+    setItems((prev) =>
+      prev.map((i) => i.id === selectedItem.id ? { ...i, stock: Math.max(0, i.stock - 1) } : i)
+    );
+    setRedemptions((prev) => [newRedemption as unknown as UserRedemption, ...prev]);
+
+    // 5. Write activity log (fire-and-forget)
     supabase.from("activity_log").insert({
-      user_id:     userId,
-      type:        "redemption",
+      user_id: userId,
+      type: "redemption",
       description: `Redeemed "${selectedItem.name}"`,
     });
+
+    return { ok: true };
   }
 
   function handleClose() {
     setDialogOpen(false);
     setTimeout(() => setSelectedItem(null), 200);
-  }
-
-  async function handleRedemptionConfirm(redemptionId: number) {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("user_redemptions")
-      .update({ status: "claimed" })
-      .eq("id", redemptionId);
-
-    if (!error) {
-      setRedemptions((prev) =>
-        prev.map((r) => r.id === redemptionId ? { ...r, status: "claimed" } : r)
-      );
-    }
-    setRedemptionModalOpen(false);
-    setTimeout(() => setSelectedRedemption(null), 200);
   }
 
   if (loading) {
@@ -708,15 +608,24 @@ export default function RewardsPage() {
       <div className="max-w-6xl mx-auto space-y-8">
 
         {/* Page header */}
-        <div>
-          <h1 className="text-2xl font-extrabold text-ink">Rewards Store</h1>
-          <p className="text-sm text-ink-muted mt-1">
-            Spend your points on exclusive perks ✨
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-extrabold text-ink">Rewards Store</h1>
+            <p className="text-sm text-ink-muted mt-1">
+              Spend your points on exclusive perks ✨
+            </p>
+          </div>
+          <Link
+            href="/profile/rewards"
+            className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-full bg-gold-light text-gold border border-gold/30 hover:bg-gold hover:text-ink transition-colors"
+          >
+            <QrCode size={14} />
+            My Rewards
+          </Link>
         </div>
 
         {/* Balance hero */}
-        <BalanceCard user={user} points={points} />
+        <BalanceCard user={user} points={points} exp={exp} />
 
         {/* Category filter pills */}
         <div className="flex flex-wrap gap-2">
@@ -801,15 +710,12 @@ export default function RewardsPage() {
                       </p>
                     </div>
                     {isPending ? (
-                      <button
-                        onClick={() => {
-                          setSelectedRedemption(r);
-                          setRedemptionModalOpen(true);
-                        }}
-                        className="shrink-0 text-xs font-semibold px-3 py-2 rounded-full bg-gold-light text-gold hover:bg-gold hover:text-surface transition-colors"
+                      <Link
+                        href="/profile/rewards"
+                        className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full bg-gold-light text-gold hover:bg-gold hover:text-surface transition-colors"
                       >
-                        Redeem
-                      </button>
+                        Show QR
+                      </Link>
                     ) : (
                       <span className={`shrink-0 text-xs font-semibold px-3 py-1 rounded-full ${
                         isClaimed   ? "bg-success-light text-success" :
@@ -824,7 +730,7 @@ export default function RewardsPage() {
               })}
             </div>
             <p className="text-xs text-ink-faint mt-2 px-1">
-              Pending redemptions are fulfilled by an IT Club admin. Show this screen when collecting your reward.
+              Pending redemptions are fulfilled by IT Club staff. Open <span className="font-semibold text-ink">My Rewards</span> to show your collection QR pass.
             </p>
           </section>
         )}
@@ -837,14 +743,6 @@ export default function RewardsPage() {
         userPoints={points}
         onClose={handleClose}
         onConfirm={handleConfirm}
-      />
-
-      {/* Redemption confirm modal */}
-      <RedemptionConfirmModal
-        redemption={selectedRedemption}
-        open={redemptionModalOpen}
-        onClose={() => setRedemptionModalOpen(false)}
-        onConfirm={handleRedemptionConfirm}
       />
     </div>
   );

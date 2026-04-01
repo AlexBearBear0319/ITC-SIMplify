@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import InteractiveMap from "@/components/features/InteractiveMap";
@@ -12,6 +12,7 @@ import StudyBuddyModal, { type StudyBuddyData } from "@/components/features/Stud
 import { createClient } from "@/utils/supabase/client";
 import { getLevelNumber } from "@/lib/levels";
 import { trackMissionProgress, POINT_ACTIONS } from "@/lib/db/points";
+import { leaveStudyGroup } from "@/lib/db/study-groups";
 import {
   MapPin,
   Flame,
@@ -77,7 +78,7 @@ type ActiveSession = {
   locationId: number;
   locationName: string;
   seats_needed: number;
-  activity: "study" | "eating";
+  activity: "study" | "eating" | "study_group" | "solo_study";
   module: string;
   duration_minutes: number;
   endsAt: Date;
@@ -98,6 +99,11 @@ type DashboardProfile = {
   points: number;
   level: number;
   streak_days: number;
+};
+
+type LocationLiveStats = {
+  seatsOccupied: number;
+  powerOutletsUsed: number;
 };
 
 // ─────────────────────────────────────────────
@@ -198,6 +204,7 @@ function getInitials(name: string): string {
 
 function LocationDrawer({
   location,
+  liveStats,
   activeSession,
   reviews,
   onCheckIn,
@@ -205,6 +212,7 @@ function LocationDrawer({
   onClose,
 }: {
   location: DashboardLocation;
+  liveStats?: LocationLiveStats;
   activeSession: ActiveSession | null;
   reviews: Review[];
   onCheckIn: () => void;
@@ -223,6 +231,16 @@ function LocationDrawer({
 
   const totalImages = location.images?.length ?? 0;
   const currentImage = hasImages ? location.images![activeImageIndex] : null;
+  const seatsOccupied = liveStats?.seatsOccupied ?? 0;
+  const powerOutletsUsed = liveStats?.powerOutletsUsed ?? 0;
+  const seatsLeft =
+    location.total_seats != null
+      ? Math.max(0, location.total_seats - seatsOccupied)
+      : null;
+  const outletsLeft =
+    location.power_outlets != null
+      ? Math.max(0, location.power_outlets - powerOutletsUsed)
+      : null;
 
   const showPrevImage = () => {
     if (!hasImages || totalImages <= 1) return;
@@ -354,17 +372,32 @@ function LocationDrawer({
                 {location.total_seats != null && (
                   <div className="flex items-center gap-2 text-xs text-ink-muted">
                     <Users size={13} className="text-brand-dark shrink-0" />
-                    {location.total_seats} seats
+                    {seatsLeft != null ? `${seatsLeft}/${location.total_seats} seats left` : `${location.total_seats} seats`}
                   </div>
                 )}
                 {location.power_outlets != null && (
                   <div className="flex items-center gap-2 text-xs text-ink-muted">
                     <Zap size={13} className="text-brand-dark shrink-0" />
-                    {location.power_outlets} outlets
+                    {outletsLeft != null ? `${outletsLeft}/${location.power_outlets} outlets left` : `${location.power_outlets} outlets`}
                   </div>
                 )}
               </div>
             )}
+            {location.total_seats == null && location.power_outlets == null && (
+              <p className="text-[11px] text-ink-faint mt-2">
+                Seat and outlet totals are not configured yet.
+              </p>
+            )}
+
+            <div className="mt-3">
+              <Link
+                href={`/location/${location.id}`}
+                onClick={onClose}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors"
+              >
+                View latest status
+              </Link>
+            </div>
 
             {/* ── Description ── */}
             {location.description && (
@@ -404,9 +437,7 @@ function LocationDrawer({
                 ) : (
                   <button
                     onClick={onCheckIn}
-                    disabled={!!activeSession}
-                    title={activeSession ? "End your current session first" : undefined}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand disabled:active:scale-100"
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-brand hover:bg-brand-dark text-ink border border-brand font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
                   >
                     <LogIn size={15} />
                     Scan QR to Enter
@@ -456,6 +487,7 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter]       = useState<LocationStatus | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<DashboardLocation | null>(null);
   const [activeSession, setActiveSession]     = useState<ActiveSession | null>(null);
+  const [activeGroup, setActiveGroup]         = useState<{ id: number; subject: string; locationName: string; isHost: boolean } | null>(null);
   const [qrScanOpen, setQrScanOpen]           = useState(false);
   const [checkInOpen, setCheckInOpen]         = useState(false);
   const [feedbackOpen, setFeedbackOpen]       = useState(false);
@@ -478,6 +510,7 @@ export default function DashboardPage() {
 
   // Error toast for optimistic rollbacks
   const [errorToast, setErrorToast] = useState<string | null>(null);
+  const [leavingGroup, setLeavingGroup] = useState(false);
   const showErrorToast = (msg: string) => {
     setErrorToast(msg);
     setTimeout(() => setErrorToast(null), 4000);
@@ -487,12 +520,14 @@ export default function DashboardPage() {
 
   // Computed from active_sessions seat tallies — drives the Peak Hour Alert banner
   const [busiestLocation, setBusiestLocation] = useState<{ name: string; seats: number } | null>(null);
+  const [liveStatsByLocation, setLiveStatsByLocation] = useState<Record<number, LocationLiveStats>>({});
 
   // Locations
   const [locations, setLocations]   = useState<DashboardLocation[]>([]);
   const [locLoading, setLocLoading] = useState(true);
   const [locError, setLocError]     = useState<string | null>(null);
   const [mapImageUrl, setMapImageUrl] = useState<string | undefined>(undefined);
+  const locationsRef = useRef<DashboardLocation[]>([]);
 
   // Daily mission
   const [mission, setMission]           = useState<Mission | null>(null);
@@ -524,12 +559,66 @@ export default function DashboardPage() {
     }
     // Auto-clear session when expired (grace: 0ms)
     if (msLeft <= 0 && activeSession) {
+      const expiredSession = activeSession;
+      const expiredSessionId = activeSessionId;
+      const expiredGroup = activeGroup;
+      const expiredUserId = userId;
+
       setActiveSession(null);
       setActiveSessionId(null);
+      setActiveGroup(null);
       setSessionExpiryToastShown(false);
+
+      void (async () => {
+        const supabase = createClient();
+
+        if (expiredSessionId != null) {
+          await supabase.from("active_sessions").update({ is_active: false }).eq("id", expiredSessionId);
+        } else if (expiredUserId) {
+          // Fallback cleanup for stale local sessions that may not have an id in state.
+          await supabase
+            .from("active_sessions")
+            .update({ is_active: false })
+            .eq("user_id", expiredUserId)
+            .eq("location_id", expiredSession.locationId)
+            .eq("is_active", true);
+        }
+
+        if (expiredGroup && expiredUserId) {
+          await leaveStudyGroup(supabase, expiredGroup.id, expiredUserId);
+        }
+
+        const loc = locationsRef.current.find((l) => l.id === expiredSession.locationId);
+        if (!loc) return;
+
+        const { data: remaining } = await supabase
+          .from("active_sessions")
+          .select("seats_taken")
+          .eq("location_id", expiredSession.locationId)
+          .eq("is_active", true);
+
+        const totalOccupied = (remaining ?? []).reduce(
+          (sum, s) => sum + (s.seats_taken ?? 1), 0
+        );
+        const totalSeats = loc.total_seats ?? 0;
+        const fillPct    = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
+        const newStatus: LocationStatus =
+          fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+
+        await supabase
+          .from("locations")
+          .update({ current_status: newStatus })
+          .eq("id", expiredSession.locationId);
+
+        setLocations((prev) =>
+          prev.map((l) =>
+            l.id === expiredSession.locationId ? { ...l, current_status: newStatus } : l
+          )
+        );
+      })();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countdownNow, activeSession]);
+  }, [countdownNow, activeSession, activeSessionId, activeGroup, userId]);
 
   // Leaderboard snippet (top 3)
   const [topEntries, setTopEntries] = useState<LeaderboardEntry[]>([]);
@@ -537,7 +626,52 @@ export default function DashboardPage() {
   // Reviews for selected location
   const [reviews, setReviews] = useState<Review[]>([]);
 
+  function applyLiveStats(
+    sessions: Array<{ location_id: number | null; seats_taken: number | null; needs_power?: boolean }> | null,
+    locationSource: DashboardLocation[] = locationsRef.current,
+  ) {
+    const stats: Record<number, LocationLiveStats> = {};
+
+    (sessions ?? []).forEach((session) => {
+      if (session.location_id == null) return;
+
+      const seats = session.seats_taken ?? 1;
+      if (!stats[session.location_id]) {
+        stats[session.location_id] = { seatsOccupied: 0, powerOutletsUsed: 0 };
+      }
+
+      stats[session.location_id].seatsOccupied += seats;
+      if (session.needs_power) {
+        stats[session.location_id].powerOutletsUsed += seats * 2;
+      }
+    });
+
+    setLiveStatsByLocation(stats);
+
+    const entries = Object.entries(stats);
+    if (entries.length === 0) {
+      setBusiestLocation(null);
+      return;
+    }
+
+    const [busiestIdRaw, busiest] = entries.sort(
+      (a, b) => b[1].seatsOccupied - a[1].seatsOccupied
+    )[0];
+    const busiestId = Number(busiestIdRaw);
+    const loc = locationSource.find((l) => l.id === busiestId) ?? locationsRef.current.find((l) => l.id === busiestId);
+    if (!loc) {
+      setBusiestLocation(null);
+      return;
+    }
+
+    setBusiestLocation({ name: loc.name, seats: busiest.seatsOccupied });
+  }
+
   useEffect(() => { setGreeting(getGreeting()); }, []);
+
+  useEffect(() => {
+    locationsRef.current = locations;
+  }, [locations]);
 
   // Fetches profile and restores any active session that survived a page refresh.
   useEffect(() => {
@@ -548,6 +682,7 @@ export default function DashboardPage() {
       if (!user) return;
 
       setUserId(user.id);
+      await supabase.rpc("check_and_unlock_achievements", { p_user_id: user.id });
 
       const { data } = await supabase
         .from("profiles")
@@ -575,26 +710,58 @@ export default function DashboardPage() {
         .maybeSingle();
 
       if (existing) {
-        // Fetch the location name directly so the banner never shows "Loading…"
+        const restoredEndsAt = new Date(
+          new Date(existing.check_in_time).getTime() +
+          existing.duration_minutes * 60_000
+        );
+        if (restoredEndsAt.getTime() <= Date.now()) {
+          // Clean up stale active_sessions rows so map status and banners stay accurate.
+          await supabase.from("active_sessions").update({ is_active: false }).eq("id", existing.id);
+        } else {
+          // Fetch the location name directly so the banner never shows "Loading…"
+          const { data: locRow } = await supabase
+            .from("locations")
+            .select("name")
+            .eq("id", existing.location_id)
+            .single();
+
+          setActiveSessionId(existing.id);
+          setActiveSession({
+            locationId:       existing.location_id,
+            locationName:     locRow?.name ?? "Unknown",
+            seats_needed:     existing.seats_taken ?? 1,
+            activity:         (existing.activity as ActiveSession["activity"]) ?? "study",
+            module:           existing.module ?? "",
+            duration_minutes: existing.duration_minutes,
+            endsAt:           restoredEndsAt,
+          });
+        }
+      }
+
+      // Restore any active study group membership (host or member)
+      const { data: membership } = await supabase
+        .from("study_group_members")
+        .select("group_id, study_groups(id, subject, location_id, is_active, host_id, expires_at)")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      const sg = (membership as any)?.study_groups;
+      const groupNotExpired = !sg?.expires_at || new Date(sg.expires_at).getTime() > Date.now();
+      if (sg?.is_active && groupNotExpired) {
         const { data: locRow } = await supabase
           .from("locations")
           .select("name")
-          .eq("id", existing.location_id)
+          .eq("id", sg.location_id)
           .single();
-
-        setActiveSessionId(existing.id);
-        setActiveSession({
-          locationId:       existing.location_id,
-          locationName:     locRow?.name ?? "Unknown",
-          seats_needed:     existing.seats_taken ?? 1,
-          activity:         existing.activity as "study" | "eating",
-          module:           existing.module ?? "",
-          duration_minutes: existing.duration_minutes,
-          endsAt: new Date(
-            new Date(existing.check_in_time).getTime() +
-            existing.duration_minutes * 60_000
-          ),
+        setActiveGroup({
+          id: sg.id,
+          subject: sg.subject ?? "Study Group",
+          locationName: locRow?.name ?? "Study spot",
+          isHost: sg.host_id === user.id,
         });
+      } else {
+        setActiveGroup(null);
       }
     }
 
@@ -633,7 +800,7 @@ export default function DashboardPage() {
 
       const mapped = (data ?? []).map((loc) => ({
         ...loc,
-        current_status: (loc.current_status as string).toLowerCase() as LocationStatus,
+        current_status: ((loc.current_status ?? "empty") as string).toLowerCase() as LocationStatus,
       }));
 
       setLocations(mapped);
@@ -645,22 +812,11 @@ export default function DashboardPage() {
           : prev
       );
 
-      // Tally seats per location to find the busiest spot for the alert banner
       const { data: sessions } = await supabase
         .from("active_sessions")
-        .select("location_id, seats_taken")
+        .select("location_id, seats_taken, needs_power")
         .eq("is_active", true);
-
-      if (sessions && sessions.length > 0) {
-        const tally: Record<number, number> = {};
-        sessions.forEach((s) => {
-          tally[s.location_id] = (tally[s.location_id] ?? 0) + (s.seats_taken ?? 1);
-        });
-        const sorted     = Object.entries(tally).sort((a, b) => b[1] - a[1]);
-        const busiestId  = Number(sorted[0][0]);
-        const busiestLoc = mapped.find((l) => l.id === busiestId);
-        if (busiestLoc) setBusiestLocation({ name: busiestLoc.name, seats: tally[busiestId] });
-      }
+      applyLiveStats(sessions, mapped);
 
       setLocLoading(false);
     }
@@ -758,6 +914,18 @@ export default function DashboardPage() {
       });
   }, [selectedLocation]);
 
+  useEffect(() => {
+    if (!selectedLocation) return;
+    const latest = locations.find((loc) => loc.id === selectedLocation.id);
+    if (!latest) {
+      setSelectedLocation(null);
+      return;
+    }
+    if (latest !== selectedLocation) {
+      setSelectedLocation(latest);
+    }
+  }, [locations, selectedLocation]);
+
   // Realtime subscription — keeps status dots and the busiest-location banner in sync
   // without requiring a manual refresh.
   useEffect(() => {
@@ -772,7 +940,7 @@ export default function DashboardPage() {
           setLocations((prev) =>
             prev.map((loc) =>
               loc.id === payload.new.id
-                ? { ...loc, current_status: payload.new.current_status as LocationStatus }
+                ? { ...loc, current_status: ((payload.new.current_status ?? "empty") as string).toLowerCase() as LocationStatus }
                 : loc
             )
           );
@@ -784,25 +952,10 @@ export default function DashboardPage() {
         () => {
           supabase
             .from("active_sessions")
-            .select("location_id, seats_taken")
+            .select("location_id, seats_taken, needs_power")
             .eq("is_active", true)
             .then(({ data: sessions }) => {
-              if (!sessions || sessions.length === 0) {
-                setBusiestLocation(null);
-                return;
-              }
-              const tally: Record<number, number> = {};
-              sessions.forEach((s) => {
-                tally[s.location_id] = (tally[s.location_id] ?? 0) + (s.seats_taken ?? 1);
-              });
-              const sorted    = Object.entries(tally).sort((a, b) => b[1] - a[1]);
-              const busiestId = Number(sorted[0][0]);
-              // Read latest locations state functionally to avoid stale closure
-              setLocations((prev) => {
-                const loc = prev.find((l) => l.id === busiestId);
-                if (loc) setBusiestLocation({ name: loc.name, seats: tally[busiestId] });
-                return prev;
-              });
+              applyLiveStats(sessions);
             });
         }
       )
@@ -856,11 +1009,41 @@ export default function DashboardPage() {
     main.scrollTo({ top, behavior: "smooth" });
   };
 
+  const scrollToActive = () => {
+    const main = document.querySelector<HTMLElement>("main");
+    const activeCard = document.querySelector<HTMLElement>("#active-session-card");
+    if (!main) return;
+    const top = activeCard
+      ? main.scrollTop + activeCard.getBoundingClientRect().top - main.getBoundingClientRect().top - 12
+      : 0;
+    main.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  };
+
   // Creates an active_sessions row, awards check-in points, and recalculates location status.
   const handleCheckInSubmit = async (data: CheckInData) => {
     if (!selectedLocation || !userId) return;
 
     const supabase = createClient();
+
+    // Guard: block if user already has any active session (solo or study group)
+    const { count: activeSessionCount } = await supabase
+      .from("active_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_active", true);
+
+    const { data: activeMembership } = await supabase
+      .from("study_group_members")
+      .select("group_id, study_groups(is_active)")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+
+    if ((activeSessionCount ?? 0) > 0 || (activeMembership && (activeMembership as any).study_groups?.is_active)) {
+      const msg = "You are already in an active session. Please leave it first.";
+      showErrorToast(msg);
+      return;
+    }
 
     // Optimistic: show the active-session banner and close the modal immediately.
     // The session ID is filled in once the DB responds (two-phase).
@@ -889,9 +1072,12 @@ export default function DashboardPage() {
       .single();
 
     if (error) {
-      console.error("[check-in] Failed to create session:", error.message);
+      const errorText = error.code === "42501"
+        ? "Check-in is blocked by a database security policy. Please contact an admin."
+        : error.message ?? "Unknown Supabase error";
+      console.error("[check-in] Failed to create session:", error);
       setActiveSession(null); // rollback
-      showErrorToast("Check-in failed. Please try again.");
+      showErrorToast(`Check-in failed: ${errorText}`);
       return;
     }
 
@@ -911,7 +1097,6 @@ export default function DashboardPage() {
         prev ? { ...prev, points: prev.points + rule.points_awarded } : prev
       );
       setPointsDelta(rule.points_awarded);
-      setTimeout(() => setPointsDelta(null), 2500);
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, userId, POINT_ACTIONS.CHECK_IN);
@@ -980,9 +1165,37 @@ export default function DashboardPage() {
 
   // Creates a study group at the selected location, reserves seats, and awards points.
   const handleStudyBuddySubmit = async (data: StudyBuddyData) => {
-    if (!selectedLocation || !userId) return;
+    if (!selectedLocation || !userId) return { error: "Missing location or user." };
 
     const supabase = createClient();
+
+    // Hard block: user already in any active session
+    const { count: activeSessionCount } = await supabase
+      .from("active_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_active", true);
+    if ((activeSessionCount ?? 0) > 0) {
+      const msg = "You are already in an active session. Please leave it first.";
+      showErrorToast(msg);
+      return { error: msg };
+    }
+
+    // Block if user is already in an active study group via membership
+    const { data: activeMembership } = await supabase
+      .from("study_group_members")
+      .select("group_id, study_groups(is_active)")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+
+    if (activeMembership && (activeMembership as any).study_groups?.is_active) {
+      const msg = "You are already in an active session. Please leave it first.";
+      showErrorToast(msg);
+      return { error: msg };
+    }
+
+    const durationMs = data.duration_minutes * 60_000;
 
     // Optimistic: show the active-session banner and close the modal immediately.
     setActiveSession({
@@ -991,12 +1204,13 @@ export default function DashboardPage() {
       seats_needed:     data.max_members,
       activity:         "study",
       module:           data.topic,
-      duration_minutes: 120,
-      endsAt:           new Date(Date.now() + 120 * 60_000),
+      duration_minutes: data.duration_minutes,
+      endsAt:           new Date(Date.now() + durationMs),
     });
     setStudyBuddyOpen(false);
 
     // 1. Create the study group
+    const expiresAt = new Date(Date.now() + durationMs).toISOString();
     const { data: group, error: groupError } = await supabase
       .from("study_groups")
       .insert({
@@ -1006,6 +1220,7 @@ export default function DashboardPage() {
         max_members:     data.max_members,
         current_members: 1,
         is_active:       true,
+        expires_at:      expiresAt,
       })
       .select("id")
       .single();
@@ -1013,14 +1228,23 @@ export default function DashboardPage() {
     if (groupError || !group) {
       console.error("[study-buddy] Failed to create group:", groupError?.message);
       setActiveSession(null); // rollback
-      showErrorToast("Failed to create study group. Please try again.");
-      return;
+      const msg = groupError?.message ?? "Failed to create study group. Please try again.";
+      showErrorToast(msg);
+      return { error: msg };
     }
 
     // 2. Add the creator as the first member
     await supabase.from("study_group_members").insert({
       group_id: group.id,
       user_id:  userId,
+    });
+
+    // Show the active-group banner immediately for the host
+    setActiveGroup({
+      id: group.id,
+      subject: data.topic || "Study Session",
+      locationName: selectedLocation.name,
+      isHost: true,
     });
 
     // 3. Create an active_sessions row so the seat count is reflected on the map
@@ -1031,7 +1255,7 @@ export default function DashboardPage() {
         location_id:      selectedLocation.id,
         activity:         "study_group",
         module:           data.topic || null,
-        duration_minutes: 120,
+        duration_minutes: data.duration_minutes,
         seats_taken:      1,
         needs_power:      data.needs_power,
         is_active:        true,
@@ -1059,6 +1283,12 @@ export default function DashboardPage() {
       try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
     }
     trackMissionProgress(supabase, userId, POINT_ACTIONS.CREATE_STUDY_GROUP);
+
+    supabase.from("activity_log").insert({
+      user_id:     userId,
+      type:        "group",
+      description: `Created a study group at ${selectedLocation.name}`,
+    });
 
     // 5. Recalculate location status
     const { data: activeSessions } = await supabase
@@ -1090,10 +1320,12 @@ export default function DashboardPage() {
     const snapshotSession   = activeSession;
     const snapshotSessionId = activeSessionId;
     const snapshotLocation  = selectedLocation;
+    const snapshotGroup     = activeGroup;
 
     // Optimistic: dismiss the session banner and close the drawer immediately.
     setActiveSession(null);
     setActiveSessionId(null);
+    setActiveGroup(null);
     setFeedbackOpen(false);
     setSelectedLocation(null);
 
@@ -1107,10 +1339,20 @@ export default function DashboardPage() {
       // Rollback so the user can try again
       setActiveSession(snapshotSession);
       setActiveSessionId(snapshotSessionId);
+      setActiveGroup(snapshotGroup);
       setFeedbackOpen(true);
       setSelectedLocation(snapshotLocation);
       showErrorToast("Failed to end session. Please try again.");
       return;
+    }
+
+    // For study-group sessions, also leave/disband the group so stale group banners don't persist.
+    if (snapshotGroup) {
+      const { error: leaveGroupError } = await leaveStudyGroup(supabase, snapshotGroup.id, userId);
+      if (leaveGroupError) {
+        setActiveGroup(snapshotGroup);
+        showErrorToast("Session ended, but leaving the study group failed. Please try leaving the group again.");
+      }
     }
 
     // Award feedback points. Uses point_rules so admins can tune without a deploy.
@@ -1178,6 +1420,91 @@ export default function DashboardPage() {
     );
   };
 
+  // Leaves an active study group (with or without an active session row) and updates map status.
+  const handleLeaveGroupSession = async () => {
+    if (!activeGroup || !userId) return;
+
+    const supabase = createClient();
+    const snapshotGroup = activeGroup;
+    const snapshotSession = activeSession;
+    const snapshotSessionId = activeSessionId;
+    const snapshotLocationId = snapshotSession?.locationId ?? null;
+
+    setLeavingGroup(true);
+    setActiveGroup(null);
+    setActiveSession(null);
+    setActiveSessionId(null);
+    setFeedbackOpen(false);
+
+    let sessionErrorMessage: string | null = null;
+
+    if (snapshotSessionId != null) {
+      const { error } = await supabase
+        .from("active_sessions")
+        .update({ is_active: false })
+        .eq("id", snapshotSessionId);
+      if (error) sessionErrorMessage = error.message;
+    } else {
+      const query = supabase
+        .from("active_sessions")
+        .update({ is_active: false })
+        .eq("user_id", userId)
+        .eq("is_active", true);
+      const { error } = snapshotLocationId != null
+        ? await query.eq("location_id", snapshotLocationId)
+        : await query;
+      if (error) sessionErrorMessage = error.message;
+    }
+
+    const { error: leaveGroupError } = await leaveStudyGroup(supabase, snapshotGroup.id, userId);
+    if (sessionErrorMessage || leaveGroupError) {
+      if (leaveGroupError) {
+        setActiveGroup(snapshotGroup);
+      }
+      if (sessionErrorMessage) {
+        setActiveSession(snapshotSession);
+        setActiveSessionId(snapshotSessionId);
+      }
+      setLeavingGroup(false);
+      showErrorToast(
+        `Failed to leave study group: ${leaveGroupError ?? sessionErrorMessage ?? "Unknown error"}`
+      );
+      return;
+    }
+
+    if (snapshotLocationId != null) {
+      const sourceLoc = locationsRef.current.find((l) => l.id === snapshotLocationId);
+      if (sourceLoc) {
+        const { data: remaining } = await supabase
+          .from("active_sessions")
+          .select("seats_taken")
+          .eq("location_id", snapshotLocationId)
+          .eq("is_active", true);
+
+        const totalOccupied = (remaining ?? []).reduce(
+          (sum, s) => sum + (s.seats_taken ?? 1), 0
+        );
+        const totalSeats = sourceLoc.total_seats ?? 0;
+        const fillPct    = totalSeats > 0 ? (totalOccupied / totalSeats) * 100 : 0;
+        const newStatus: LocationStatus =
+          fillPct === 0 ? "empty" : fillPct <= 60 ? "empty" : fillPct <= 90 ? "busy" : "full";
+
+        await supabase
+          .from("locations")
+          .update({ current_status: newStatus })
+          .eq("id", snapshotLocationId);
+
+        setLocations((prev) =>
+          prev.map((l) =>
+            l.id === snapshotLocationId ? { ...l, current_status: newStatus } : l
+          )
+        );
+      }
+    }
+
+    setLeavingGroup(false);
+  };
+
   return (
     <>
       {/* ── Floating +pts animation ── */}
@@ -1201,14 +1528,14 @@ export default function DashboardPage() {
         {newBadgeName && (
           <motion.div
             key="badge-toast"
-            initial={{ opacity: 0, y: -24, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0,   scale: 1    }}
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0,  scale: 1    }}
             exit={{    opacity: 0, y: -16, scale: 0.95 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             onAnimationComplete={() => setTimeout(() => setNewBadgeName(null), 3000)}
             className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gold text-ink text-sm font-bold px-5 py-3 rounded-full shadow-xl pointer-events-none"
           >
-            <Trophy size={16} />
+            <Trophy size={13} />
             Badge unlocked: {newBadgeName}!
           </motion.div>
         )}
@@ -1235,10 +1562,25 @@ export default function DashboardPage() {
         {selectedLocation && (
           <LocationDrawer
             location={selectedLocation}
+            liveStats={liveStatsByLocation[selectedLocation.id]}
             activeSession={activeSession}
             reviews={reviews}
-            onCheckIn={() => setQrScanOpen(true)}
-            onLeaveSpot={() => setFeedbackOpen(true)}
+            onCheckIn={() => {
+              if (activeSession || activeGroup) {
+                showErrorToast("Leave your existing session or group first.");
+                setSelectedLocation(null);
+                scrollToActive();
+                return;
+              }
+              setQrScanOpen(true);
+            }}
+            onLeaveSpot={() => {
+              if (activeGroup) {
+                void handleLeaveGroupSession();
+                return;
+              }
+              setFeedbackOpen(true);
+            }}
             onClose={() => setSelectedLocation(null)}
           />
         )}
@@ -1377,53 +1719,81 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* Layout update: keep the live map near the welcome message for quicker access. */}
-        {/* Check-in notifications are separate cards above the map (not inside the map wrapper). */}
-        {activeSession && (() => {
-          const msLeft  = Math.max(0, activeSession.endsAt.getTime() - countdownNow.getTime());
+        {/* Check-in/group notifications are shown as a single unified banner card. */}
+        {(activeSession || activeGroup) && (() => {
+          const msLeft = activeSession
+            ? Math.max(0, activeSession.endsAt.getTime() - countdownNow.getTime())
+            : 0;
           const minsLeft = Math.floor(msLeft / 60_000);
           const secsLeft = Math.floor((msLeft % 60_000) / 1_000);
-          const isWarning = msLeft <= 5 * 60_000; // last 5 mins
+          const isWarning = !!activeSession && msLeft <= 5 * 60_000; // last 5 mins
+          const isGroupContext = !!activeGroup;
+          const isStudyLikeActivity = activeSession
+            ? activeSession.activity === "study" || activeSession.activity === "study_group" || activeSession.activity === "solo_study"
+            : false;
+          const titleTone = isGroupContext
+            ? "text-brand-dark"
+            : isWarning
+            ? "text-gold"
+            : "text-success";
+          const cardTone = isGroupContext
+            ? "bg-brand-faint border-brand/30"
+            : isWarning
+            ? "bg-gold-light border-gold/30"
+            : "bg-success-light border-success/30";
+
           return (
             <motion.div
+              id="active-session-card"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               variants={cardVariants}
             >
-              <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border ${
-                isWarning ? "bg-gold-light border-gold/30" : "bg-success-light border-success/30"
-              }`}>
-                <Clock size={16} className={isWarning ? "text-gold shrink-0" : "text-success shrink-0"} />
+              <div className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl border ${cardTone}`}>
+                {isGroupContext ? (
+                  <Users size={16} className="text-brand-dark shrink-0" />
+                ) : (
+                  <Clock size={16} className={isWarning ? "text-gold shrink-0" : "text-success shrink-0"} />
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-ink truncate">
-                    Checked in at{" "}
-                    <span className={isWarning ? "text-gold" : "text-success"}>{activeSession.locationName}</span>
+                    {isGroupContext ? "Study group active at " : "Checked in at "}
+                    <span className={titleTone}>
+                      {activeSession?.locationName ?? activeGroup?.locationName ?? "Study spot"}
+                    </span>
                   </p>
                   <p className="text-xs text-ink-muted">
-                    <span className="sm:hidden">
-                      <span className={`font-semibold ${isWarning ? "text-gold" : "text-ink"}`}>
-                        {minsLeft}:{String(secsLeft).padStart(2, "0")} left
-                      </span>
-                    </span>
-                    <span className="hidden sm:inline">
-                      {activeSession.activity === "study"
-                        ? `Studying${activeSession.module ? ` · ${activeSession.module}` : ""}`
-                        : "Eating"}
-                      {" · "}
-                      <span className={`font-semibold ${isWarning ? "text-gold" : "text-ink"}`}>
-                        {minsLeft}:{String(secsLeft).padStart(2, "0")} left
-                      </span>
-                    </span>
+                    {isGroupContext
+                      ? `${activeGroup?.isHost ? "Hosting" : "Joined"}${activeGroup?.subject ? ` · ${activeGroup?.subject}` : ""}`
+                      : isStudyLikeActivity
+                      ? `Studying${activeSession?.module ? ` · ${activeSession.module}` : ""}`
+                      : "Eating"}
+                    {activeSession && (
+                      <>
+                        {" · "}
+                        <span className={`font-semibold ${isWarning ? "text-gold" : "text-ink"}`}>
+                          {minsLeft}:{String(secsLeft).padStart(2, "0")} left
+                        </span>
+                      </>
+                    )}
                   </p>
                 </div>
                 <button
                   onClick={() => {
+                    if (isGroupContext) {
+                      void handleLeaveGroupSession();
+                      return;
+                    }
+                    if (!activeSession) return;
                     const loc = locations.find((l) => l.id === activeSession.locationId);
                     if (loc) { setSelectedLocation(loc); setFeedbackOpen(true); }
                   }}
-                  className="shrink-0 flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors"
+                  disabled={isGroupContext && leavingGroup}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <LogOut size={12} /> Leave
+                  <LogOut size={12} />
+                  {isGroupContext ? (leavingGroup ? "Leaving..." : "Leave Group") : "Leave"}
                 </button>
               </div>
             </motion.div>
@@ -1588,6 +1958,11 @@ export default function DashboardPage() {
                     <Coins size={12} className="text-gold" />
                     <span className="text-xs font-bold text-gold">
                       +{mission.reward_points} pts
+                    </span>
+                    <span className="text-xs text-gold/60">·</span>
+                    <Zap size={11} className="text-gold/80" />
+                    <span className="text-xs font-bold text-gold/80">
+                      +{mission.reward_points} exp
                     </span>
                   </div>
                 )}
