@@ -1217,6 +1217,9 @@ const IMG_MAX_BYTES = IMG_MAX_MB * 1024 * 1024;
 const IMG_TYPES     = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 const IMG_ACCEPT    = IMG_TYPES.join(",");
 const IMG_LABELS    = "JPG · JPEG · PNG · WEBP · GIF";
+const IMG_OPTIMIZE_MIN_BYTES = 1.5 * 1024 * 1024; // optimize only if file is reasonably large
+const IMG_OPTIMIZE_LONG_EDGE = 1920;
+const IMG_OPTIMIZE_QUALITY   = 0.82;
 
 function clientValidate(file: File): string | null {
   if (!(IMG_TYPES as readonly string[]).includes(file.type))
@@ -1224,6 +1227,53 @@ function clientValidate(file: File): string | null {
   if (file.size > IMG_MAX_BYTES)
     return `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — maximum allowed size is ${IMG_MAX_MB} MB.`;
   return null;
+}
+
+async function optimizeImageForUpload(file: File): Promise<{ file: File; note: string | null }> {
+  // Skip optimization for GIF to avoid breaking animation.
+  if (file.type === "image/gif" || file.size < IMG_OPTIMIZE_MIN_BYTES) {
+    return { file, note: null };
+  }
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const longestEdge = Math.max(bitmap.width, bitmap.height);
+    const scale = longestEdge > IMG_OPTIMIZE_LONG_EDGE ? IMG_OPTIMIZE_LONG_EDGE / longestEdge : 1;
+    const outW = Math.max(1, Math.round(bitmap.width * scale));
+    const outH = Math.max(1, Math.round(bitmap.height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = outW;
+    canvas.height = outH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return { file, note: null };
+    }
+    ctx.drawImage(bitmap, 0, 0, outW, outH);
+    bitmap.close();
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/webp", IMG_OPTIMIZE_QUALITY);
+    });
+    if (!blob) return { file, note: null };
+
+    // Keep original if optimization doesn't reduce much.
+    if (blob.size >= file.size * 0.95) return { file, note: null };
+
+    const base = file.name.replace(/\.[^.]+$/, "");
+    const optimized = new File([blob], `${base}-optimized.webp`, {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+
+    return {
+      file: optimized,
+      note: `Optimized ${(file.size / 1024 / 1024).toFixed(1)} MB → ${(optimized.size / 1024 / 1024).toFixed(1)} MB`,
+    };
+  } catch {
+    return { file, note: null };
+  }
 }
 
 function ImageUpload({
@@ -1244,6 +1294,9 @@ function ImageUpload({
   const [uploadErr, setUploadErr]   = useState<string | null>(null);
   const [dragOver,  setDragOver]    = useState(false);
   const [copied,    setCopied]      = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadNote, setUploadNote] = useState<string | null>(null);
+  const [uploadStage, setUploadStage] = useState<string>("Uploading image...");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const doUpload = async (file: File) => {
@@ -1252,18 +1305,51 @@ function ImageUpload({
 
     setUploading(true);
     setUploadErr(null);
-    setFileName(file.name);
+    setUploadNote(null);
+    setUploadStage("Preparing image...");
+    setUploadProgress(6);
 
-    const fd = new FormData();
-    fd.append("file", file);
-    const res = await adminUploadLocationImage(fd);
+    let progressTimer: number | null = null;
 
-    setUploading(false);
-    setFileName(null);
-    if (inputRef.current) inputRef.current.value = "";
+    try {
+      const optimized = await optimizeImageForUpload(file);
+      const uploadFile = optimized.file;
 
-    if (res.error) { setUploadErr(res.error); return; }
-    if (res.url)   onChange(res.url);
+      setUploadNote(optimized.note);
+      setFileName(uploadFile.name);
+      setUploadStage("Uploading image...");
+      setUploadProgress(18);
+
+      progressTimer = window.setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 94) return prev;
+          return prev + Math.max(1, Math.round((100 - prev) / 10));
+        });
+      }, 180);
+
+      const fd = new FormData();
+      fd.append("file", uploadFile);
+      const res = await adminUploadLocationImage(fd);
+
+      if (res.error) {
+        setUploadProgress(0);
+        setUploadErr(res.error);
+        return;
+      }
+
+      setUploadStage("Finalizing...");
+      setUploadProgress(100);
+      if (res.url) onChange(res.url);
+      setTimeout(() => {
+        setUploadProgress(0);
+        setUploadStage("Uploading image...");
+      }, 500);
+    } finally {
+      if (progressTimer != null) window.clearInterval(progressTimer);
+      setUploading(false);
+      setFileName(null);
+      if (inputRef.current) inputRef.current.value = "";
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1316,8 +1402,16 @@ function ImageUpload({
           </div>
           {uploading && (
             <div className="absolute inset-0 bg-canvas/80 flex flex-col items-center justify-center gap-2">
-              <span className="w-6 h-6 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
-              <p className="text-xs text-ink-muted">Uploading {fileName}…</p>
+              <p className="text-xs font-semibold text-ink">{uploadStage}</p>
+              <div className="w-56 h-2 rounded-full bg-border overflow-hidden">
+                <div
+                  className="h-full bg-brand transition-[width] duration-200 ease-out"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-ink-muted">
+                {uploadProgress}%{fileName ? ` · ${fileName}` : ""}
+              </p>
             </div>
           )}
         </div>
@@ -1343,10 +1437,17 @@ function ImageUpload({
         >
           {uploading ? (
             <>
-              <span className="w-7 h-7 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
-              <div>
-                <p className="text-sm font-medium text-ink">Uploading…</p>
-                <p className="text-xs text-ink-muted mt-0.5 max-w-[180px] truncate">{fileName}</p>
+              <div className="w-full max-w-64">
+                <p className="text-sm font-medium text-ink text-center">{uploadStage}</p>
+                <div className="mt-2 h-2 rounded-full bg-border overflow-hidden">
+                  <div
+                    className="h-full bg-brand transition-[width] duration-200 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-ink-muted mt-1 text-center">
+                  {uploadProgress}%{fileName ? ` · ${fileName}` : ""}
+                </p>
               </div>
             </>
           ) : (
@@ -1404,6 +1505,9 @@ function ImageUpload({
       {/* ── Contextual hint (only when no error) ── */}
       {hint && !uploadErr && (
         <p className="text-[10px] text-ink-faint leading-relaxed">{hint}</p>
+      )}
+      {uploadNote && !uploadErr && (
+        <p className="text-[10px] text-success leading-relaxed">{uploadNote}</p>
       )}
     </div>
   );
