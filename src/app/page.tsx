@@ -10,6 +10,7 @@ import QRScannerModal from "@/components/features/QRScannerModal";
 import ActionChoiceModal from "@/components/features/ActionChoiceModal";
 import StudyBuddyModal, { type StudyBuddyData } from "@/components/features/StudyBuddyModal";
 import { createClient } from "@/utils/supabase/client";
+import { getLevelNumber } from "@/lib/levels";
 import { trackMissionProgress, POINT_ACTIONS } from "@/lib/db/points";
 import { leaveStudyGroup } from "@/lib/db/study-groups";
 import {
@@ -913,7 +914,7 @@ export default function DashboardPage() {
               name:       p.full_name ?? p.username ?? "Student",
               initials:   getInitials(p.full_name ?? p.username ?? "ST"),
               points:     p.points ?? 0,
-              level:      p.level ?? 1,
+              level:      getLevelNumber(p.exp ?? 0),
               avatar_url: p.avatar_url ?? null,
             }))
           );

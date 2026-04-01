@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
-import { getLevelNumber } from "@/lib/levels";
+import { getLevel, getLevelNumber } from "@/lib/levels";
 import {
   motion,
   AnimatePresence,
@@ -569,6 +569,7 @@ export default function ProfilePage() {
     );
   }
 
+  const level = getLevel(profile.exp ?? 0);
   const levelNumber = getLevelNumber(profile.exp ?? 0);
   const joinedLabel = new Date(profile.joined_at).toLocaleDateString("en-SG", {
     month: "short",
@@ -603,10 +604,10 @@ export default function ProfilePage() {
             ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
           }}
           className={`relative overflow-hidden bg-surface rounded-2xl p-6 shadow-sm border ${
-            level.level === 100 ? "border-gold/45 legend-glow" : "border-border"
+            level.nextPts === Infinity ? "border-gold/45 legend-glow" : "border-border"
           }`}
         >
-          {level.level === 100 ? (
+          {level.nextPts === Infinity ? (
             <>
               <div className="pointer-events-none absolute -top-10 -left-10 w-52 h-52 rounded-full bg-gold opacity-20 blur-3xl" />
               <div className="pointer-events-none absolute -bottom-6 right-4 w-44 h-44 rounded-full bg-gold opacity-15 blur-2xl" />
@@ -641,8 +642,8 @@ export default function ProfilePage() {
 
                   {/* Level + equipped badge + member since — directly below username */}
                   <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${level.badgeClass}`}>
-                      {level.emoji} {level.name}
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${level.badgeClass}`}>
+                      Level {levelNumber}
                     </span>
                     {profile.equipped_badge_id && (() => {
                       const b = achievements.find((a) => a.id === profile.equipped_badge_id);
