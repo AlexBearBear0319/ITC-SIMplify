@@ -102,6 +102,16 @@ const INPUT_H  = 240   // panel height with no messages yet
 const CHAT_H   = 520   // panel height when chat log is shown
 const LOG_H    = CHAT_H - INPUT_H  // scrollable message area height
 
+function formatReadableAiText(raw: string): string {
+  return raw
+    .replace(/\[([^\]]+)\]\((\/location\/\d+)\)/g, "$1: $2")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s*-\s+/gm, "• ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
 // ── MorphPanel ────────────────────────────────────────────────────────────────
 export function MorphPanel() {
   const wrapperRef     = React.useRef<HTMLDivElement>(null)
@@ -209,7 +219,8 @@ export function MorphPanel() {
                   style={{ height: LOG_H }}
                 >
                   {messages.map((msg) => {
-                    const text = msg.parts.filter(isTextUIPart).map(p => p.text).join("")
+                    const rawText = msg.parts.filter(isTextUIPart).map(p => p.text).join("")
+                    const text = msg.role === "assistant" ? formatReadableAiText(rawText) : rawText
                     if (!text) return null
                     return (
                       <div

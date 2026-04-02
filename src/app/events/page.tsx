@@ -15,7 +15,7 @@ import { useChat } from "@ai-sdk/react";
 import { isTextUIPart } from "ai";
 import { DayPicker } from "react-day-picker";
 import type { DayButtonProps } from "react-day-picker";
-import { format, isSameDay, parseISO, startOfMonth, endOfMonth, startOfDay, endOfDay } from "date-fns";
+import { format, isSameDay, parseISO, startOfMonth } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
@@ -32,7 +32,6 @@ import {
   Loader2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { createClient } from "@/utils/supabase/client";
 
 // ─────────────────────────────────────────────
 // Types  (matches events table schema exactly)
@@ -45,6 +44,7 @@ type CalendarEvent = {
   event_date: string;      // ISO 8601 string
   location_id: number | null;
   is_peak_alert: boolean;
+  location_name?: string | null;
 };
 
 type SuggestionMood = "neutral" | "warning" | "danger";
@@ -106,6 +106,16 @@ function getQuickSpots(mood: SuggestionMood, spots: SuggestionSpot[]) {
   if (mood === "danger")  return spots.slice(0, Math.min(2, spots.length));
   if (mood === "warning") return spots.slice(Math.min(1, spots.length - 1), Math.min(3, spots.length));
   return spots.slice(0, Math.min(3, spots.length));
+}
+
+function formatReadableAiText(raw: string): string {
+  return raw
+    .replace(/\[([^\]]+)\]\((\/location\/\d+)\)/g, "$1: $2")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s*-\s+/gm, "• ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 // ─────────────────────────────────────────────
@@ -291,14 +301,22 @@ function AISuggestionCard({
             .join(", ")
         : "No campus events today";
     sendMessage({
-      text: `Campus events scheduled: ${evSummary}. Based on these events and real-time occupancy, recommend the 2–3 best study spots for today and briefly say why. Keep it under 60 words.`,
+      text: `Campus events today: ${evSummary}.
+Give a student-friendly recommendation in plain text point form.
+Rules:
+- Use symbols like ✅ ⚠️ 📍 💺 🔌.
+- No markdown syntax at all (no **, no [link](...), no code style).
+- Keep it short (max 90 words).
+- Recommend top 2 best spots for today.
+- For each spot include: name, seats left, power note, one-line why, and route path like /location/{id}.`,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isLoading = status === "submitted" || status === "streaming";
   const lastMsg   = messages.filter((m) => m.role === "assistant").at(-1);
-  const aiText    = lastMsg?.parts.filter(isTextUIPart).map((p) => p.text).join("") ?? "";
+  const aiTextRaw = lastMsg?.parts.filter(isTextUIPart).map((p) => p.text).join("") ?? "";
+  const aiText    = formatReadableAiText(aiTextRaw);
 
   const mood  = getEventMood(dayEvents);
   const c     = MOOD_CONFIG[mood];
@@ -361,60 +379,37 @@ export default function EventsPage() {
   const [eventsError, setEventsError]   = useState<string | null>(null);
   const [suggestionSpots, setSuggestionSpots] = useState<SuggestionSpot[]>([]);
 
-  // Fetch available study locations once on mount (for suggestion chip buttons)
-  useEffect(() => {
-    const supabase = createClient();
-    supabase
-      .from("locations")
-      .select("id, name, current_status, description")
-      .order("name")
-      .then(({ data }) => {
-        if (!data) return;
-        const spots: SuggestionSpot[] = data.map((loc) => ({
-          locationId: loc.id,
-          name:       loc.name,
-          highlight:  loc.description ?? loc.current_status ?? "Study spot",
-        }));
-        setSuggestionSpots(spots);
-      });
-  }, []);
-
   // Fetch events whenever the displayed month changes
   useEffect(() => {
-    const supabase = createClient();
     setLoading(true);
     setEventsError(null);
 
     const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(currentMonth);
-    const queryStart = new Date(startOfDay(monthStart));
-    const queryEnd = new Date(endOfDay(monthEnd));
-    // Include a one-day UTC buffer on both edges to avoid timezone cutoff misses.
-    queryStart.setDate(queryStart.getDate() - 1);
-    queryEnd.setDate(queryEnd.getDate() + 1);
+    const monthParam = format(currentMonth, "yyyy-MM");
+    let cancelled = false;
 
-    supabase
-      .from("events")
-      .select("id, title, description, event_date, location_id, is_peak_alert")
-      .gte("event_date", queryStart.toISOString())
-      .lte("event_date", queryEnd.toISOString())
-      .order("event_date")
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("[events] Failed to load events:", error.message);
-          setEvents([]);
-          setEventsError("Could not load events right now. Please try again.");
-          setLoading(false);
-          return;
+    fetch(`/api/events/calendar?month=${monthParam}`, { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(payload?.error ?? "Failed to load events.");
         }
+        return res.json() as Promise<{
+          events: CalendarEvent[];
+          spots: SuggestionSpot[];
+        }>;
+      })
+      .then((payload) => {
+        if (cancelled) return;
 
-        const monthEvents = ((data ?? []) as CalendarEvent[])
+        const monthEvents = (payload.events ?? [])
           .filter((event) => {
             const date = parseISO(event.event_date);
             return date.getFullYear() === currentMonth.getFullYear() && date.getMonth() === currentMonth.getMonth();
           })
           .map((event) => ({ ...event, is_peak_alert: Boolean(event.is_peak_alert) }));
 
+        setSuggestionSpots(payload.spots ?? []);
         setEvents(monthEvents);
         setSelectedDate((prev) => {
           const isPrevInMonth =
@@ -428,8 +423,22 @@ export default function EventsPage() {
           if (monthEvents.length > 0) return parseISO(monthEvents[0].event_date);
           return monthStart;
         });
-        setLoading(false);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "Could not load events right now.";
+        console.error("[events] Failed to load events:", message);
+        setEvents([]);
+        setSuggestionSpots([]);
+        setEventsError(message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [currentMonth]);
 
   // Dates that have events / peak alerts (for day modifiers)
@@ -577,7 +586,7 @@ export default function EventsPage() {
                         <EventCard
                           key={event.id}
                           event={event}
-                          locationName={loc?.name ?? null}
+                          locationName={event.location_name ?? loc?.name ?? null}
                         />
                       );
                     })}
