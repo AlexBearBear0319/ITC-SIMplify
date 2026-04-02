@@ -61,6 +61,9 @@ On any location detail page, students scan a QR code to check in. A successful s
 ### Crowd Status Updates
 Students can report the current crowd level at any location directly from the location detail page. Each submitted update earns 10 points and appears in the live status log.
 
+### Study Buddy 
+Students can start a session to study together with their buddies or find new friends with the same goal. 
+
 ### Events Calendar
 The Events page shows a monthly calendar with campus events marked on each date. Selecting a date displays that day's events along with a study spot recommendation based on expected foot traffic.
 
@@ -76,8 +79,11 @@ Students spend accumulated points in the Rewards store. Items are grouped into p
 ### Admin Panel
 Users with admin access can view campus analytics including check-in counts, peak hour traffic charts, and a breakdown of location categories. Access is restricted at the routing level by the `is_admin` flag in Supabase.
 
+### AI Chatbot 
+Students are able to ask chatbot about any information regarding study spot in campus. The chatbot can help with finding a spot according to the students' preferences and finding the current available spot. 
+
 ### Automatic Dark Mode
-The app switches to dark mode between 7:00 PM and 5:59 AM Singapore Time (SGT) without any user input. The theme is managed through CSS variables, so no Tailwind `dark:` classes are needed.
+The app switches to dark mode between 7:00 PM and 5:59 AM Singapore Time (SGT) without any user input. The theme is managed through CSS variables, so no Tailwind `dark:` classes are needed. SIMplify also provides a toggle for students to change between light mode and dark mode. 
 
 ---
 
@@ -100,6 +106,9 @@ The app is deployed on Vercel:
 - **Notification preferences** in Settings are UI-only. The corresponding database table has not been created yet.
 - The `SearchBar` and `Footer` components use hardcoded Tailwind colour classes instead of the project's design tokens. These need to be migrated before they are production-ready.
 - There is no `.env.example` file in the repository. New contributors need to request the Supabase credentials directly.
+- The map only displays one part of Singapore Institute Management. Students can only check in at the Tay Eng Soon Library, hence the study spot is limited. 
+- The zone updated status are slightly unsync which leads to inaccuracy with the real-life situations.
+
 
 ### Planned Improvements
 
@@ -110,6 +119,9 @@ The app is deployed on Vercel:
 - Add the notifications preferences table to Supabase and wire up the Settings toggles.
 - Migrate `SearchBar` and `Footer` to use design tokens from `globals.css`.
 - Add a `.env.example` file to the repository.
+- Improve the method on update status to be more accurate. 
+- Improve the method of student checking in. 
+- Expand the map to covers all study spots in Singapore Institute of Management. 
 
 ---
 

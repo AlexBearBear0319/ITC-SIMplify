@@ -9,6 +9,7 @@ import { joinStudyGroup, leaveStudyGroup, createStudyGroup } from "@/lib/db/stud
 import { awardPoints, POINT_ACTIONS, trackMissionProgress } from "@/lib/db/points";
 import { markProfileStatsDirty } from "@/lib/profile-sync";
 import QRScannerModal from "@/components/features/QRScannerModal";
+import FeedbackModal, { type FeedbackData } from "@/components/features/FeedbackModal";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -31,9 +32,6 @@ import {
   Trophy,
 } from "lucide-react";
 
-// ─────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────
 
 type StudyGroup = {
   id: number;
@@ -76,9 +74,12 @@ type GroupMember = {
   profiles: { username: string; avatar_url: string | null };
 };
 
-// ─────────────────────────────────────────────
-// Animation variants
-// ─────────────────────────────────────────────
+type LeaveFeedbackContext = {
+  groupId: number;
+  locationId: number;
+  locationName: string;
+};
+
 
 const containerVariants = {
   hidden: {},
@@ -90,9 +91,6 @@ const cardVariants = {
   show:   { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } },
 };
 
-// ─────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────
 
 function timeAgo(dateStr: string): string {
   const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60_000);
@@ -110,9 +108,6 @@ function getCapacityInfo(current: number, max: number) {
   return               { pipColor: "bg-success", label: "Open",   bg: "bg-success-light", text: "text-success" };
 }
 
-// ─────────────────────────────────────────────
-// GroupDetailDialog
-// ─────────────────────────────────────────────
 
 function MemberAvatar({ username, avatarUrl, isHost }: { username: string; avatarUrl?: string | null; isHost?: boolean }) {
   const [showTip, setShowTip] = useState(false);
@@ -209,7 +204,6 @@ function GroupDetailDialog({
           aria-describedby="group-detail-desc"
           className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 bg-surface rounded-2xl shadow-xl outline-none max-h-[90vh] overflow-y-auto"
         >
-          {/* Header */}
           <div className="px-6 pt-6 pb-4 border-b border-border">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
@@ -238,14 +232,11 @@ function GroupDetailDialog({
             </div>
           </div>
 
-          {/* Body */}
           <div className="px-6 py-5 space-y-5">
-            {/* Description */}
             <Dialog.Description id="group-detail-desc" className="text-sm text-ink-muted leading-relaxed">
               {group.description || "No description provided."}
             </Dialog.Description>
 
-            {/* Meta */}
             <div className="space-y-2.5">
               <div className="flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-full bg-brand-light flex items-center justify-center text-[10px] font-bold text-ink shrink-0 overflow-hidden">
@@ -271,15 +262,12 @@ function GroupDetailDialog({
               </div>
             </div>
 
-            {/* Participants — real data from study_group_members */}
             <div>
               <p className="text-xs font-semibold text-ink-muted mb-2.5">
                 Participants ({liveCount}/{group.max_members})
               </p>
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Host */}
                 <MemberAvatar username={group.profiles.username} avatarUrl={group.profiles.avatar_url} isHost />
-                {/* Other members (excluding host) */}
                 {members
                   .filter((m) => m.user_id !== group.host_id)
                   .map((m) => (
@@ -290,7 +278,6 @@ function GroupDetailDialog({
                     />
                   ))
                 }
-                {/* Empty slots */}
                 {Array.from({ length: emptySlots }).map((_, i) => (
                   <div
                     key={`empty-${i}`}
@@ -303,7 +290,6 @@ function GroupDetailDialog({
               <p className="text-[11px] text-ink-faint mt-2">Hover a member to see their username</p>
             </div>
 
-            {/* One-active-group warning */}
             {hasOtherActiveGroup && (
               <div className="flex items-start gap-2.5 p-3 bg-gold-light rounded-xl border border-gold/30">
                 <Users size={14} className="text-gold shrink-0 mt-0.5" />
@@ -317,7 +303,6 @@ function GroupDetailDialog({
             )}
           </div>
 
-          {/* Footer action */}
           <div className="px-6 pb-6">
             {isThisGroupActive ? (
               <button
@@ -356,9 +341,6 @@ function GroupDetailDialog({
   );
 }
 
-// ─────────────────────────────────────────────
-// StudyGroupCard
-// ─────────────────────────────────────────────
 
 function StudyGroupCard({
   group,
@@ -407,7 +389,6 @@ function StudyGroupCard({
       onClick={onSelect}
       className="group flex flex-col bg-surface rounded-2xl border border-border shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300 ease-in-out overflow-hidden cursor-pointer"
     >
-      {/* Card header */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-center justify-between mb-3">
           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-brand-faint text-brand-dark text-[10px] font-semibold rounded-full border border-brand/30">
@@ -441,7 +422,6 @@ function StudyGroupCard({
         </p>
       </div>
 
-      {/* Member capacity bar */}
       <div className="px-5 pb-4">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1">
@@ -468,9 +448,7 @@ function StudyGroupCard({
 
       <div className="mx-5 border-t border-border" />
 
-      {/* Card footer */}
       <div className="px-5 py-4 flex items-center justify-between gap-3">
-        {/* Host + location */}
         <div className="flex flex-col gap-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <div className="w-5 h-5 rounded-full bg-brand-light flex items-center justify-center text-[9px] font-bold text-ink shrink-0 overflow-hidden">
@@ -489,7 +467,6 @@ function StudyGroupCard({
           </div>
         </div>
 
-        {/* Quick action button — stopPropagation so card click doesn't fire too */}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -529,9 +506,6 @@ function StudyGroupCard({
   );
 }
 
-// ─────────────────────────────────────────────
-// Create Group Dialog
-// ─────────────────────────────────────────────
 
 const FORM_INPUT =
   "w-full px-3 py-2.5 bg-canvas border border-border rounded-xl text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition-colors resize-none";
@@ -795,9 +769,6 @@ function CreateGroupDialog({
   );
 }
 
-// ─────────────────────────────────────────────
-// Styled select wrapper
-// ─────────────────────────────────────────────
 
 function FilterSelect({
   value,
@@ -825,9 +796,6 @@ function FilterSelect({
   );
 }
 
-// ─────────────────────────────────────────────
-// Main Page Content
-// ─────────────────────────────────────────────
 
 function FinderPageContent() {
   const searchParams = useSearchParams();
@@ -841,7 +809,6 @@ function FinderPageContent() {
   const [searchQuery,     setSearchQuery]     = useState("");
   const [locationFilter,  setLocationFilter]  = useState("all");
 
-  // ── Fetch all active study groups (with joined profile + location data) ──
   // Always computes current_members from actual study_group_members rows so
   // the card count can never be stale or inflated by a counter drift.
   const fetchGroups = async () => {
@@ -1018,6 +985,8 @@ function FinderPageContent() {
   const [blockToast,           setBlockToast]           = useState<string | null>(null); // inline message
   const [newBadgeName,         setNewBadgeName]         = useState<string | null>(null);
   const [countdownNow,         setCountdownNow]         = useState(() => new Date());
+  const [leaveFeedbackOpen,    setLeaveFeedbackOpen]    = useState(false);
+  const [pendingLeaveFeedback, setPendingLeaveFeedback] = useState<LeaveFeedbackContext | null>(null);
 
   useEffect(() => {
     const id = setInterval(() => setCountdownNow(new Date()), 1_000);
@@ -1047,7 +1016,6 @@ function FinderPageContent() {
     ? groups.find((g) => g.id === selectedGroupId) ?? null
     : null;
 
-  // ── Derived filtered list ──────────────────
   const filteredGroups = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return groups
@@ -1076,7 +1044,6 @@ function FinderPageContent() {
     setSlotsFilter("all");
   };
 
-  // ── Handlers ──────────────────────────────
 
   const showPointsAnim = (action: string) => {
     const pts = pointRules[action] ?? 0;
@@ -1145,7 +1112,7 @@ function FinderPageContent() {
     await fetchGroups();
   };
 
-  const handleLeaveGroup = async (id: number) => {
+  const handleLeaveGroup = async (id: number, feedback?: FeedbackData, reviewLocationId?: number) => {
     const isHost = groups.some((g) => g.id === id && g.host_id === currentUser?.id);
     if (!currentUser || (activeGroupId !== id && !isHost)) return;
     const { error } = await leaveStudyGroup(supabase, id, currentUser.id);
@@ -1161,6 +1128,26 @@ function FinderPageContent() {
       type: "group",
       description: "Left a study group",
     });
+
+    if (feedback && reviewLocationId != null) {
+      const trimmedComment = feedback.comment.trim();
+      const { error: reviewError } = await supabase.from("reviews").insert({
+        location_id: reviewLocationId,
+        user_id: currentUser.id,
+        comment: trimmedComment || null,
+        rating: feedback.rating,
+      });
+
+      if (reviewError) {
+        showBlockToast("Left group, but your review could not be saved. Please try again.");
+      } else {
+        await awardPoints(supabase, currentUser.id, POINT_ACTIONS.LEAVE_REVIEW);
+        showPointsAnim(POINT_ACTIONS.LEAVE_REVIEW);
+        trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.LEAVE_REVIEW);
+        try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+      }
+    }
+
     // Optimistic update: drop the card count immediately
     setGroups((prev) =>
       prev.map((g) =>
@@ -1169,6 +1156,40 @@ function FinderPageContent() {
     );
     setActiveGroupId(null);
     await fetchGroups();
+  };
+
+  /**
+   * Opens the checkout feedback modal before finalizing group leave.
+   * Falls back to direct leave if the group metadata cannot be resolved.
+   */
+  const requestLeaveGroup = (id: number) => {
+    const isHost = groups.some((g) => g.id === id && g.host_id === currentUser?.id);
+    if (!currentUser || (activeGroupId !== id && !isHost)) return;
+
+    const group = groups.find((g) => g.id === id);
+    if (!group) {
+      void handleLeaveGroup(id);
+      return;
+    }
+
+    setSelectedGroupId((prev) => (prev === id ? null : prev));
+    setPendingLeaveFeedback({
+      groupId: id,
+      locationId: group.location_id,
+      locationName: group.locations.name,
+    });
+    setLeaveFeedbackOpen(true);
+  };
+
+  /**
+   * Persists review feedback and then completes the leave-group operation.
+   */
+  const handleLeaveFeedbackSubmit = async (data: FeedbackData) => {
+    if (!pendingLeaveFeedback) return;
+    const pending = pendingLeaveFeedback;
+    setLeaveFeedbackOpen(false);
+    setPendingLeaveFeedback(null);
+    await handleLeaveGroup(pending.groupId, data, pending.locationId);
   };
 
   const expireGroup = useCallback(async (id: number) => {
@@ -1241,7 +1262,6 @@ function FinderPageContent() {
 
   return (
     <>
-      {/* Group detail dialog */}
       {selectedGroup && (
         <GroupDetailDialog
           group={selectedGroup}
@@ -1249,12 +1269,23 @@ function FinderPageContent() {
           currentUserId={currentUser?.id ?? null}
           supabase={supabase}
           onJoin={handleJoinGroup}
-          onLeave={handleLeaveGroup}
+          onLeave={requestLeaveGroup}
           onClose={() => setSelectedGroupId(null)}
         />
       )}
 
-      {/* Floating points animation */}
+      {pendingLeaveFeedback && (
+        <FeedbackModal
+          open={leaveFeedbackOpen}
+          locationName={pendingLeaveFeedback.locationName}
+          onOpenChange={(open) => {
+            setLeaveFeedbackOpen(open);
+            if (!open) setPendingLeaveFeedback(null);
+          }}
+          onSubmit={handleLeaveFeedbackSubmit}
+        />
+      )}
+
       <AnimatePresence>
         {pointsDelta !== null && (
           <motion.div
@@ -1273,7 +1304,6 @@ function FinderPageContent() {
         )}
       </AnimatePresence>
 
-      {/* Badge unlock toast */}
       <AnimatePresence>
         {newBadgeName && (
           <motion.div
@@ -1290,7 +1320,6 @@ function FinderPageContent() {
         )}
       </AnimatePresence>
 
-      {/* Block toast */}
       <AnimatePresence>
         {blockToast && (
           <motion.div
@@ -1306,7 +1335,6 @@ function FinderPageContent() {
         )}
       </AnimatePresence>
 
-      {/* QR scanner — scans location QR, auto-detects location for the create form */}
       <QRScannerModal
         open={qrScanOpen}
         onOpenChange={(open) => { if (!open) setQrScanOpen(false); }}
@@ -1341,7 +1369,6 @@ function FinderPageContent() {
 
       <div className="px-3 py-3 md:px-4 md:py-4 lg:px-5 lg:py-5 max-w-6xl mx-auto space-y-3 md:space-y-4">
 
-        {/* ── Page Header Card ── */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1366,7 +1393,6 @@ function FinderPageContent() {
           </button>
         </motion.div>
 
-        {/* ── Active group banner ── */}
         {activeGroupId !== null && (() => {
           const activeGroup = groups.find((g) => g.id === activeGroupId);
           if (!activeGroup) return null;
@@ -1382,7 +1408,7 @@ function FinderPageContent() {
                 <p className="text-xs text-ink-muted">{activeGroup.locations.name}</p>
               </div>
               <button
-                onClick={() => handleLeaveGroup(activeGroupId)}
+                onClick={() => requestLeaveGroup(activeGroupId)}
                 className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors"
               >
                 <LogOut size={12} /> Leave
@@ -1391,7 +1417,6 @@ function FinderPageContent() {
           );
         })()}
 
-        {/* ── Solo session warning banner ── */}
         {existingSoloSession && activeGroupId === null && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -1406,7 +1431,6 @@ function FinderPageContent() {
           </motion.div>
         )}
 
-        {/* ── Filter & Search Bar ── */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1454,7 +1478,6 @@ function FinderPageContent() {
             </div>
           </div>
 
-          {/* Quick subject tags */}
           <div className="flex items-center gap-2 flex-wrap">
             <SlidersHorizontal size={12} className="text-ink-faint shrink-0" />
             {POPULAR_SUBJECTS.map((tag) => {
@@ -1486,7 +1509,6 @@ function FinderPageContent() {
           </div>
         </motion.div>
 
-        {/* ── Results summary ── */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -1504,7 +1526,6 @@ function FinderPageContent() {
           </div>
         </motion.div>
 
-        {/* ── Cards Grid ── */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
@@ -1530,7 +1551,7 @@ function FinderPageContent() {
                   onExpire={expireGroup}
                   onSelect={() => setSelectedGroupId(group.id)}
                   onJoin={handleJoinGroup}
-                  onLeave={handleLeaveGroup}
+                  onLeave={requestLeaveGroup}
                 />
               </motion.div>
             ))
@@ -1560,7 +1581,6 @@ function FinderPageContent() {
         )}
       </div>
 
-      {/* ── Mobile FAB ── */}
       <button
         onClick={() => setQrScanOpen(true)}
         className="fixed md:hidden bottom-6 right-6 z-20 flex items-center gap-2 px-5 py-3 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full shadow-lg hover:shadow-xl transition-all duration-200 active:scale-[0.97]"

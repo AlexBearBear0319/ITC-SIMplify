@@ -1,20 +1,8 @@
-// ============================================================
-// DATABASE QUERIES: EVENTS
-// ============================================================
-// Handles school events that can block nearby study spots.
-//
-// HOW IT WORKS:
-//   1. An admin creates an event linked to a location
-//   2. When a student tries to check in at that location,
-//      the app calls isLocationBlockedByEvent() to check
-//   3. If blocked, the UI shows "Unavailable — Event in Progress"
-//      and prevents check-in
-// ============================================================
+/** Database helpers for campus events and event-based location blocking. */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { DbResult, Event } from '@/lib/types/database'
 
-// ─── GET ALL UPCOMING EVENTS ──────────────────────────────────────────────────
 
 /**
  * Fetches all events happening from now onward, sorted by date.
@@ -28,8 +16,8 @@ export async function getUpcomingEvents(
   const { data, error } = await supabase
     .from('events')
     .select('*')
-    .gte('event_date', now)              // .gte = "greater than or equal to" now
-    .order('event_date', { ascending: true })  // Soonest events first
+    .gte('event_date', now)
+    .order('event_date', { ascending: true })
 
   if (error) {
     console.error('[getUpcomingEvents]', error.message)
@@ -39,7 +27,6 @@ export async function getUpcomingEvents(
   return { data: data as Event[], error: null }
 }
 
-// ─── GET EVENTS AT A SPECIFIC LOCATION ────────────────────────────────────────
 
 /**
  * Fetches all upcoming events happening at or near a specific location.
@@ -68,7 +55,6 @@ export async function getEventsAtLocation(
   return { data: data as Event[], error: null }
 }
 
-// ─── CHECK IF A LOCATION IS CURRENTLY BLOCKED ────────────────────────────────
 
 /**
  * Checks whether a study spot is currently unavailable due to an ongoing event.
@@ -84,8 +70,7 @@ export async function isLocationBlockedByEvent(
   supabase: SupabaseClient,
   locationId: number,
 ): Promise<DbResult<boolean>> {
-  // Consider an event "active" if it started within the last 4 hours
-  // Adjust HOURS_CONSIDERED_ACTIVE if your events run shorter or longer
+  // Treat events as active for a fixed window after start time.
   const HOURS_CONSIDERED_ACTIVE = 4
   const cutoffTime = new Date(
     Date.now() - HOURS_CONSIDERED_ACTIVE * 60 * 60 * 1000,
@@ -96,22 +81,20 @@ export async function isLocationBlockedByEvent(
     .from('events')
     .select('id')
     .eq('location_id', locationId)
-    .gte('event_date', cutoffTime)  // Event started after the cutoff (within 4 hours ago)
-    .lte('event_date', now)         // Event has already started (not future)
-    .limit(1)                       // We only need to know if any event exists
+    .gte('event_date', cutoffTime)
+    .lte('event_date', now)
+    .limit(1)
 
   if (error) {
     console.error(`[isLocationBlockedByEvent] locationId=${locationId}`, error.message)
     return { data: null, error: error.message }
   }
 
-  // If at least one active event was found, the location is blocked
   const isBlocked = data.length > 0
 
   return { data: isBlocked, error: null }
 }
 
-// ─── CREATE EVENT (Admin only) ────────────────────────────────────────────────
 
 /**
  * Creates a new event that will block a study spot.

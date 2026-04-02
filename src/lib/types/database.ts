@@ -1,9 +1,5 @@
-// TypeScript types mirroring the Supabase (PostgreSQL) schema.
-// Import from here rather than defining inline types in pages.
-//
-//   import type { Location, Profile, ActiveSession } from '@/lib/types/database'
+/** TypeScript models mirroring the Supabase public schema. */
 
-// ─── ENUMS ──────────────────────────────────────────────────────────────────
 
 /**
  * Maps to the `location_status` Postgres enum.
@@ -12,7 +8,6 @@
  */
 export type LocationStatus = 'empty' | 'busy' | 'full'
 
-// ─── TABLES ─────────────────────────────────────────────────────────────────
 
 /**
  * A study spot / location on campus.
@@ -47,7 +42,7 @@ export type Profile = {
   avatar_url: string | null
   points: number | null
   exp: number | null                 // Total EXP earned — never decreases, drives the level system
-updated_at: string | null
+  updated_at: string | null
   full_name: string | null
   streak_days: number | null
   last_checkin_at: string | null
@@ -181,7 +176,6 @@ export type UserRedemption = {
   claimed_by: string | null
 }
 
-// ─── HELPER TYPE ─────────────────────────────────────────────────────────────
 
 /**
  * Standard return wrapper for all DB query functions.
