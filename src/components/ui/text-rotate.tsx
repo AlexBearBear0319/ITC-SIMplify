@@ -14,7 +14,7 @@ import {
   motion,
   MotionProps,
   Transition,
-} from "motion/react"
+} from "framer-motion"
 
 import { cn } from "@/lib/utils"
 

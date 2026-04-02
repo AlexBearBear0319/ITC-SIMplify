@@ -557,6 +557,17 @@ export default function ProfilePage() {
     month: "short",
     year: "numeric",
   });
+  const featuredIds = (() => {
+    const unlocked = achievements.filter((a) => a.unlocked).map((a) => a.id);
+    const deduped = new Set<number>();
+
+    if (profile.equipped_badge_id) deduped.add(profile.equipped_badge_id);
+    unlocked.forEach((id) => {
+      if (deduped.size < 3) deduped.add(id);
+    });
+
+    return Array.from(deduped).slice(0, 3);
+  })();
 
   return (
     <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
