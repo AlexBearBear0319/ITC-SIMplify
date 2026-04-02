@@ -1122,16 +1122,6 @@ export default function DashboardPage() {
     main.scrollTo({ top, behavior: "smooth" });
   };
 
-  const scrollToActive = () => {
-    const main = document.querySelector<HTMLElement>("main");
-    const activeCard = document.querySelector<HTMLElement>("#active-session-card");
-    if (!main) return;
-    const top = activeCard
-      ? main.scrollTop + activeCard.getBoundingClientRect().top - main.getBoundingClientRect().top - 12
-      : 0;
-    main.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-  };
-
   // Creates an active_sessions row, awards check-in points, and recalculates location status.
   const handleCheckInSubmit = async (data: CheckInData) => {
     if (!selectedLocation || !userId) return;
@@ -1672,8 +1662,6 @@ export default function DashboardPage() {
             onCheckIn={() => {
               if (activeSession || activeGroup) {
                 showErrorToast("Leave your existing session or group first.");
-                setSelectedLocation(null);
-                scrollToActive();
                 return;
               }
               setQrScanOpen(true);

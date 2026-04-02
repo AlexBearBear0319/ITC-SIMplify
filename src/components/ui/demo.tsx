@@ -1,6 +1,6 @@
 "use client"
 
-import { LayoutGroup, motion } from "framer-motion"
+import { LayoutGroup, motion } from "motion/react"
 
 import { TextRotate } from "@/components/ui/text-rotate"
 
