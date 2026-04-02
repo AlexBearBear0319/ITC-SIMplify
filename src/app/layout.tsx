@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import Level67Celebration from "@/components/features/Level67Celebration";
 import ThemeProvider from "@/components/providers/ThemeProvider";
 import { MorphPanel } from "@/components/ui/ai-input";
 
@@ -54,6 +55,8 @@ export default function RootLayout({
           <div className="fixed bottom-20 right-4 z-50 md:bottom-6 md:right-6">
             <MorphPanel />
           </div>
+
+          <Level67Celebration />
         </ThemeProvider>
       </body>
     </html>

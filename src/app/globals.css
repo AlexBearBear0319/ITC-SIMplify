@@ -120,12 +120,18 @@ body {
   100% { transform: translateX(300%); }
 }
 
+@keyframes mythical-rainbow-flow {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
 /* Shared layout for all rarity cards — required for ::before clipping */
 .rarity-common,
 .rarity-uncommon,
 .rarity-rare,
 .rarity-epic,
-.rarity-legendary {
+.rarity-legendary,
+.rarity-mythical {
   position: relative;
   overflow: hidden;
 }
@@ -182,6 +188,63 @@ body {
   width: 50%; height: 100%; pointer-events: none;
   background: linear-gradient(90deg, transparent 15%, rgba(212, 164, 71, 0.55) 50%, transparent 85%);
   animation: rarity-shimmer 4.5s linear infinite;
+}
+
+.rarity-mythical {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--color-surface) 94%, white 6%),
+      color-mix(in srgb, var(--color-surface) 96%, transparent)
+    ) padding-box,
+    linear-gradient(
+      120deg,
+      #ff6b8a,
+      #ffb454,
+      #f8f56a,
+      #6cf0a8,
+      #61d7ff,
+      #8a7dff,
+      #ff6b8a
+    ) border-box;
+  background-size: 100% 100%, 240% 240%;
+  animation: mythical-rainbow-flow 8s linear infinite;
+  box-shadow: 0 0 0 1px color-mix(in srgb, white 22%, transparent),
+              0 10px 28px color-mix(in srgb, var(--color-gold) 24%, transparent);
+}
+.rarity-mythical::before {
+  content: ''; position: absolute; top: 0; left: 0;
+  width: 56%; height: 100%; pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 10%,
+    rgba(255, 250, 214, 0.68) 46%,
+    rgba(227, 177, 122, 0.42) 56%,
+    transparent 88%
+  );
+  animation: rarity-shimmer 4s linear infinite;
+}
+
+.rarity-mythical-badge {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--color-surface) 88%, white 12%),
+      color-mix(in srgb, var(--color-surface) 92%, transparent)
+    ) padding-box,
+    linear-gradient(
+      120deg,
+      #ff6b8a,
+      #ffb454,
+      #f8f56a,
+      #6cf0a8,
+      #61d7ff,
+      #8a7dff,
+      #ff6b8a
+    ) border-box;
+  background-size: 100% 100%, 220% 220%;
+  animation: mythical-rainbow-flow 5.5s linear infinite;
+  box-shadow: 0 3px 14px color-mix(in srgb, var(--color-gold) 24%, transparent);
 }
 
 /* Animated gradient borders for the leaderboard podium */

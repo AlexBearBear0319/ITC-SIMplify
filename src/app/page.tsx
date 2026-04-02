@@ -12,6 +12,7 @@ import StudyBuddyModal, { type StudyBuddyData } from "@/components/features/Stud
 import { createClient } from "@/utils/supabase/client";
 import { getLevelNumber } from "@/lib/levels";
 import { trackMissionProgress, POINT_ACTIONS } from "@/lib/db/points";
+import { markProfileStatsDirty } from "@/lib/profile-sync";
 import { leaveStudyGroup } from "@/lib/db/study-groups";
 import { deriveLocationStatus } from "@/lib/location-status";
 import {
@@ -1210,7 +1211,7 @@ export default function DashboardPage() {
         prev ? { ...prev, points: prev.points + rule.points_awarded } : prev
       );
       setPointsDelta(rule.points_awarded);
-      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+      markProfileStatsDirty();
     }
     trackMissionProgress(supabase, userId, POINT_ACTIONS.CHECK_IN);
     // Early Bird: fire if checking in within the first hour of opening (9–10 AM)
@@ -1390,7 +1391,7 @@ export default function DashboardPage() {
       );
       setPointsDelta(rule.points_awarded);
       setTimeout(() => setPointsDelta(null), 2500);
-      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+      markProfileStatsDirty();
     }
     trackMissionProgress(supabase, userId, POINT_ACTIONS.CREATE_STUDY_GROUP);
 
