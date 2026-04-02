@@ -1,10 +1,19 @@
 # SIMplify
 
-**SIMplify** is a web app built by the IT Club that helps students find available study spots on campus, check in using QR codes, and earn points for contributing crowd status updates. Students can also browse upcoming campus events, join study groups, and redeem points for rewards.
+SIMplify is a campus study companion web app for SIM students.
+It helps students find available study zones, check in with QR, track points, unlock achievements, join study groups, view campus events, and redeem rewards.
 
-Built with **Next.js 15 (App Router)**, **Tailwind CSS v4**, and **Supabase**.
+Built with Next.js (App Router), Supabase, Tailwind CSS v4, and Vercel.
 
----
+## Project Overview
+
+SIMplify combines live occupancy data and gamification to improve how students use campus study spaces.
+
+Core idea:
+- make seat availability visible in real time
+- reduce crowding and uncertainty when choosing a study spot
+- reward useful student actions (check-ins, reviews, missions)
+- give admins practical visibility into usage trends and status mismatches
 
 ## Setup Instructions
 
@@ -23,105 +32,123 @@ npm install
 
 ### 3. Configure environment variables
 
-Create a `.env.local` file in the project root:
+Create `.env.local` in the project root.
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-project-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+OPENAI_API_KEY=your-openai-api-key
 ```
 
-Get these values from the Supabase Dashboard under **Project Settings > API**.
+Notes:
+- `NEXT_PUBLIC_*` values are from Supabase Project Settings -> API.
+- `SUPABASE_SERVICE_ROLE_KEY` is required for secure server-side routes (admin actions and events calendar API).
+- `OPENAI_API_KEY` is required for AI chat, events AI suggestions, and admin insight generation.
 
-### 4. Run the development server
+### 4. Run locally
 
 ```bash
 npm run dev
 ```
 
-The app will be available at `http://localhost:3000`.
+Open `http://localhost:3000`.
 
-### Other scripts
+### 5. Useful scripts
 
 | Command | Description |
-|---------|-------------|
-| `npm run build` | Builds the app for production |
-| `npm start` | Runs the production build |
-| `npm run lint` | Runs ESLint |
+|---|---|
+| `npm run dev` | Start local dev server |
+| `npm run build` | Build for production |
+| `npm start` | Run production build |
+| `npm run lint` | Run ESLint |
 
----
+## Features Summary and Usage Guide
 
-## Features
+### Student Side
 
-### Study Spot Finder
-The dashboard displays an interactive floor plan of the Tay Eng Soon Library. Each study zone shows its current crowd status (empty, busy, or full) as a colour-coded pin. Students can pan and zoom the map to find a spot, then tap a pin to view details.
+1. Dashboard Map and Live Zone Status
+- Browse the interactive campus map.
+- See status per zone: `empty`, `busy`, `full`.
+- Tap a pin to open location details.
 
-### QR Code Check-In
-On any location detail page, students scan a QR code to check in. A successful scan opens a form to record their activity type, module, number of seats needed, and how long they plan to stay.
+2. QR Check-in and Session Tracking
+- Open a location and scan the QR code to check in.
+- Session occupancy updates zone status automatically.
+- End session to free seats and refresh status.
 
-### Crowd Status Updates
-Students can report the current crowd level at any location directly from the location detail page. Each submitted update earns 10 points and appears in the live status log.
+3. Events Calendar and Study Suggestions
+- View monthly campus events.
+- Select a date to see event details.
+- AI suggests suitable study spots in readable point form.
 
-### Events Calendar
-The Events page shows a monthly calendar with campus events marked on each date. Selecting a date displays that day's events along with a study spot recommendation based on expected foot traffic.
+4. Study Buddy / Group Study
+- Create a study group with member limit and duration.
+- Join or leave active groups.
+- Group occupancy contributes to live zone status.
 
-### Leaderboard
-A live-updating leaderboard ranks students by total points. The top three positions are shown on a podium. Each student's rank, username, and point total are visible in the full list below.
+5. Profile, Level, Achievements, Missions
+- Track points, level, streak, and recent activities.
+- Complete missions and unlock achievements.
+- Equip badge display from earned badges.
 
-### User Profile and Badges
-The profile page shows a student's total points, check-in count, and study streak. Earned IT Club badges are displayed with their rarity tier (common, rare, or epic). Badges that are locked show progress toward unlocking them.
+6. Rewards and Redemption
+- Spend points on rewards.
+- Track pending and claimed redemptions.
 
-### Rewards Store
-Students spend accumulated points in the Rewards store. Items are grouped into physical rewards, virtual rewards, and room or equipment bookings. Each item shows its points cost and remaining stock.
+7. AI Campus Chat
+- Ask for spot recommendations (quiet, power, group-friendly, etc.).
+- Responses are concise, point form, and route-aware.
 
-### Admin Panel
-Users with admin access can view campus analytics including check-in counts, peak hour traffic charts, and a breakdown of location categories. Access is restricted at the routing level by the `is_admin` flag in Supabase.
+### Admin Side
 
-### Automatic Dark Mode
-The app switches to dark mode between 7:00 PM and 5:59 AM Singapore Time (SGT) without any user input. The theme is managed through CSS variables, so no Tailwind `dark:` classes are needed.
+1. Overview Analytics
+- KPI cards, peak-hour chart, area usage breakdown.
+- AI trend insight in actionable format.
 
----
+2. Zone Status Debug Panel
+- Compare derived status vs stored `current_status`.
+- Quickly detect mismatches by zone.
 
-## Live Deployment
+3. Data Management
+- Manage events, rewards, locations, users, reviews, points rules, schools/majors/subjects.
+- Upload campus map and location images.
 
-The app is deployed on Vercel:
+## Live Deployed Link (Vercel)
 
-**[https://itc-simplify.vercel.app](https://itc-simplify.vercel.app)**
-
----
+https://itc-simplify.vercel.app
 
 ## Known Limitations and Future Improvements
 
-### Current Limitations
+### Known Limitations
 
-- The **Statistics** and **Admin** pages display mock data. The Supabase RPC calls for KPI metrics, peak hour density, and category breakdown are not yet connected.
-- The **Location Detail** page partially uses mock data. QR token validation against the database and point-awarding on check-in are not yet implemented.
-- The **Rewards** redemption flow does not call the Supabase RPC function yet. Items can be selected but the transaction is not recorded in the database.
-- The **Study Buddy Finder** page exists but displays mock study group slots instead of live data from Supabase.
-- **Notification preferences** in Settings are UI-only. The corresponding database table has not been created yet.
-- The `SearchBar` and `Footer` components use hardcoded Tailwind colour classes instead of the project's design tokens. These need to be migrated before they are production-ready.
-- There is no `.env.example` file in the repository. New contributors need to request the Supabase credentials directly.
+- Upload progress for location images is estimated UI progress, not exact byte-level transfer progress.
+- Occupancy accuracy depends on session lifecycle integrity (`active_sessions.is_active` cleanup).
+- Some AI outputs can still vary in style depending on model behavior.
+- Full automated test coverage (unit/integration/e2e) is not complete yet.
+- Some admin analytics are derived from table reads and may not reflect advanced BI-level metrics.
 
-### Planned Improvements
+### Future Improvements
 
-- Replace all mock data with live Supabase queries and RPC calls.
-- Complete the QR code validation flow (match scanned token against `locations.qr_token` and log to `status_logs`).
-- Implement the rewards redemption RPC and deduct points from the user's balance on confirmation.
-- Build out the Study Buddy Finder with real study group creation and discovery.
-- Add the notifications preferences table to Supabase and wire up the Settings toggles.
-- Migrate `SearchBar` and `Footer` to use design tokens from `globals.css`.
-- Add a `.env.example` file to the repository.
+- Move uploads to signed direct-storage flow with true byte-level progress.
+- Add scheduled cleanup/worker logic for stale sessions.
+- Expand test coverage with integration and e2e tests.
+- Add stronger observability for AI routes and Supabase errors.
+- Improve analytics with materialized views or RPC endpoints for heavier reporting.
+
+## Team Contribution Breakdown
+
+| Member | Role | Contribution |
+|---|---|---|
+| Alex (Vun Kian Hiung) | Tech & Project Lead | Project architecture, Supabase schema planning, deployment pipeline, integration coordination, and code review. |
+| Ameer | Backend Lead | Supabase data layer, server actions/API routes, session/points/achievement logic, and DB integrations. |
+| Kimbery | UI/UX Lead | Product flows, interface direction, design system, and visual consistency guidance. |
+| Helen | Frontend Developer | Feature page implementation, component integration, and responsive UI work. |
+| Chris | Frontend Developer | Frontend feature implementation, page wiring, and interaction refinements. |
+
+If your final submission requires exact per-feature ownership, replace this section with your latest final assignment split before submission.
 
 ---
 
-## Team Contributions
-
-| Member | Role | Contributions |
-|--------|------|---------------|
-| **Alex (Vun Kian Hiung)** | Tech and Project Lead | Set up the repository, designed the Supabase database schema, configured authentication middleware, handled Vercel deployment, and managed pull request reviews. |
-| **Ameer** | Backend Lead | Built the Supabase data layer including all fetch, insert, and update functions across locations, sessions, profiles, events, points, reviews, and study groups. |
-| **Kimbery** | UI/UX Lead | Produced the Figma wireframes, defined the design system (colour palette, typography, and spacing), and specified the "Relax View" theme used throughout the app. |
-| **Helen** | Frontend Developer | Implemented pages and React components from Kimbery's designs using Tailwind CSS. |
-| **Chris** | Frontend Developer | Implemented pages and React components from Kimbery's designs using Tailwind CSS. |
-
-For coding conventions, folder structure, and the Git workflow, see [CONTRIBUTING.md](./CONTRIBUTING.md).
-For the full component API, design token reference, and route architecture, see [TEAM_HANDOVER.md](./TEAM_HANDOVER.md).
+For contributor workflow and standards, see [CONTRIBUTING.md](./CONTRIBUTING.md).  
+For handover notes, see [TEAM_HANDOVER.md](./TEAM_HANDOVER.md).
