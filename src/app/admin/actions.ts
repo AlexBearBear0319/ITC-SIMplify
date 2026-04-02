@@ -322,7 +322,7 @@ export async function adminUpdatePoints(userId: string, points: number): Promise
   if (authErr) return { error: authErr };
   try {
     const { error } = await createAdminClient()
-      .from("profiles").update({ points }).eq("id", userId);
+      .from("profiles").update({ points, exp: points }).eq("id", userId);
     return { error: error?.message ?? null };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Unexpected error" };
