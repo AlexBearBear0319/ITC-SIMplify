@@ -111,7 +111,7 @@ type Props = {
                   Your study group is live at{" "}
                   <span className="font-semibold text-ink">{locationName}</span>.
                 </p>
-                <div className="flex items-center gap-2 mt-3 px-3 py-2 bg-gold-light rounded-full border border-gold/30">
+                <div className="flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-gold-light rounded-full border border-gold/30">
                   <Coins size={13} className="text-gold" />
                   <span className="text-sm font-bold text-gold">Points earned!</span>
                 </div>
@@ -126,7 +126,7 @@ type Props = {
                       <button
                         type="button"
                         onClick={handleBack}
-                        className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-ink-muted hover:text-ink transition-colors"
+                        className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-ink-muted hover:text-ink transition-colors"
                       >
                         <ChevronLeft size={14} />
                         Back
@@ -135,11 +135,11 @@ type Props = {
                     <Dialog.Title className="text-base font-bold text-ink">
                       Find Study Buddy
                     </Dialog.Title>
-                    <p id="buddy-desc" className="text-xs text-ink-muted mt-1 truncate max-w-55">
+                    <p id="buddy-desc" className="text-xs text-ink-muted mt-0.5 truncate max-w-55">
                       {locationName}
                     </p>
                   </div>
-                  <Dialog.Close className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors">
+                  <Dialog.Close className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors">
                     <X size={16} />
                   </Dialog.Close>
                 </div>
@@ -157,7 +157,7 @@ type Props = {
                       onChange={(e) => setTopic(e.target.value)}
                       placeholder="e.g., Data Structures, Stats revision…"
                       maxLength={80}
-                      className="w-full px-3 py-3 bg-canvas border border-border rounded-xl text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition-colors"
+                      className="w-full px-3 py-2.5 bg-canvas border border-border rounded-xl text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition-colors"
                     />
                   </div>
 
@@ -207,12 +207,12 @@ type Props = {
                   </div>
 
                   {/* Power seat toggle */}
-                  <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-canvas">
+                  <div className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-canvas">
                     <div className="flex items-center gap-2">
                       <Zap size={15} className={needsPower ? "text-gold" : "text-ink-faint"} />
                       <div>
                         <p className="text-xs font-semibold text-ink leading-tight">Power seats needed?</p>
-                        <p className="text-[10px] text-ink-faint mt-1">
+                        <p className="text-[10px] text-ink-faint mt-0.5">
                           {needsPower
                             ? `~${maxMembers * 2} outlet${maxMembers * 2 !== 1 ? "s" : ""} reserved`
                             : "No outlets reserved"}

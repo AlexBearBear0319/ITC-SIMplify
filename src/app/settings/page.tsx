@@ -55,7 +55,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
+    <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
       <div className="max-w-6xl mx-auto space-y-6">
 
         <div>
@@ -92,7 +92,7 @@ export default function SettingsPage() {
               <div key={id} className="flex items-center gap-4 px-5 py-4">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-ink">{label}</p>
-                  <p className="text-xs text-ink-muted mt-1 leading-relaxed">{description}</p>
+                  <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">{description}</p>
                 </div>
                 <Toggle checked={checked} onChange={onChange} />
               </div>
@@ -101,7 +101,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Danger Zone ── */}
-        <section className="bg-alert-light/45 rounded-2xl border border-alert/30 shadow-sm overflow-hidden">
+        <section className="bg-surface rounded-2xl border border-alert/30 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-alert/20 flex items-center gap-2">
             <AlertTriangle size={16} className="text-alert" />
             <h2 className="font-semibold text-alert">Danger Zone</h2>
@@ -111,7 +111,7 @@ export default function SettingsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-ink">Sign out of your account</p>
-                <p className="text-xs text-ink-muted mt-1">
+                <p className="text-xs text-ink-muted mt-0.5">
                   You will be redirected to the login page.
                 </p>
               </div>

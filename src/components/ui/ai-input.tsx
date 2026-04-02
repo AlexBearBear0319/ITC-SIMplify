@@ -200,7 +200,7 @@ export function MorphPanel() {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-ink-muted hover:text-ink transition-colors p-1 rounded-full hover:bg-canvas"
+                className="text-ink-muted hover:text-ink transition-colors p-0.5 rounded-full hover:bg-canvas"
                 aria-label="Close AI chat"
               >
                 <X size={13} />
@@ -232,7 +232,7 @@ export function MorphPanel() {
                       >
                         {/* Avatar */}
                         <div className={cn(
-                          "w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-1",
+                          "w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
                           msg.role === "user"
                             ? "bg-brand"
                             : "bg-canvas border border-border",

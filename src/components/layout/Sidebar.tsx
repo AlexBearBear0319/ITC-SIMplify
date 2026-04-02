@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 
 const NAV_MAIN = [
-  { icon: LayoutDashboard, label: "Dashboard",   href: "/dashboard" },
+  { icon: LayoutDashboard, label: "Dashboard",   href: "/" },
   { icon: Users,           label: "Study Buddy", href: "/finder" },
   { icon: CalendarDays,    label: "Events",      href: "/events" },
   { icon: Gift,            label: "Rewards",     href: "/rewards" },
@@ -124,8 +124,8 @@ export default function Sidebar() {
         `}
       >
         {/* ── Logo row — X button lives here on mobile ── */}
-        <div className="px-6 h-16 border-b border-border dark:border-slate-700 flex items-center shrink-0">
-          <Link href="/dashboard" className="flex items-center gap-3 group flex-1 min-w-0">
+        <div className="px-5 h-16 border-b border-border dark:border-slate-700 flex items-center shrink-0">
+          <Link href="/" className="flex items-center gap-3 group flex-1 min-w-0">
             <div className="w-11 h-11 rounded-xl bg-surface border border-border flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-200 shrink-0 overflow-hidden">
               <Image
                 src="/SIMplify_logo_light.svg?v=20260330-1"
@@ -146,7 +146,7 @@ export default function Sidebar() {
               <p className="font-bold text-[15px] text-ink tracking-tight leading-none">
                 SIMplify
               </p>
-              <p className="text-[10px] text-ink-faint mt-1 leading-none">
+              <p className="text-[10px] text-ink-faint mt-0.5 leading-none">
                 IT Club · SIM UOW
               </p>
             </div>
@@ -156,15 +156,15 @@ export default function Sidebar() {
           <button
             onClick={() => setIsOpen(false)}
             aria-label="Close navigation"
-            className="md:hidden shrink-0 ml-2 p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-200"
+            className="md:hidden shrink-0 ml-2 p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-200"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* ── Main navigation ── */}
-        <nav className="flex-1 px-4 py-5 overflow-y-auto space-y-2">
-          <p className="px-3 mb-3 text-[10px] font-semibold text-ink-faint uppercase tracking-widest">
+        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-0.5">
+          <p className="px-3 mb-2 text-[10px] font-semibold text-ink-faint uppercase tracking-widest">
             Navigate
           </p>
 
@@ -175,7 +175,7 @@ export default function Sidebar() {
                 key={href}
                 href={href}
                 className={`
-                  flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium
+                  flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
                   transition-all duration-200
                   ${
                     active
@@ -198,7 +198,7 @@ export default function Sidebar() {
         <div className="mx-4 border-t border-border dark:border-slate-700" />
 
         {/* ── Profile + Settings ── */}
-        <div className="px-4 py-4 space-y-2">
+        <div className="px-3 py-3 space-y-0.5">
           {NAV_BOTTOM.map(({ icon: Icon, label, href }) => {
             const active = isActive(href);
             return (
@@ -206,7 +206,7 @@ export default function Sidebar() {
                 key={href}
                 href={href}
                 className={`
-                  flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium
+                  flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
                   transition-all duration-200
                   ${
                     active
@@ -243,7 +243,7 @@ export default function Sidebar() {
               <p className="text-sm font-semibold text-ink truncate leading-tight">
                 {profile?.full_name || profile?.username || "Loading…"}
               </p>
-              <p className="text-xs text-gold font-medium leading-tight mt-1">
+              <p className="text-xs text-gold font-medium leading-tight mt-0.5">
                 ✦ {profile?.points.toLocaleString() ?? "—"} pts
               </p>
             </div>

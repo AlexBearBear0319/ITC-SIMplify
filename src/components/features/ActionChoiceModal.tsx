@@ -67,7 +67,7 @@ export default function ActionChoiceModal({
             QR Verified ✓
           </p>
           <h2 className="text-xl font-bold text-ink mt-1 leading-snug">{locationName}</h2>
-          <p className="text-sm text-ink-muted mt-1">What would you like to do here?</p>
+          <p className="text-sm text-ink-muted mt-0.5">What would you like to do here?</p>
         </div>
 
         {/* Choices */}
@@ -82,7 +82,7 @@ export default function ActionChoiceModal({
             </div>
             <div className="text-left">
               <p className="font-bold text-sm">Solo Check-in</p>
-              <p className="text-xs opacity-70 mt-1">Reserve your seat · Earn points</p>
+              <p className="text-xs opacity-70 mt-0.5">Reserve your seat · Earn points</p>
             </div>
           </button>
 
@@ -101,7 +101,7 @@ export default function ActionChoiceModal({
             </div>
             <div className="text-left">
               <p className={`font-bold text-sm ${isUserCheckedIn ? "text-ink-faint" : "text-ink"}`}>Find Study Buddy</p>
-              <p className={`text-xs mt-1 ${isUserCheckedIn ? "text-ink-faint" : "text-ink-muted"}`}>
+              <p className={`text-xs mt-0.5 ${isUserCheckedIn ? "text-ink-faint" : "text-ink-muted"}`}>
                 {isUserCheckedIn ? "Check out first to start a study group" : "Create a group · Study together"}
               </p>
             </div>

@@ -118,7 +118,7 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                   )}
                 </p>
                 {!editMode && (
-                  <div className="flex items-center gap-2 mt-3 px-3 py-2 bg-gold-light rounded-full border border-gold/30">
+                  <div className="flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-gold-light rounded-full border border-gold/30">
                     <Coins size={13} className="text-gold" />
                     <span className="text-sm font-bold text-gold">+10 pts earned</span>
                   </div>
@@ -134,18 +134,18 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                       <button
                         type="button"
                         onClick={handleBack}
-                        className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-ink-muted hover:text-ink transition-colors"
+                        className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-ink-muted hover:text-ink transition-colors"
                       >
                         <ChevronLeft size={14} />
                         Back
                       </button>
                     )}
                     <Dialog.Title className="text-base font-bold text-ink">{editMode ? "Edit Session" : "Check In"}</Dialog.Title>
-                    <p id="checkin-desc" className="text-xs text-ink-muted mt-1 truncate max-w-55">
+                    <p id="checkin-desc" className="text-xs text-ink-muted mt-0.5 truncate max-w-55">
                       {locationName}
                     </p>
                   </div>
-                  <Dialog.Close className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors">
+                  <Dialog.Close className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors">
                     <X size={16} />
                   </Dialog.Close>
                 </div>
@@ -188,7 +188,7 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                           key={value}
                           type="button"
                           onClick={() => setActivity(value)}
-                          className={`flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-semibold transition-all duration-150 ${
+                          className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-semibold transition-all duration-150 ${
                             activity === value
                               ? "bg-brand border-brand text-ink"
                               : "bg-canvas border-border text-ink-muted hover:border-brand hover:text-ink"
@@ -220,7 +220,7 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                           onChange={(e) => setModule(e.target.value)}
                           placeholder="e.g., CS301 Data Structures"
                           maxLength={60}
-                          className="w-full px-3 py-3 bg-canvas border border-border rounded-xl text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition-colors"
+                          className="w-full px-3 py-2.5 bg-canvas border border-border rounded-xl text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition-colors"
                         />
                       </motion.div>
                     )}
@@ -229,7 +229,7 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                   {/* Duration */}
                   <div>
                     <label className="block text-xs font-semibold text-ink-muted mb-2">Duration</label>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-4 gap-1.5">
                       {DURATION_OPTIONS.map(({ label, value }) => (
                         <button
                           key={value}
@@ -248,12 +248,12 @@ export default function CheckInModal({ open, locationName, onOpenChange, onSubmi
                   </div>
 
                   {/* Power seat toggle */}
-                  <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-canvas">
+                  <div className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-canvas">
                     <div className="flex items-center gap-2">
                       <Zap size={15} className={needsPower ? "text-gold" : "text-ink-faint"} />
                       <div>
                         <p className="text-xs font-semibold text-ink leading-tight">Power seat needed?</p>
-                        <p className="text-[10px] text-ink-faint mt-1">
+                        <p className="text-[10px] text-ink-faint mt-0.5">
                           {needsPower
                             ? `~${seatsNeeded * 2} outlet${seatsNeeded * 2 !== 1 ? "s" : ""} reserved`
                             : "No outlets reserved"}

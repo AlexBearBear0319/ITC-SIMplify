@@ -20,7 +20,7 @@ function FieldError({ msg }: { msg?: string }) {
     <motion.p
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-2 text-xs text-alert mt-2"
+      className="flex items-center gap-1.5 text-xs text-alert mt-1.5"
     >
       <AlertCircle size={12} className="shrink-0" />
       {msg}
@@ -36,7 +36,7 @@ function PasswordInput({
   const [show, setShow] = useState(false);
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-ink mb-2">{label}</label>
+      <label htmlFor={id} className="block text-sm font-medium text-ink mb-1.5">{label}</label>
       <div className="relative">
         <input
           id={id} name={name}
@@ -44,7 +44,7 @@ function PasswordInput({
           autoComplete={autoComplete}
           placeholder="••••••••"
           required
-          className={`w-full px-4 py-3 pr-11 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${error ? "border-alert" : "border-border"}`}
+          className={`w-full px-4 py-2.5 pr-11 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${error ? "border-alert" : "border-border"}`}
         />
         <button
           type="button"
@@ -94,7 +94,7 @@ export default function ResetPasswordPage() {
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-extrabold text-ink leading-tight">Set New Password</h1>
-            <p className="text-sm text-ink-muted mt-2 max-w-xs">
+            <p className="text-sm text-ink-muted mt-1.5 max-w-xs">
               Choose a strong password for your account.
             </p>
           </div>
@@ -145,7 +145,7 @@ export default function ResetPasswordPage() {
                   {state && "error" in state && !Object.keys(fe).length && (
                     <motion.p
                       initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                      className="flex items-center gap-2 text-xs text-alert bg-alert-light rounded-xl px-4 py-3"
+                      className="flex items-center gap-2 text-xs text-alert bg-alert-light rounded-xl px-4 py-2.5"
                     >
                       <AlertCircle size={14} className="shrink-0" /> {state.error}
                     </motion.p>

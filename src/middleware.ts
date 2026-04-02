@@ -31,7 +31,6 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isAuthPage = pathname.startsWith("/auth/");
-  const isPublicLanding = pathname === "/" || pathname.startsWith("/landing");
   // These routes must never be intercepted — they complete auth flows mid-flight.
   const isPassThrough =
     pathname === "/auth/reset-password" ||
@@ -40,20 +39,15 @@ export async function middleware(request: NextRequest) {
 
   // ── 1. Logged-in user visiting an auth page → send to dashboard ───────────
   if (isAuthPage && user && !isPassThrough) {
-    return redirect("/dashboard", request, response);
+    return redirect("/", request, response);
   }
 
-  // ── 2. Logged-in user on public landing → send to dashboard ───────────────
-  if (user && isPublicLanding) {
-    return redirect("/dashboard", request, response);
-  }
-
-  // ── 3. Guest visiting private pages → send to login ────────────────────────
-  if (!isAuthPage && !isPublicLanding && !user) {
+  // ── 2. Guest visiting any non-auth page → send to login ───────────────────
+  if (!isAuthPage && !user) {
     return redirect("/auth/login", request, response);
   }
 
-  // ── 4. Admin-only routes ───────────────────────────────────────────────────
+  // ── 3. Admin-only routes ───────────────────────────────────────────────────
   // Guests are already bounced above. Check is_admin for logged-in users.
   if (user && (pathname === "/admin" || pathname.startsWith("/admin/"))) {
     const { data: profile } = await supabase
@@ -63,7 +57,7 @@ export async function middleware(request: NextRequest) {
       .single();
 
     if (!profile?.is_admin) {
-      return redirect("/dashboard", request, response);
+      return redirect("/", request, response);
     }
   }
 

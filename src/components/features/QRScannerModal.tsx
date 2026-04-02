@@ -169,7 +169,7 @@ export default function QRScannerModal({
             QR Verification
           </p>
           {locationName && (
-            <p className="text-sm font-bold text-white mt-1">{locationName}</p>
+            <p className="text-sm font-bold text-white mt-0.5">{locationName}</p>
           )}
         </div>
         <div className="w-9" />
@@ -263,7 +263,7 @@ export default function QRScannerModal({
         {status === "error" && (
           <button
             onClick={handleRetry}
-            className="w-full flex items-center justify-center gap-2 py-4 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-lg active:scale-[0.98]"
+            className="w-full flex items-center justify-center gap-2 py-3.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-lg active:scale-[0.98]"
           >
             <QrCode size={16} />
             Try Again
@@ -272,7 +272,7 @@ export default function QRScannerModal({
         {status !== "verified" && (
           <button
             onClick={handleClose}
-            className="w-full py-3 text-white/40 hover:text-white text-sm font-medium transition-colors text-center"
+            className="w-full py-2.5 text-white/40 hover:text-white text-sm font-medium transition-colors text-center"
           >
             Cancel
           </button>

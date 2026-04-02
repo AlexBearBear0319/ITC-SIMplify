@@ -313,7 +313,7 @@ function LocationDrawer({
                         <ChevronRight size={16} />
                       </button>
 
-                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 px-2 py-1 rounded-full bg-overlay/45">
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2 py-1 rounded-full bg-overlay/45">
                         {location.images!.map((_, i) => (
                           <span
                             key={i}
@@ -338,7 +338,7 @@ function LocationDrawer({
               <div className="pt-1">
             <div className="flex items-start justify-between mb-2">
               <span
-                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${s.bg} ${s.text}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${s.bg} ${s.text}`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot} animate-pulse`} />
                 Live · {s.label}
@@ -355,7 +355,7 @@ function LocationDrawer({
             <h2 className="text-xl font-bold text-ink leading-tight">{location.name}</h2>
 
             {location.location_text && (
-              <p className="text-sm text-ink-muted mt-1 flex items-center gap-2">
+              <p className="text-sm text-ink-muted mt-1 flex items-center gap-1.5">
                 <MapPin size={12} className="text-brand-dark shrink-0" />
                 {location.location_text}
               </p>
@@ -365,19 +365,19 @@ function LocationDrawer({
             {(location.opening_time || location.total_seats != null || location.power_outlets != null) && (
               <div className="flex items-center gap-4 mt-3 flex-wrap">
                 {location.opening_time && (
-                  <div className="flex items-center gap-2 text-xs text-ink-muted">
+                  <div className="flex items-center gap-1.5 text-xs text-ink-muted">
                     <Clock size={13} className="text-brand-dark shrink-0" />
                     {location.opening_time}
                   </div>
                 )}
                 {location.total_seats != null && (
-                  <div className="flex items-center gap-2 text-xs text-ink-muted">
+                  <div className="flex items-center gap-1.5 text-xs text-ink-muted">
                     <Users size={13} className="text-brand-dark shrink-0" />
                     {seatsLeft != null ? `${seatsLeft}/${location.total_seats} seats left` : `${location.total_seats} seats`}
                   </div>
                 )}
                 {location.power_outlets != null && (
-                  <div className="flex items-center gap-2 text-xs text-ink-muted">
+                  <div className="flex items-center gap-1.5 text-xs text-ink-muted">
                     <Zap size={13} className="text-brand-dark shrink-0" />
                     {outletsLeft != null ? `${outletsLeft}/${location.power_outlets} outlets left` : `${location.power_outlets} outlets`}
                   </div>
@@ -410,7 +410,7 @@ function LocationDrawer({
 
               {/* ── Active session timer ── */}
               {isMyActiveLocation && activeSession && (
-                <div className="mt-4 flex items-center gap-3 px-3 py-3 bg-success-light border border-success/30 rounded-xl">
+                <div className="mt-4 flex items-center gap-2.5 px-3 py-2.5 bg-success-light border border-success/30 rounded-xl">
               <CheckCircle2 size={15} className="text-success shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-ink">You&apos;re checked in here</p>
@@ -456,7 +456,7 @@ function LocationDrawer({
                 ) : (
                   reviews.map((review) => (
                     <div key={review.id} className="py-3 border-b border-border last:border-0">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-1.5">
                         <div className="w-6 h-6 rounded-full bg-brand-light flex items-center justify-center text-[9px] font-bold text-ink shrink-0">
                           {review.username.slice(0, 2).toUpperCase()}
                         </div>
@@ -1619,7 +1619,7 @@ export default function DashboardPage() {
             initial={{ opacity: 1, y: 0, scale: 0.9 }}
             animate={{ opacity: 0, y: -60, scale: 1.15 }}
             transition={{ duration: 2.2, ease: "easeOut" }}
-            className="fixed top-24 right-4 z-80 flex items-center gap-2 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
+            className="fixed top-24 right-4 z-80 flex items-center gap-1.5 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
           >
             <Coins size={16} />
             +{pointsDelta} pts
@@ -1637,7 +1637,7 @@ export default function DashboardPage() {
             exit={{    opacity: 0, y: -16, scale: 0.95 }}
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             onAnimationComplete={() => setTimeout(() => setNewBadgeName(null), 3000)}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gold text-ink text-sm font-bold px-5 py-3 rounded-full shadow-xl pointer-events-none"
+            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gold text-ink text-xs font-semibold px-4 py-2 rounded-full shadow-lg pointer-events-none whitespace-nowrap"
           >
             <Trophy size={13} />
             Badge unlocked: {newBadgeName}!
@@ -1653,9 +1653,9 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 16, scale: 0.95 }}
             animate={{ opacity: 1, y: 0,  scale: 1    }}
             exit={{    opacity: 0, y: 8,   scale: 0.97 }}
-            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-start gap-3 bg-ink text-surface text-sm font-medium px-4 py-3 rounded-2xl shadow-xl max-w-xs w-[calc(100vw-2rem)]"
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-start gap-2.5 bg-ink text-surface text-sm font-medium px-4 py-3 rounded-2xl shadow-xl max-w-xs w-[calc(100vw-2rem)]"
           >
-            <AlertCircle size={16} className="text-alert shrink-0 mt-1" />
+            <AlertCircle size={16} className="text-alert shrink-0 mt-0.5" />
             {errorToast}
           </motion.div>
         )}
@@ -1754,24 +1754,23 @@ export default function DashboardPage() {
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="px-4 py-4 md:px-6 md:py-6 lg:px-8 lg:py-8 max-w-6xl mx-auto space-y-3 md:space-y-4"
+        className="px-3 py-3 md:px-4 md:py-4 lg:px-5 lg:py-5 max-w-6xl mx-auto space-y-3 md:space-y-4"
       >
 
         {/* ── 1. Greeting Hero ── */}
-        <motion.div variants={cardVariants} className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
+        <motion.div variants={cardVariants} className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
-            <p className="text-sm text-ink-muted font-medium flex items-center gap-2">
+            <p className="text-sm text-ink-muted font-medium flex items-center gap-1.5">
               {greeting.emoji && <span>{greeting.emoji}</span>}
               {greeting.text}
             </p>
 
-            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-ink mt-1 leading-tight">
+            <h2 className="text-2xl md:text-3xl font-bold text-ink mt-1 leading-tight">
               {profile === null ? (
                 <span className="inline-block h-8 w-48 bg-canvas rounded-lg animate-pulse" />
               ) : (
                 <>
-                  <span className="sm:hidden">Ready to study, </span>
-                  <span className="hidden sm:inline">Ready to tackle your work, </span>
+                  Ready to tackle your work,{" "}
                   <span className="text-brand-dark dark:text-brand">
                     {profile.full_name ?? profile.username ?? "Student"}
                   </span>?
@@ -1779,26 +1778,27 @@ export default function DashboardPage() {
               )}
             </h2>
 
-            <p className="text-sm text-ink-muted mt-2 flex items-center gap-2">
-              <Flame size={14} className="text-alert shrink-0 hidden sm:block" />
+            <p className="text-sm text-ink-muted mt-1.5 flex items-center gap-1.5">
+              <Flame size={14} className="text-alert shrink-0" />
               {profile === null ? (
                 <span className="inline-block h-4 w-40 bg-canvas rounded animate-pulse" />
               ) : (
-                <>
-                  <span className="sm:hidden">
-                    Streak: <span className="font-semibold text-ink">{profile.streak_days} day{profile.streak_days === 1 ? "" : "s"}</span>
-                  </span>
-                  <span className="hidden sm:inline">
-                    You&apos;re on a <span className="font-semibold text-ink">{profile.streak_days}-day</span> study streak. Keep it up!
-                  </span>
-                </>
+                profile.streak_days > 0 ? (
+                  <>
+                    You&apos;re on a{" "}
+                    <span className="font-semibold text-ink">{profile.streak_days}-day</span>{" "}
+                    study streak. Keep it up!
+                  </>
+                ) : (
+                  "Start your study streak today with your first check-in."
+                )
               )}
             </p>
           </div>
 
-          <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 shrink-0 w-full sm:w-auto">
+          <div className="flex flex-row sm:flex-col items-center sm:items-end gap-1.5 shrink-0">
             {/* ── Points badge ── */}
-            <div className="flex items-center justify-center gap-2 bg-gold-light border border-gold/30 px-3 py-2 rounded-full w-full sm:w-auto">
+            <div className="flex items-center gap-1.5 bg-gold-light border border-gold/30 px-3 py-1.5 rounded-full">
               <Coins size={13} className="text-gold" />
               <span className="text-sm font-bold text-gold">
                 {profile === null ? (
@@ -1809,7 +1809,7 @@ export default function DashboardPage() {
               </span>
             </div>
             {/* ── Level badge ── */}
-            <div className="hidden sm:flex items-center gap-2 bg-brand-faint border border-brand/40 px-3 py-2 rounded-full">
+            <div className="flex items-center gap-1.5 bg-brand-faint border border-brand/40 px-3 py-1.5 rounded-full">
               <Star size={13} className="text-brand-dark" />
               <span className="text-sm font-semibold text-ink">
                 {profile === null ? (
@@ -1906,19 +1906,14 @@ export default function DashboardPage() {
 
         {alertVisible && busiestLocation && (
           <motion.div variants={cardVariants}>
-            <div className="flex items-start gap-3 bg-alert-light border border-alert/40 rounded-2xl px-4 py-3">
-              <AlertTriangle size={18} className="text-alert shrink-0 mt-1" strokeWidth={2.2} />
+            <div className="flex items-start gap-2.5 bg-alert-light border border-alert/40 rounded-2xl px-4 py-3">
+              <AlertTriangle size={18} className="text-alert shrink-0 mt-0.5" strokeWidth={2.2} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-ink leading-snug">
                   {busiestLocation.name} is busy right now
                 </p>
-                <p className="text-xs text-ink-muted mt-1">
-                  <span className="sm:hidden">
-                    {busiestLocation.seats} seat{busiestLocation.seats !== 1 ? "s" : ""} occupied. {" "}
-                  </span>
-                  <span className="hidden sm:inline">
-                    {busiestLocation.seats} seat{busiestLocation.seats !== 1 ? "s" : ""} currently occupied · Expect crowded study zones.{" "}
-                  </span>
+                <p className="text-xs text-ink-muted mt-0.5">
+                  {busiestLocation.seats} seat{busiestLocation.seats !== 1 ? "s" : ""} currently occupied · Expect crowded study zones.{" "}
                   <button
                     onClick={() => { setAlertVisible(false); scrollToMap(); }}
                     className="font-medium text-ink underline underline-offset-2 hover:text-brand-dark transition-colors"
@@ -1949,20 +1944,20 @@ export default function DashboardPage() {
               <h3 className="text-lg md:text-xl font-bold text-ink">Pick a spot</h3>
               <span className="h-0.5 flex-1 rounded-full bg-linear-to-r from-brand/70 to-transparent" />
             </div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
               <div>
                 {/* Match primary/secondary text colors with other section headers. */}
                 <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
                   Tay Eng Soon Library
                 </p>
-                <p className="text-base text-ink-muted mt-2">Live Zone Status</p>
+                <p className="text-base text-ink-muted mt-1.5">Live Zone Status</p>
               </div>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-1.5 flex-wrap">
                 {FILTER_OPTIONS.map(({ value, label, active, inactive }) => (
                   <button
                     key={String(value)}
                     onClick={() => setStatusFilter(value)}
-                    className={`px-3 py-2 text-xs font-medium rounded-full border transition-all duration-200 ${
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-200 ${
                       statusFilter === value ? active : inactive
                     }`}
                   >
@@ -2018,12 +2013,12 @@ export default function DashboardPage() {
                       onClick={() => setSelectedLocation(loc)}
                       className="group p-3 bg-canvas border border-border rounded-xl hover:border-brand hover:bg-brand-faint transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm text-left"
                     >
-                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold mb-2 ${s.bg} ${s.text}`}>
+                      <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold mb-1.5 ${s.bg} ${s.text}`}>
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
                         {isCheckedIn ? "You're here" : s.label}
                       </div>
                       <p className="text-xs font-semibold text-ink leading-tight truncate">{loc.name}</p>
-                      <p className="text-[10px] text-ink-faint mt-1 truncate">{loc.category}</p>
+                      <p className="text-[10px] text-ink-faint mt-0.5 truncate">{loc.category}</p>
                     </button>
                   );
                 })}
@@ -2053,12 +2048,12 @@ export default function DashboardPage() {
                     <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
                       Daily Mission
                     </p>
-                    <p className="text-sm text-ink-muted leading-none mt-1">Resets at midnight</p>
+                    <p className="text-sm text-ink-muted leading-none mt-0.5">Resets at midnight</p>
                   </div>
                   <span className="hidden sm:block h-0.5 flex-1 rounded-full bg-linear-to-r from-brand/70 to-transparent" />
                 </div>
                 {mission && (
-                  <div className="flex items-center gap-1 bg-gold-light border border-gold/30 px-3 py-1 rounded-full">
+                  <div className="flex items-center gap-1.5 bg-gold-light border border-gold/30 px-2.5 py-1 rounded-full">
                     <Coins size={12} className="text-gold" />
                     <span className="text-xs font-bold text-gold">
                       +{mission.reward_points} pts
@@ -2081,17 +2076,17 @@ export default function DashboardPage() {
               ) : mission ? (
                 <>
                   <h3 className="text-lg font-bold text-ink leading-tight">{mission.title}</h3>
-                  <p className="text-sm text-ink-muted mt-2 leading-relaxed flex-1">
+                  <p className="text-sm text-ink-muted mt-1.5 leading-relaxed flex-1">
                     {mission.description}
                   </p>
 
-                  <div className="flex items-center gap-2 mt-3 text-xs text-ink-muted">
+                  <div className="flex items-center gap-1.5 mt-2.5 text-xs text-ink-muted">
                     <MapPin size={12} className="shrink-0 text-brand-dark" />
                     <span>{mission.location_hint}</span>
                   </div>
 
                   <div className="mt-3">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-medium text-ink-muted">Progress</span>
                       <span className="text-xs font-semibold text-ink">
                         {mission.progress} / {mission.target_count}
@@ -2109,7 +2104,7 @@ export default function DashboardPage() {
                   {missionDone ? (
                     <button
                       disabled
-                      className="mt-4 flex items-center justify-center gap-2 w-full py-3 bg-gold-light border border-gold/30 text-gold font-semibold text-sm rounded-full cursor-not-allowed"
+                      className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 bg-gold-light border border-gold/30 text-gold font-semibold text-sm rounded-full cursor-not-allowed"
                     >
                       <CheckCircle2 size={15} />
                       Mission Complete!
@@ -2117,7 +2112,7 @@ export default function DashboardPage() {
                   ) : missionInProgress ? (
                     <button
                       onClick={scrollToMap}
-                      className="mt-4 flex items-center justify-center gap-2 w-full py-3 bg-brand-faint border border-brand/40 text-brand-dark font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
+                      className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 bg-brand-faint border border-brand/40 text-brand-dark font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
                     >
                       <span className="w-2 h-2 rounded-full bg-brand-dark animate-pulse shrink-0" />
                       {realtimeProgressPct > 0
@@ -2131,7 +2126,7 @@ export default function DashboardPage() {
                         sessionStorage.setItem(`mission-started-${mission.id}`, "true");
                         scrollToMap();
                       }}
-                      className="mt-4 flex items-center justify-center gap-2 w-full py-3 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
+                      className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.98]"
                     >
                       <CheckCircle2 size={15} />
                       Start Mission
@@ -2160,19 +2155,19 @@ export default function DashboardPage() {
                     <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
                       This Week
                     </p>
-                    <p className="text-sm text-ink-muted leading-none mt-1">Top Contributors</p>
+                    <p className="text-sm text-ink-muted leading-none mt-0.5">Top Contributors</p>
                   </div>
                   <span className="hidden sm:block h-0.5 flex-1 rounded-full bg-linear-to-r from-brand/70 to-transparent" />
                 </div>
                 <Link
                   href="/leaderboard"
-                  className="text-xs font-medium text-brand-dark hover:text-ink flex items-center gap-1 transition-colors duration-150"
+                  className="text-xs font-medium text-brand-dark hover:text-ink flex items-center gap-0.5 transition-colors duration-150"
                 >
                   View all <ChevronRight size={13} />
                 </Link>
               </div>
 
-              <div className="flex flex-col gap-2 flex-1">
+              <div className="flex flex-col gap-1.5 flex-1">
                 {topEntries.length === 0 ? (
                   <>
                     {[1, 2, 3].map((i) => (
@@ -2185,7 +2180,7 @@ export default function DashboardPage() {
                     return (
                       <div
                         key={entry.rank}
-                        className="flex items-center gap-3 p-3 rounded-xl hover:bg-brand-faint transition-colors duration-150"
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-brand-faint transition-colors duration-150"
                       >
                         <div
                           className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ring-2 ${style.ring} bg-brand-light text-ink overflow-hidden`}
@@ -2201,12 +2196,12 @@ export default function DashboardPage() {
                           <p className="text-sm font-semibold text-ink truncate leading-tight">
                             {entry.name}
                           </p>
-                          <p className="text-[10px] text-ink-muted leading-tight mt-1">
+                          <p className="text-[10px] text-ink-muted leading-tight mt-0.5">
                             Level {entry.level}
                           </p>
                         </div>
                         <span
-                          className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full ${style.badge}`}
+                          className={`shrink-0 inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full ${style.badge}`}
                         >
                           {style.label} {entry.points.toLocaleString()}
                         </span>
@@ -2216,14 +2211,14 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              <div className="mt-3 pt-3 border-t border-border">
+              <div className="mt-3 pt-2.5 border-t border-border">
                 <div className="flex items-center justify-between text-xs text-ink-muted">
                   <span>Your rank this week</span>
                   <span className="font-semibold text-ink">
                     {userRank !== null ? `#${userRank}` : "#—"}
                   </span>
                 </div>
-                <div className="mt-2 h-1.5 bg-brand-light rounded-full overflow-hidden">
+                <div className="mt-1.5 h-1.5 bg-brand-light rounded-full overflow-hidden">
                   <div className="h-full bg-brand rounded-full" style={{ width: "34%" }} />
                 </div>
               </div>
