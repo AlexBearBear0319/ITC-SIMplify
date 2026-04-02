@@ -1,21 +1,4 @@
-// ============================================================
-// SUPABASE BROWSER CLIENT
-// ============================================================
-// Use this file in components that have "use client" at the top.
-// It creates a Supabase connection that runs in the user's browser
-// and automatically reads their login session from cookies.
-//
-// HOW TO USE (inside a React client component or hook):
-//
-//   'use client'
-//   import { createClient } from '@/lib/supabase/client'
-//
-//   const supabase = createClient()
-//   const { data } = await supabase.from('locations').select('*')
-//
-// NOTE: Do NOT use this in Server Components or API routes.
-//       Use '@/lib/supabase/server' instead for those.
-// ============================================================
+/** Factory for browser-side Supabase client instances. */
 
 import { createBrowserClient } from '@supabase/ssr'
 

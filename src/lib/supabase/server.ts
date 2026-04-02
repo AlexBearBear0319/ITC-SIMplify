@@ -1,24 +1,4 @@
-// ============================================================
-// SUPABASE SERVER CLIENT
-// ============================================================
-// Use this file in:
-//   - Server Components (files without 'use client')
-//   - API Route Handlers (app/api/*/route.ts)
-//   - Server Actions (functions marked with 'use server')
-//
-// It reads the logged-in user's session from the HTTP request cookies
-// on the server side — the user never sees this code run.
-//
-// HOW TO USE (inside a Server Component):
-//
-//   import { createClient } from '@/lib/supabase/server'
-//
-//   const supabase = await createClient()   // ← must await!
-//   const { data } = await supabase.from('locations').select('*')
-//
-// NOTE: Always use "await" when calling createClient() here.
-//       The function is async because it needs to read from the cookie store.
-// ============================================================
+/** Factory for server-side Supabase client instances backed by request cookies. */
 
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'

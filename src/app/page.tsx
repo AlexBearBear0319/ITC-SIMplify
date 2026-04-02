@@ -34,9 +34,6 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-// ─────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────
 
 type Mission = {
   id: number;
@@ -94,7 +91,6 @@ type Review = {
   created_at: string;
 };
 
-// The fields we need from the logged-in student's profile row
 type DashboardProfile = {
   full_name: string | null;
   username: string | null;
@@ -108,9 +104,6 @@ type LocationLiveStats = {
   powerOutletsUsed: number;
 };
 
-// ─────────────────────────────────────────────
-// Config tables
-// ─────────────────────────────────────────────
 
 const FILTER_OPTIONS: {
   value: LocationStatus | null;
@@ -156,9 +149,6 @@ const RANK_STYLE: Record<number, { ring: string; badge: string; label: string }>
   3: { ring: "ring-[#CD7F32]/60", badge: "bg-[#FFF0E8] text-[#CD7F32]", label: "🥉" },
 };
 
-// ─────────────────────────────────────────────
-// Animation variants
-// ─────────────────────────────────────────────
 
 const containerVariants = {
   hidden: {},
@@ -174,9 +164,6 @@ const cardVariants = {
   },
 };
 
-// ─────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -200,9 +187,6 @@ function getInitials(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-// ─────────────────────────────────────────────
-// LocationDrawer — Google Maps-style bottom sheet
-// ─────────────────────────────────────────────
 
 function LocationDrawer({
   location,
@@ -256,7 +240,6 @@ function LocationDrawer({
 
   return (
     <>
-      {/* Backdrop */}
       <motion.div
         className="fixed inset-0 z-50 bg-overlay/50 backdrop-blur-sm"
         initial={{ opacity: 0 }}
@@ -265,7 +248,6 @@ function LocationDrawer({
         onClick={onClose}
       />
 
-      {/* Bottom-sheet panel */}
       <motion.div
         role="dialog"
         aria-modal="true"
@@ -277,20 +259,16 @@ function LocationDrawer({
         exit={{ y: "100%" }}
         transition={{ type: "spring", damping: 30, stiffness: 300 }}
       >
-        {/* Drag handle */}
         <div className="flex justify-center pt-3 shrink-0">
           <div className="w-10 h-1 rounded-full bg-border" />
         </div>
 
-        {/* Body: left media stays static, right details scroll independently on desktop. */}
         <div className="flex-1 overflow-y-auto md:overflow-hidden px-4 pt-3 pb-8 md:px-5">
           <div className="h-full flex flex-col md:flex-row gap-4 md:gap-5">
 
-            {/* ── Left: image gallery (static placement) ── */}
             <div className="md:w-[42%] md:max-w-md shrink-0">
               {hasImages && currentImage ? (
                 <div className="relative rounded-xl overflow-hidden border border-border bg-canvas h-48 md:h-105">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={currentImage}
                     alt={`${location.name} photo ${activeImageIndex + 1}`}
@@ -332,10 +310,8 @@ function LocationDrawer({
               )}
             </div>
 
-            {/* ── Right: details (scrollable) ── */}
             <div className="flex-1 md:overflow-y-auto md:pr-1">
 
-              {/* ── Header: status + name + close ── */}
               <div className="pt-1">
             <div className="flex items-start justify-between mb-2">
               <span
@@ -362,7 +338,6 @@ function LocationDrawer({
               </p>
             )}
 
-            {/* ── Facility info chips ── */}
             {(location.opening_time || location.total_seats != null || location.power_outlets != null) && (
               <div className="flex items-center gap-4 mt-3 flex-wrap">
                 {location.opening_time && (
@@ -401,7 +376,6 @@ function LocationDrawer({
               </Link>
             </div>
 
-            {/* ── Description ── */}
             {location.description && (
               <p className="text-sm text-ink-muted mt-3 leading-relaxed">
                 {location.description}
@@ -409,7 +383,6 @@ function LocationDrawer({
             )}
               </div>
 
-              {/* ── Active session timer ── */}
               {isMyActiveLocation && activeSession && (
                 <div className="mt-4 flex items-center gap-2.5 px-3 py-2.5 bg-success-light border border-success/30 rounded-xl">
               <CheckCircle2 size={15} className="text-success shrink-0" />
@@ -426,7 +399,6 @@ function LocationDrawer({
                 </div>
               )}
 
-              {/* ── Action buttons ── */}
               <div className="mt-4">
                 {isMyActiveLocation ? (
                   <button
@@ -447,7 +419,6 @@ function LocationDrawer({
                 )}
               </div>
 
-              {/* ── Reviews ── */}
               <div className="mt-6">
                 <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest mb-3">
                   Reviews
@@ -486,9 +457,6 @@ function LocationDrawer({
   );
 }
 
-// ─────────────────────────────────────────────
-// Main component
-// ─────────────────────────────────────────────
 
 export default function DashboardPage() {
   const [greeting, setGreeting]               = useState({ text: "", emoji: "" });
@@ -504,20 +472,15 @@ export default function DashboardPage() {
   const [userId,  setUserId]  = useState<string | null>(null);
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
 
-  // `id` from active_sessions — held so we can mark the row inactive on check-out
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
 
-  // Post-QR-scan action choice
   const [actionChoiceOpen, setActionChoiceOpen] = useState(false);
   const [studyBuddyOpen,   setStudyBuddyOpen]   = useState(false);
 
-  // Floating +pts animation
   const [pointsDelta, setPointsDelta] = useState<number | null>(null);
 
-  // Badge unlock notification
   const [newBadgeName, setNewBadgeName] = useState<string | null>(null);
 
-  // Error toast for optimistic rollbacks
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [leavingGroup, setLeavingGroup] = useState(false);
   const showErrorToast = (msg: string) => {
@@ -527,11 +490,9 @@ export default function DashboardPage() {
 
   const [userRank, setUserRank] = useState<number | null>(null);
 
-  // Computed from active_sessions seat tallies — drives the Peak Hour Alert banner
   const [busiestLocation, setBusiestLocation] = useState<{ name: string; seats: number } | null>(null);
   const [liveStatsByLocation, setLiveStatsByLocation] = useState<Record<number, LocationLiveStats>>({});
 
-  // Locations
   const [locations, setLocations]   = useState<DashboardLocation[]>([]);
   const [locLoading, setLocLoading] = useState(true);
   const [locError, setLocError]     = useState<string | null>(null);
@@ -539,7 +500,6 @@ export default function DashboardPage() {
   const locationsRef = useRef<DashboardLocation[]>([]);
   const userIdRef = useRef<string | null>(null);
 
-  // Daily mission
   const [mission, setMission]           = useState<Mission | null>(null);
   const [missionLoading, setMissionLoading] = useState(true);
   const [missionStarted, setMissionStarted] = useState(false);
@@ -628,12 +588,13 @@ export default function DashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countdownNow, activeSession, activeSessionId, activeGroup, userId]);
 
-  // Leaderboard snippet (top 3)
   const [topEntries, setTopEntries] = useState<LeaderboardEntry[]>([]);
-
-  // Reviews for selected location
   const [reviews, setReviews] = useState<Review[]>([]);
 
+  /**
+   * Aggregates active-session rows into per-location occupancy/power metrics and updates
+   * the busiest-location banner source used on the dashboard.
+   */
   function applyLiveStats(
     sessions: Array<{ location_id: number | null; seats_taken: number | null; needs_power?: boolean }> | null,
     locationSource: DashboardLocation[] = locationsRef.current,
@@ -1614,7 +1575,6 @@ export default function DashboardPage() {
 
   return (
     <>
-      {/* ── Floating +pts animation ── */}
       <AnimatePresence>
         {pointsDelta !== null && (
           <motion.div
@@ -1630,7 +1590,6 @@ export default function DashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Badge unlock toast ── */}
       <AnimatePresence>
         {newBadgeName && (
           <motion.div
@@ -1648,7 +1607,6 @@ export default function DashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Error toast (optimistic rollback feedback) ── */}
       <AnimatePresence>
         {errorToast && (
           <motion.div
@@ -1664,7 +1622,6 @@ export default function DashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Location drawer ── */}
       <AnimatePresence>
         {selectedLocation && (
           <LocationDrawer
@@ -1697,7 +1654,6 @@ export default function DashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* ── QR scanner (z-70, above everything) ── */}
       {selectedLocation && (
         <QRScannerModal
           open={qrScanOpen}
@@ -1708,7 +1664,6 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* ── Action choice (after QR verified) ── */}
       {selectedLocation && (
         <ActionChoiceModal
           open={actionChoiceOpen}
@@ -1719,7 +1674,6 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* ── Study buddy modal ── */}
       {selectedLocation && (
         <StudyBuddyModal
           open={studyBuddyOpen}
@@ -1733,7 +1687,6 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* ── Check-in modal (z-60, above drawer) ── */}
       {selectedLocation && (
         <CheckInModal
           open={checkInOpen}
@@ -1747,7 +1700,6 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* ── Feedback / check-out modal ── */}
       {selectedLocation && (
         <FeedbackModal
           open={feedbackOpen}
@@ -1764,7 +1716,6 @@ export default function DashboardPage() {
         className="px-3 py-3 md:px-4 md:py-4 lg:px-5 lg:py-5 max-w-6xl mx-auto space-y-3 md:space-y-4"
       >
 
-        {/* ── 1. Greeting Hero ── */}
         <motion.div variants={cardVariants} className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
             <p className="text-sm text-ink-muted font-medium flex items-center gap-1.5">
@@ -1804,7 +1755,6 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex flex-row sm:flex-col items-center sm:items-end gap-1.5 shrink-0">
-            {/* ── Points badge ── */}
             <div className="flex items-center gap-1.5 bg-gold-light border border-gold/30 px-3 py-1.5 rounded-full">
               <Coins size={13} className="text-gold" />
               <span className="text-sm font-bold text-gold">
@@ -1815,7 +1765,6 @@ export default function DashboardPage() {
                 )}
               </span>
             </div>
-            {/* ── Level badge ── */}
             <div className="flex items-center gap-1.5 bg-brand-faint border border-brand/40 px-3 py-1.5 rounded-full">
               <Star size={13} className="text-brand-dark" />
               <span className="text-sm font-semibold text-ink">
@@ -1829,8 +1778,6 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* Layout update: keep the live map near the welcome message for quicker access. */}
-        {/* Check-in/group notifications are shown as a single unified banner card. */}
         {(activeSession || activeGroup) && (() => {
           const msLeft = activeSession
             ? Math.max(0, activeSession.endsAt.getTime() - countdownNow.getTime())
@@ -1948,10 +1895,8 @@ export default function DashboardPage() {
           </motion.div>
         )}
 
-        {/* ── 2. Library Map ── */}
         <motion.div variants={cardVariants} id="library-map">
           <div className="bg-surface rounded-2xl border border-border shadow-sm p-4 md:p-5">
-            {/* Primary heading above map status labels to guide first action. */}
             <div className="flex items-center gap-2 mb-3">
               <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-gold-light border border-gold/30">
                 <MapPin size={14} className="text-gold" />
@@ -1961,7 +1906,6 @@ export default function DashboardPage() {
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
               <div>
-                {/* Match primary/secondary text colors with other section headers. */}
                 <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
                   Tay Eng Soon Library
                 </p>
@@ -2010,7 +1954,6 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Quick-pick cards stay below the map for fast filtering and selection. */}
             {locLoading ? (
               <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                 {[...Array(6)].map((_, i) => (
@@ -2047,10 +1990,8 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* ── 3 + 4. Daily Mission + Leaderboard ── */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 md:gap-4">
 
-          {/* ── 3. Daily Mission ── */}
           <motion.div variants={cardVariants} className="lg:col-span-3">
             <div className="h-full bg-surface rounded-2xl border border-border shadow-sm p-4 md:p-5 flex flex-col">
               <div className="flex items-center justify-between mb-3">
@@ -2059,7 +2000,6 @@ export default function DashboardPage() {
                     <Target size={16} className="text-gold" strokeWidth={2.2} />
                   </div>
                   <div>
-                    {/* Promote mission heading text so the card title is legible at a glance. */}
                     <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
                       Daily Mission
                     </p>
@@ -2157,7 +2097,6 @@ export default function DashboardPage() {
             </div>
           </motion.div>
 
-          {/* ── 4. Leaderboard Snippet ── */}
           <motion.div variants={cardVariants} className="lg:col-span-2">
             <div className="h-full bg-surface rounded-2xl border border-border shadow-sm p-4 md:p-5 flex flex-col">
               <div className="flex items-center justify-between mb-3">
@@ -2166,7 +2105,6 @@ export default function DashboardPage() {
                     <Trophy size={15} className="text-gold" strokeWidth={2.2} />
                   </div>
                   <div>
-                    {/* Match leaderboard title sizing with mission for consistent hierarchy. */}
                     <p className="text-xs md:text-sm font-bold text-ink uppercase tracking-wide leading-none">
                       This Week
                     </p>

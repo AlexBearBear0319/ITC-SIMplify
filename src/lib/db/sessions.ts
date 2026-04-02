@@ -1,22 +1,8 @@
-// ============================================================
-// DB QUERIES: ACTIVE SESSIONS (check-in / check-out)
-// ============================================================
-// This handles the main feature of the app: students checking
-// in and out of study spots.
-//
-// The flow goes something like:
-//   1. Student scans QR code at a location
-//   2. We call checkIn() to create a session row
-//   3. Student is now "occupying" a spot
-//   4. Call awardPoints() from points.ts to give them their check-in points
-//   5. The DB trigger updates location status automatically
-//   6. When they're done, checkOut() marks the session as inactive
-// ============================================================
+/** Database helpers for active check-in/check-out sessions. */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ActiveSession, DbResult } from '@/lib/types/database'
 
-// ─── CHECK IN ─────────────────────────────────────────────────────────────────
 
 /**
  * The data we need from the student when they check in.
@@ -52,10 +38,10 @@ export async function checkIn(
       activity: data.activity,
       module: data.module,
       duration_minutes: data.duration_minutes,
-      seats_taken: data.seats_taken ?? 1,  // default to 1 seat if they didn't specify
+      seats_taken: data.seats_taken ?? 1,
       is_active: true,
     })
-    .select()    // need to return the new row so we have the generated ID
+    .select()
     .single()
 
   if (error) {
@@ -66,7 +52,6 @@ export async function checkIn(
   return { data: session as ActiveSession, error: null }
 }
 
-// ─── CHECK OUT ────────────────────────────────────────────────────────────────
 
 /**
  * Ends a student's session by flipping is_active to false.
@@ -82,7 +67,7 @@ export async function checkOut(
 ): Promise<DbResult<ActiveSession>> {
   const { data, error } = await supabase
     .from('active_sessions')
-    .update({ is_active: false })  // soft delete, keeps the row for history
+    .update({ is_active: false })
     .eq('id', sessionId)
     .select()
     .single()
@@ -95,7 +80,6 @@ export async function checkOut(
   return { data: data as ActiveSession, error: null }
 }
 
-// ─── GET USER'S CURRENT SESSION ───────────────────────────────────────────────
 
 /**
  * Looks up the student's currently active session, if they have one.
@@ -115,8 +99,8 @@ export async function getUserActiveSession(
     .from('active_sessions')
     .select('*')
     .eq('user_id', userId)
-    .eq('is_active', true)   // only look at sessions that havent ended yet
-    .maybeSingle()           // returns null instead of throwing if no row found
+    .eq('is_active', true)
+    .maybeSingle()
 
   if (error) {
     console.error(`[getUserActiveSession] userId=${userId}`, error.message)
@@ -126,7 +110,6 @@ export async function getUserActiveSession(
   return { data: data as ActiveSession | null, error: null }
 }
 
-// ─── GET ALL ACTIVE SESSIONS AT A LOCATION ───────────────────────────────────
 
 /**
  * Gets all ongoing sessions at a specific study spot.
@@ -154,7 +137,6 @@ export async function getActiveSessionsAtLocation(
   return { data: data as ActiveSession[], error: null }
 }
 
-// ─── COUNT SEATS TAKEN AT A LOCATION ─────────────────────────────────────────
 
 /**
  * Adds up all the seats_taken from active sessions at a location.
@@ -173,7 +155,6 @@ export async function countSeatsTakenAtLocation(
 
   if (error) return { data: null, error }
 
-  // sum up seats_taken across all active sessions at this spot
   const total = (data ?? []).reduce(
     (sum, session) => sum + (session.seats_taken ?? 1),
     0,
@@ -182,7 +163,6 @@ export async function countSeatsTakenAtLocation(
   return { data: total, error: null }
 }
 
-// ─── UPDATE SESSION ───────────────────────────────────────────────────────────
 
 /**
  * Updates fields on an existing active session.
@@ -215,7 +195,6 @@ export async function updateSession(
   return { data: data as ActiveSession, error: null }
 }
 
-// ─── GET SESSIONS OPEN TO STUDY BUDDY ────────────────────────────────────────
 
 /**
  * Gets active sessions where the student is open to finding a study buddy.
@@ -238,7 +217,7 @@ export async function getStudyBuddySessionsAtLocation(
     .select('*')
     .eq('location_id', locationId)
     .eq('is_active', true)
-    .not('module', 'is', null)  // only sessions with a module set are "open"
+    .not('module', 'is', null)
 
   if (filterByModule) {
     // case-insensitive match so "cs101" still finds "CS101"
