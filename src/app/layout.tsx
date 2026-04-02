@@ -51,7 +51,7 @@ export default function RootLayout({
           </div>
 
           {/* Floating AI chat button — fixed above mobile nav area */}
-          <div className="fixed bottom-20 right-4 z-50 md:bottom-6 md:right-6">
+          <div className="fixed bottom-24 right-6 z-50 md:bottom-8 md:right-8">
             <MorphPanel />
           </div>
         </ThemeProvider>

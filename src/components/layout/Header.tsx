@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
-import { UserCircle, Settings, ChevronDown, Coins, LogOut, ShieldCheck, Monitor, Sun, Moon,} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { UserCircle, Settings, Coins, LogOut, ShieldCheck, Monitor, Sun, Moon, ChevronDown } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { useThemeMode } from "@/components/providers/ThemeProvider";
 
@@ -16,7 +16,8 @@ type UserProfile = {
 };
 
 const PAGE_TITLES: Record<string, string> = {
-  "/":            "Dashboard",
+  "/":            "Welcome",
+  "/dashboard":   "Dashboard",
   "/location":    "Locations",
   "/finder":      "Study Buddy",
   "/events":      "Events",
@@ -31,9 +32,9 @@ const PAGE_TITLES: Record<string, string> = {
 export default function Header() {
   const pathname = usePathname();
   const router   = useRouter();
-  const [open, setOpen]       = useState(false);
+  const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Theme controls from provider:
   // - mode = "auto" | "light" | "dark"
@@ -70,10 +71,9 @@ export default function Header() {
     return () => window.removeEventListener("profile-updated", fetchProfile);
   }, []);
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (open && ref.current && !ref.current.contains(e.target as Node)) {
+      if (open && dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     };
@@ -81,7 +81,6 @@ export default function Header() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // Close on route change
   useEffect(() => { setOpen(false); }, [pathname]);
 
   const handleLogOut = async () => {
@@ -103,7 +102,7 @@ export default function Header() {
     "bg-surface text-ink-muted border-border hover:bg-brand-faint hover:text-ink";
 
   return (
-    <header className="sticky top-0 z-20 h-16 bg-surface/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 md:px-6 shrink-0">
+    <header className="sticky top-0 z-20 h-16 bg-surface/80 backdrop-blur-md border-b border-border flex items-center justify-between px-5 md:px-8 shrink-0">
       {/* Page title – offset on mobile for hamburger */}
       <h1 className="text-base md:text-lg font-bold text-ink pl-10 md:pl-0 truncate">
         {title}
@@ -162,14 +161,11 @@ export default function Header() {
           </button>
         </div>
 
-
-      {/* Profile button */}
-      <div className="relative shrink-0" ref={ref}>
+      <div className="relative shrink-0" ref={dropdownRef}>
         <button
-          onClick={() => setOpen(!open)}
-          className="flex items-center gap-2 px-3 py-1.5 bg-canvas border border-border rounded-full hover:bg-brand-faint transition-colors duration-200"
+          onClick={() => setOpen((prev) => !prev)}
+          className="flex items-center gap-2 px-3 py-2 bg-canvas border border-border rounded-full hover:bg-brand-faint transition-colors duration-200"
         >
-          {/* Avatar */}
           <div className="w-7 h-7 rounded-full bg-brand-light flex items-center justify-center text-xs font-bold text-ink shrink-0 overflow-hidden">
             {profile?.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -182,68 +178,97 @@ export default function Header() {
             <span className="text-xs font-semibold text-ink">
               {displayName ?? "…"}
             </span>
-            <span className="text-[10px] text-gold font-medium mt-0.5">
+            <span className="text-[10px] text-gold font-medium mt-1">
               ✦ {profile ? profile.points.toLocaleString() : "—"} pts
             </span>
           </div>
-          <ChevronDown
-            size={14}
-            className={`text-ink-muted transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          />
+          <motion.div
+            animate={{ rotate: open ? 180 : 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="text-ink-muted"
+          >
+            <ChevronDown size={14} />
+          </motion.div>
         </button>
 
-        {/* Dropdown */}
-        {open && (
-          <div className="absolute top-full right-0 mt-2 w-52 bg-surface border border-border rounded-2xl shadow-md py-1.5 overflow-hidden">
-            <div className="px-4 py-2 border-b border-border mb-1">
-              <p className="text-sm font-semibold text-ink">
-                {displayName ?? "Loading…"}
-              </p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <Coins size={12} className="text-gold" />
-                <span className="text-xs text-gold font-medium">
-                  {profile ? profile.points.toLocaleString() : "—"} points
-                </span>
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.98, filter: "blur(4px)" }}
+              animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: -8, scale: 0.98, filter: "blur(4px)" }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="absolute top-full right-0 mt-2 w-56 bg-surface border border-border rounded-2xl shadow-md py-2 overflow-hidden z-50"
+            >
+              <div className="px-4 py-2 border-b border-border mb-1">
+                <p className="text-sm font-semibold text-ink">{displayName ?? "Loading..."}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <Coins size={12} className="text-gold" />
+                  <span className="text-xs text-gold font-medium">
+                    {profile ? profile.points.toLocaleString() : "—"} points
+                  </span>
+                </div>
               </div>
-            </div>
 
-            <Link
-              href="/profile"
-              className="flex items-center gap-3 px-4 py-2 text-sm text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-150"
-            >
-              <UserCircle size={16} />
-              <span>Profile</span>
-            </Link>
-
-            {profile?.is_admin && (
-              <Link
-                href="/admin"
-                className="flex items-center gap-3 px-4 py-2 text-sm text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-150"
+              <motion.button
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.16, delay: 0.03 }}
+                onClick={() => {
+                  setOpen(false);
+                  router.push("/profile");
+                }}
+                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-150"
               >
-                <ShieldCheck size={16} />
-                <span>Admin Panel</span>
-              </Link>
-            )}
+                <UserCircle size={16} />
+                <span>Profile</span>
+              </motion.button>
 
-            <Link
-              href="/settings"
-              className="flex items-center gap-3 px-4 py-2 text-sm text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-150"
-            >
-              <Settings size={16} />
-              <span>Settings</span>
-            </Link>
+              {profile?.is_admin && (
+                <motion.button
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.16, delay: 0.06 }}
+                  onClick={() => {
+                    setOpen(false);
+                    router.push("/admin");
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-150"
+                >
+                  <ShieldCheck size={16} />
+                  <span>Admin Panel</span>
+                </motion.button>
+              )}
 
-            <div className="border-t border-border mt-1 pt-1">
-              <button
-                onClick={handleLogOut}
-                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-alert hover:bg-alert-light transition-colors duration-150"
+              <motion.button
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.16, delay: profile?.is_admin ? 0.09 : 0.06 }}
+                onClick={() => {
+                  setOpen(false);
+                  router.push("/settings");
+                }}
+                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors duration-150"
               >
-                <LogOut size={16} />
-                <span>Log Out</span>
-              </button>
-            </div>
-          </div>
-        )}
+                <Settings size={16} />
+                <span>Settings</span>
+              </motion.button>
+
+              <div className="border-t border-border mt-1 pt-1">
+                <motion.button
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.16, delay: profile?.is_admin ? 0.12 : 0.09 }}
+                  onClick={handleLogOut}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-alert hover:bg-alert-light transition-colors duration-150"
+                >
+                  <LogOut size={16} />
+                  <span>Log Out</span>
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       </div>
     </header>

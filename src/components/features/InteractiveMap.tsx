@@ -176,7 +176,7 @@ export default function InteractiveMap({
         {({ zoomIn, zoomOut, resetTransform }) => (
           <>
             {/* ── Zoom controls ── */}
-            <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">
+            <div className="absolute top-3 right-3 z-10 flex flex-col gap-2">
               {[
                 { fn: () => zoomIn(),         Icon: ZoomIn,    label: "Zoom in"    },
                 { fn: () => zoomOut(),        Icon: ZoomOut,   label: "Zoom out"   },
@@ -218,7 +218,7 @@ export default function InteractiveMap({
                 )}
 
                 {/* ── Label chip ── */}
-                <div className="absolute top-3 left-3 z-10 bg-surface/90 backdrop-blur-sm px-2.5 py-1.5 rounded-lg border border-border shadow-sm">
+                <div className="absolute top-3 left-3 z-10 bg-surface/90 backdrop-blur-sm px-3 py-2 rounded-lg border border-border shadow-sm">
                   <p className="text-[11px] font-semibold text-ink-muted">
                     {mapImageUrl ? "Campus Map" : "Tay Eng Soon Library"}
                   </p>
@@ -269,7 +269,7 @@ export default function InteractiveMap({
                 { color: "bg-gold",    label: "Busy"  },
                 { color: "bg-alert",   label: "Full"  },
               ].map(({ color, label }) => (
-                <div key={label} className="flex items-center gap-1.5">
+                <div key={label} className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />
                   <span className="text-[10px] text-ink-muted">{label}</span>
                 </div>
@@ -277,7 +277,7 @@ export default function InteractiveMap({
             </div>
 
             {/* ── Gesture hint ── */}
-            <div className="absolute bottom-3 right-3 z-10 bg-surface/80 backdrop-blur-sm px-2.5 py-1.5 rounded-lg border border-border pointer-events-none">
+            <div className="absolute bottom-3 right-3 z-10 bg-surface/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-border pointer-events-none">
               <p className="text-[10px] text-ink-faint">Drag · Pinch · Scroll to zoom</p>
             </div>
           </>

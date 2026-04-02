@@ -181,7 +181,7 @@ export default function LeaderboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
+      <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
         <div className="max-w-6xl mx-auto space-y-8">
           <div>
             <h1 className="text-2xl font-extrabold text-ink">Campus Leaderboard</h1>
@@ -203,7 +203,7 @@ export default function LeaderboardPage() {
   }
 
   return (
-    <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
+    <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
       <div className="max-w-6xl mx-auto space-y-8">
 
         {/* ── Page header ── */}
@@ -319,7 +319,7 @@ export default function LeaderboardPage() {
                   key={entry.id}
                   variants={rowVariants}
                   className={[
-                    "flex items-center gap-3 px-4 py-3.5",
+                    "flex items-center gap-3 px-4 py-4",
                     i < rest.length - 1 ? "border-b border-border" : "",
                     isCurrent ? "bg-brand-faint" : "",
                   ]
@@ -350,7 +350,7 @@ export default function LeaderboardPage() {
 
                   {/* Name + meta */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-ink leading-tight truncate">
                         {getDisplayName(entry)}
                       </p>
@@ -358,7 +358,7 @@ export default function LeaderboardPage() {
                         Level {getLevelNumber(entry.exp ?? 0)}
                       </span>
                       {isCurrent && (
-                        <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-brand text-ink leading-none">
+                        <span className="shrink-0 text-[10px] font-medium px-2 py-1 rounded-full bg-brand text-ink leading-none">
                           You
                         </span>
                       )}

@@ -32,8 +32,8 @@ const PRESET_PROFILE_ICONS = [
 ];
 
 const FIELD_INPUT =
-  "w-full px-4 py-2.5 rounded-xl border border-border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow";
-const FIELD_LABEL = "block text-sm font-medium text-ink mb-1.5";
+  "w-full px-4 py-3 rounded-xl border border-border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow";
+const FIELD_LABEL = "block text-sm font-medium text-ink mb-2";
 
 export default function EditProfilePage() {
   const supabase = useMemo(() => createClient(), []);
@@ -247,7 +247,7 @@ export default function EditProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
+      <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
         <div className="max-w-3xl mx-auto">
           <div className="h-[520px] rounded-2xl bg-surface border border-border animate-pulse" />
         </div>
@@ -256,11 +256,11 @@ export default function EditProfilePage() {
   }
 
   return (
-    <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
+    <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
       <div className="max-w-3xl mx-auto space-y-4">
         <Link
           href="/profile"
-          className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-ink-muted hover:text-ink transition-colors"
         >
           <ArrowLeft size={16} />
           Back to Profile
@@ -312,7 +312,7 @@ export default function EditProfilePage() {
                   <button
                     type="button"
                     onClick={() => avatarInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-border text-ink-muted hover:text-ink hover:bg-surface transition-colors"
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-medium border border-border text-ink-muted hover:text-ink hover:bg-surface transition-colors"
                   >
                     <Camera size={13} />
                     Upload your own
@@ -329,7 +329,7 @@ export default function EditProfilePage() {
                           key={iconPath}
                           type="button"
                           onClick={() => handlePickPresetAvatar(iconPath)}
-                          className={`relative rounded-xl border p-1.5 bg-surface transition-all ${
+                          className={`relative rounded-xl border p-2 bg-surface transition-all ${
                             selected
                               ? "border-brand ring-2 ring-brand/30"
                               : "border-border hover:border-brand/50"
@@ -471,19 +471,19 @@ export default function EditProfilePage() {
               <button
                 type="submit"
                 disabled={saveState === "saving"}
-                className="px-5 py-2.5 rounded-full bg-ink text-surface text-sm font-medium hover:bg-ink/80 active:scale-95 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="px-5 py-3 rounded-full bg-ink text-surface text-sm font-medium hover:bg-ink/80 active:scale-95 transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {saveState === "saving" ? "Saving..." : "Save Profile"}
               </button>
 
               {saveState === "saved" && (
-                <div className="flex items-center gap-1.5 text-success text-sm">
+                <div className="flex items-center gap-2 text-success text-sm">
                   <CheckCircle2 size={15} />
                   <span>Saved!</span>
                 </div>
               )}
               {saveState === "error" && (
-                <div className="flex items-center gap-1.5 text-alert text-sm">
+                <div className="flex items-center gap-2 text-alert text-sm">
                   <XCircle size={15} />
                   <span>{saveError ?? "Failed to save."}</span>
                 </div>

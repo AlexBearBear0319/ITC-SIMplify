@@ -105,7 +105,7 @@ function KPICard({ kpi, loading }: { kpi: KPI; loading: boolean }) {
           <>
             <p className="text-2xl font-extrabold text-ink leading-none">{kpi.value}</p>
             <p className="text-xs font-medium text-ink-muted mt-1">{kpi.label}</p>
-            <p className="text-[11px] text-ink-faint mt-0.5">{kpi.sub}</p>
+            <p className="text-[11px] text-ink-faint mt-1">{kpi.sub}</p>
           </>
         )}
       </div>
@@ -343,7 +343,7 @@ export default function StatisticsPage() {
   const weeklyTotal = stats?.weeklyTotal ?? 0;
 
   return (
-    <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
+    <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
       <div className="max-w-6xl mx-auto space-y-8">
 
         {/* ── Header ── */}
@@ -358,7 +358,7 @@ export default function StatisticsPage() {
           <button
             onClick={() => setRefreshKey((k) => k + 1)}
             disabled={loading}
-            className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors disabled:opacity-40"
+            className="shrink-0 flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-full border border-border text-ink-muted hover:text-ink hover:bg-canvas transition-colors disabled:opacity-40"
           >
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
             Refresh
@@ -404,7 +404,7 @@ export default function StatisticsPage() {
           >
             <div className="mb-1">
               <h2 className="text-sm font-bold text-ink">Peak Hours (Campus-wide)</h2>
-              <p className="text-xs text-ink-muted mt-0.5">
+              <p className="text-xs text-ink-muted mt-1">
                 Check-in density by hour today — bars are relative to the busiest hour.
                 Use this to know when to expect queues and when spaces free up.
               </p>
@@ -436,7 +436,7 @@ export default function StatisticsPage() {
           >
             <div className="mb-1">
               <h2 className="text-sm font-bold text-ink">Most Popular Areas</h2>
-              <p className="text-xs text-ink-muted mt-0.5">
+              <p className="text-xs text-ink-muted mt-1">
                 Which library areas students use most — last 7 days.
                 Helps identify high-demand spots that may need more capacity.
               </p>
@@ -476,13 +476,13 @@ export default function StatisticsPage() {
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
                       <p className="text-xl font-extrabold text-ink leading-none">{weeklyTotal}</p>
-                      <p className="text-[10px] text-ink-muted mt-0.5">7-day total</p>
+                      <p className="text-[10px] text-ink-muted mt-1">7-day total</p>
                     </div>
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
                   {categories.map((cat) => (
-                    <div key={cat.name} className="flex items-center gap-1.5">
+                    <div key={cat.name} className="flex items-center gap-2">
                       <span className="shrink-0 w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
                       <span className="text-[11px] text-ink-muted truncate flex-1">{cat.name}</span>
                       <span className="text-[11px] font-semibold text-ink">{cat.value}%</span>
@@ -516,7 +516,7 @@ export default function StatisticsPage() {
               Regenerates automatically when you refresh the page.
             </p>
             {aiLoading && !aiInsight ? (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <div className="h-3 rounded bg-gold/20 animate-pulse w-full" />
                 <div className="h-3 rounded bg-gold/20 animate-pulse w-4/5" />
                 <div className="h-3 rounded bg-gold/20 animate-pulse w-2/3" />
@@ -524,7 +524,7 @@ export default function StatisticsPage() {
             ) : (
               <p className="text-sm text-ink-muted leading-relaxed">
                 {aiInsight || "Waiting for data…"}
-                {aiLoading && <span className="inline-block w-1 h-3.5 bg-gold/60 ml-0.5 animate-pulse rounded-sm" />}
+                {aiLoading && <span className="inline-block w-1 h-3.5 bg-gold/60 ml-1 animate-pulse rounded-sm" />}
               </p>
             )}
           </div>

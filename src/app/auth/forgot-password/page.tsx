@@ -21,7 +21,7 @@ function FieldError({ msg }: { msg?: string }) {
     <motion.p
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-1.5 text-xs text-alert mt-1.5"
+      className="flex items-center gap-2 text-xs text-alert mt-2"
     >
       <AlertCircle size={12} className="shrink-0" />
       {msg}
@@ -54,7 +54,7 @@ export default function ForgotPasswordPage() {
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-extrabold text-ink leading-tight">Forgot Password?</h1>
-            <p className="text-sm text-ink-muted mt-1.5 max-w-xs">
+            <p className="text-sm text-ink-muted mt-2 max-w-xs">
               Enter your email and we&apos;ll send you a reset link.
             </p>
           </div>
@@ -93,7 +93,7 @@ export default function ForgotPasswordPage() {
                 animate={{ opacity: 1 }}
               >
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-ink mb-1.5">
+                  <label htmlFor="email" className="block text-sm font-medium text-ink mb-2">
                     Email
                   </label>
                   <div className="relative">
@@ -105,7 +105,7 @@ export default function ForgotPasswordPage() {
                       autoComplete="email"
                       placeholder="your.email@example.com"
                       required
-                      className={`w-full pl-10 pr-4 py-2.5 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${fe.email ? "border-alert" : "border-border"}`}
+                      className={`w-full pl-10 pr-4 py-3 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${fe.email ? "border-alert" : "border-border"}`}
                     />
                   </div>
                   <FieldError msg={fe.email} />
@@ -116,7 +116,7 @@ export default function ForgotPasswordPage() {
                   {state && "error" in state && !Object.keys(fe).length && (
                     <motion.p
                       initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                      className="flex items-center gap-2 text-xs text-alert bg-alert-light rounded-xl px-4 py-2.5"
+                      className="flex items-center gap-2 text-xs text-alert bg-alert-light rounded-xl px-4 py-3"
                     >
                       <AlertCircle size={14} className="shrink-0" /> {state.error}
                     </motion.p>
@@ -138,7 +138,7 @@ export default function ForgotPasswordPage() {
         <div className="flex justify-center mt-5">
           <Link
             href="/auth/login"
-            className="flex items-center gap-1.5 text-xs text-ink-muted hover:text-ink transition-colors"
+            className="flex items-center gap-2 text-xs text-ink-muted hover:text-ink transition-colors"
           >
             <ArrowLeft size={13} /> Back to Sign In
           </Link>

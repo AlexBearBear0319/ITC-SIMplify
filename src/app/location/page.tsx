@@ -7,5 +7,5 @@
 import { redirect } from "next/navigation";
 
 export default function LocationIndexPage() {
-  redirect("/");
+  redirect("/dashboard");
 }

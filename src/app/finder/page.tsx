@@ -135,7 +135,7 @@ function MemberAvatar({ username, avatarUrl, isHost }: { username: string; avata
         )}
       </div>
       {showTip && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 bg-ink text-surface text-[11px] font-medium rounded-lg whitespace-nowrap shadow-md pointer-events-none z-10">
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-ink text-surface text-[11px] font-medium rounded-lg whitespace-nowrap shadow-md pointer-events-none z-10">
           @{username}{isHost ? " · host" : ""}
         </div>
       )}
@@ -213,16 +213,16 @@ function GroupDetailDialog({
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full ${cap.bg} ${cap.text}`}>
+                  <span className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-full ${cap.bg} ${cap.text}`}>
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cap.pipColor}`} />
                     {cap.label} · {liveCount}/{group.max_members}
                   </span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-brand-faint text-brand-dark text-[10px] font-semibold rounded-full border border-brand/30">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-brand-faint text-brand-dark text-[10px] font-semibold rounded-full border border-brand/30">
                     <BookOpen size={9} />
                     {group.locations.category}
                   </span>
                   {isThisGroupActive && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-success-light text-success text-[10px] font-semibold rounded-full border border-success/30">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-success-light text-success text-[10px] font-semibold rounded-full border border-success/30">
                       ✓ Your session
                     </span>
                   )}
@@ -231,7 +231,7 @@ function GroupDetailDialog({
                   {group.subject}
                 </Dialog.Title>
               </div>
-              <Dialog.Close className="shrink-0 p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors mt-1">
+              <Dialog.Close className="shrink-0 p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors mt-1">
                 <X size={16} />
               </Dialog.Close>
             </div>
@@ -247,13 +247,8 @@ function GroupDetailDialog({
             {/* Meta */}
             <div className="space-y-2.5">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-brand-light flex items-center justify-center text-[10px] font-bold text-ink shrink-0 overflow-hidden">
-                  {group.profiles.avatar_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={group.profiles.avatar_url} alt={group.profiles.username} className="w-full h-full object-cover" />
-                  ) : (
-                    hostInitials
-                  )}
+                <div className="w-7 h-7 rounded-full bg-brand-light flex items-center justify-center text-[10px] font-bold text-ink shrink-0">
+                  {hostInitials}
                 </div>
                 <span className="text-xs text-ink-muted">
                   Hosted by{" "}
@@ -272,7 +267,7 @@ function GroupDetailDialog({
 
             {/* Participants — real data from study_group_members */}
             <div>
-              <p className="text-xs font-semibold text-ink-muted mb-2.5">
+              <p className="text-xs font-semibold text-ink-muted mb-3">
                 Participants ({liveCount}/{group.max_members})
               </p>
               <div className="flex items-center gap-2 flex-wrap">
@@ -304,11 +299,11 @@ function GroupDetailDialog({
 
             {/* One-active-group warning */}
             {hasOtherActiveGroup && (
-              <div className="flex items-start gap-2.5 p-3 bg-gold-light rounded-xl border border-gold/30">
-                <Users size={14} className="text-gold shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 p-3 bg-gold-light rounded-xl border border-gold/30">
+                <Users size={14} className="text-gold shrink-0 mt-1" />
                 <div>
                   <p className="text-xs font-semibold text-ink">Already in another group</p>
-                  <p className="text-[11px] text-ink-muted mt-0.5">
+                  <p className="text-[11px] text-ink-muted mt-1">
                     Leave your current session first to join this one.
                   </p>
                 </div>
@@ -409,7 +404,7 @@ function StudyGroupCard({
       {/* Card header */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-center justify-between mb-3">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-brand-faint text-brand-dark text-[10px] font-semibold rounded-full border border-brand/30">
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-brand-faint text-brand-dark text-[10px] font-semibold rounded-full border border-brand/30">
             <BookOpen size={9} />
             {group.locations.category}
           </span>
@@ -431,7 +426,7 @@ function StudyGroupCard({
           </div>
         </div>
 
-        <h3 className="text-base font-bold text-ink leading-snug line-clamp-2 mb-1.5">
+        <h3 className="text-base font-bold text-ink leading-snug line-clamp-2 mb-2">
           {group.subject}
         </h3>
 
@@ -454,7 +449,7 @@ function StudyGroupCard({
             ))}
           </div>
           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${cap.bg} ${cap.text}`}>
-            {cap.label} · {memberCount}/{totalCapacity}
+            {cap.label} · {group.current_members}/{group.max_members}
           </span>
         </div>
         <div className="h-1 bg-canvas rounded-full overflow-hidden">
@@ -472,13 +467,8 @@ function StudyGroupCard({
         {/* Host + location */}
         <div className="flex flex-col gap-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-brand-light flex items-center justify-center text-[9px] font-bold text-ink shrink-0 overflow-hidden">
-              {group.profiles.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={group.profiles.avatar_url} alt={group.profiles.username} className="w-full h-full object-cover" />
-              ) : (
-                initials
-              )}
+            <div className="w-5 h-5 rounded-full bg-brand-light flex items-center justify-center text-[9px] font-bold text-ink shrink-0">
+              {initials}
             </div>
             <span className="text-xs text-ink-muted truncate">@{group.profiles.username}</span>
           </div>
@@ -497,7 +487,7 @@ function StudyGroupCard({
           }}
           disabled={hasOtherActiveGroup || isExpired || (!isThisGroupActive && isFull)}
           className={`
-            shrink-0 flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-full
+            shrink-0 flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-full
             transition-all duration-200 active:scale-[0.97]
             ${isThisGroupActive
               ? "bg-alert-light text-alert border border-alert/40 hover:bg-alert/20"
@@ -533,8 +523,8 @@ function StudyGroupCard({
 // ─────────────────────────────────────────────
 
 const FORM_INPUT =
-  "w-full px-3 py-2.5 bg-canvas border border-border rounded-xl text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition-colors resize-none";
-const FORM_LABEL = "block text-xs font-semibold text-ink-muted mb-1.5";
+  "w-full px-3 py-3 bg-canvas border border-border rounded-xl text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition-colors resize-none";
+const FORM_LABEL = "block text-xs font-semibold text-ink-muted mb-2";
 
 function CreateGroupDialog({
   open,
@@ -605,7 +595,7 @@ function CreateGroupDialog({
               <p className="text-sm text-ink-muted mt-1">
                 Your study group is live. Others can join now.
               </p>
-              <div className="flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-gold-light rounded-full border border-gold/30">
+              <div className="flex items-center gap-2 mt-3 px-3 py-2 bg-gold-light rounded-full border border-gold/30">
                 <Coins size={13} className="text-gold" />
                 <span className="text-sm font-bold text-gold">+20 pts</span>
                 <span className="text-sm text-gold/60">·</span>
@@ -620,14 +610,14 @@ function CreateGroupDialog({
                   <Dialog.Title className="text-base font-bold text-ink leading-tight">
                     Start a Study Session
                   </Dialog.Title>
-                  <Dialog.Description id="create-dialog-desc" className="text-xs text-ink-muted mt-0.5">
+                  <Dialog.Description id="create-dialog-desc" className="text-xs text-ink-muted mt-1">
                     Create a group and earn{" "}
                     <span className="text-gold font-semibold">+20 pts</span>
                     {" "}&amp;{" "}
                     <span className="text-gold font-semibold">+20 exp</span>
                   </Dialog.Description>
                 </div>
-                <Dialog.Close className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors mt-0.5">
+                <Dialog.Close className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-brand-faint transition-colors mt-1">
                   <X size={16} />
                 </Dialog.Close>
               </div>
@@ -696,7 +686,7 @@ function CreateGroupDialog({
                     </label>
                     {defaultLocationId ? (
                       /* Location locked to QR-scanned spot */
-                      <div className="flex items-center gap-2 px-3 py-2.5 bg-success-light border border-success/30 rounded-xl text-sm text-ink">
+                      <div className="flex items-center gap-2 px-3 py-3 bg-success-light border border-success/30 rounded-xl text-sm text-ink">
                         <QrCode size={13} className="text-success shrink-0" />
                         <span className="flex-1 font-medium truncate">
                           {locationsList.find((l) => l.id === defaultLocationId)?.name ?? "Scanned location"}
@@ -1261,7 +1251,7 @@ function FinderPageContent() {
             initial={{ opacity: 1, y: 0, scale: 0.9 }}
             animate={{ opacity: 0, y: -60, scale: 1.15 }}
             transition={{ duration: 2.2, ease: "easeOut" }}
-            className="fixed top-24 right-4 z-50 flex items-center gap-1.5 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
+            className="fixed top-24 right-4 z-50 flex items-center gap-2 bg-gold text-ink font-bold text-base px-4 py-2 rounded-full shadow-lg pointer-events-none"
           >
             <Coins size={16} />
             +{pointsDelta} pts
@@ -1297,9 +1287,9 @@ function FinderPageContent() {
             initial={{ opacity: 0, y: 16, scale: 0.95 }}
             animate={{ opacity: 1, y: 0,  scale: 1    }}
             exit={{    opacity: 0, y: 8,   scale: 0.97 }}
-            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-start gap-2.5 bg-ink text-surface text-sm font-medium px-4 py-3 rounded-2xl shadow-xl max-w-xs w-[calc(100vw-2rem)]"
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-start gap-3 bg-ink text-surface text-sm font-medium px-4 py-3 rounded-2xl shadow-xl max-w-xs w-[calc(100vw-2rem)]"
           >
-            <AlertCircle size={16} className="text-gold shrink-0 mt-0.5" />
+            <AlertCircle size={16} className="text-gold shrink-0 mt-1" />
             {blockToast}
           </motion.div>
         )}
@@ -1358,7 +1348,7 @@ function FinderPageContent() {
 
           <button
             onClick={() => setQrScanOpen(true)}
-            className="hidden sm:flex items-center gap-2 px-5 py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.97] shrink-0"
+            className="hidden sm:flex items-center gap-2 px-5 py-3 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm active:scale-[0.97] shrink-0"
           >
             <Plus size={16} />
             Start a Session
@@ -1382,7 +1372,7 @@ function FinderPageContent() {
               </div>
               <button
                 onClick={() => handleLeaveGroup(activeGroupId)}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors"
+                className="shrink-0 flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors"
               >
                 <LogOut size={12} /> Leave
               </button>
@@ -1463,7 +1453,7 @@ function FinderPageContent() {
                   key={tag}
                   onClick={() => setSearchQuery(isActive ? "" : tag)}
                   className={`
-                    px-2.5 py-1 text-xs font-medium rounded-full border transition-all duration-150
+                    px-3 py-1 text-xs font-medium rounded-full border transition-all duration-150
                     ${isActive
                       ? "bg-brand border-brand text-ink"
                       : "bg-surface border-border text-ink-muted hover:border-brand hover:text-ink"
@@ -1477,7 +1467,7 @@ function FinderPageContent() {
             {activeFilterCount > 0 && (
               <button
                 onClick={clearFilters}
-                className="ml-1 text-xs font-medium text-alert hover:text-ink transition-colors flex items-center gap-0.5"
+                className="ml-1 text-xs font-medium text-alert hover:text-ink transition-colors flex items-center gap-1"
               >
                 <X size={11} /> Clear ({activeFilterCount})
               </button>
@@ -1549,9 +1539,9 @@ function FinderPageContent() {
               </p>
               <button
                 onClick={() => { clearFilters(); setQrScanOpen(true); }}
-                className="mt-5 px-5 py-2.5 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm"
+                className="mt-5 px-5 py-3 bg-brand hover:bg-brand-dark text-ink font-semibold text-sm rounded-full transition-all duration-200 hover:shadow-sm"
               >
-                <span className="flex items-center gap-1.5"><Plus size={14} /> Start a Session</span>
+                <span className="flex items-center gap-2"><Plus size={14} /> Start a Session</span>
               </button>
             </motion.div>
           )}

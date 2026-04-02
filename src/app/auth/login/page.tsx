@@ -31,7 +31,7 @@ function FieldError({ msg }: { msg?: string }) {
     <motion.p
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-1.5 text-xs text-alert mt-1.5"
+      className="flex items-center gap-2 text-xs text-alert mt-2"
     >
       <AlertCircle size={12} className="shrink-0" />
       {msg}
@@ -50,7 +50,7 @@ function PasswordInput({
   const [show, setShow] = useState(false);
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-ink mb-1.5">{label}</label>
+      <label htmlFor={id} className="block text-sm font-medium text-ink mb-2">{label}</label>
       <div className="relative">
         <input
           id={id} name={name}
@@ -59,7 +59,7 @@ function PasswordInput({
           placeholder={placeholder ?? "••••••••"}
           value={value}
           onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-          className={`w-full px-4 py-2.5 pr-11 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${error ? "border-alert" : "border-border"}`}
+          className={`w-full px-4 py-3 pr-11 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${error ? "border-alert" : "border-border"}`}
         />
         <button
           type="button"
@@ -90,18 +90,18 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
     <form action={action} className="space-y-4">
       {/* Email */}
       <div>
-        <label htmlFor="login-email" className="block text-sm font-medium text-ink mb-1.5">Email</label>
+        <label htmlFor="login-email" className="block text-sm font-medium text-ink mb-2">Email</label>
         <input
           id="login-email" name="email" type="email" autoComplete="email"
           placeholder="your.email@example.com" required
-          className={`w-full px-4 py-2.5 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${fe.email ? "border-alert" : "border-border"}`}
+          className={`w-full px-4 py-3 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${fe.email ? "border-alert" : "border-border"}`}
         />
         <FieldError msg={fe.email} />
       </div>
 
       {/* Password */}
       <div>
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center justify-between mb-2">
           <label htmlFor="login-password" className="block text-sm font-medium text-ink">Password</label>
           <Link href="/auth/forgot-password" className="text-xs text-ink-muted hover:text-ink transition-colors">
             Forgot Password?
@@ -115,7 +115,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         {state && "error" in state && !Object.keys(fe).length && (
           <motion.p
             initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="flex items-center gap-2 text-xs text-alert bg-alert-light rounded-xl px-4 py-2.5"
+            className="flex items-center gap-2 text-xs text-alert bg-alert-light rounded-xl px-4 py-3"
           >
             <AlertCircle size={14} className="shrink-0" /> {state.error}
           </motion.p>
@@ -154,26 +154,26 @@ function SignUpForm({ onSuccess }: { onSuccess: (msg: string) => void }) {
     <form action={action} className="space-y-4">
       {/* Email */}
       <div>
-        <label htmlFor="signup-email" className="block text-sm font-medium text-ink mb-1.5">Email</label>
+        <label htmlFor="signup-email" className="block text-sm font-medium text-ink mb-2">Email</label>
         <input
           id="signup-email" name="email" type="email" autoComplete="email"
           placeholder="your.email@example.com" required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className={`w-full px-4 py-2.5 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${fe.email ? "border-alert" : "border-border"}`}
+          className={`w-full px-4 py-3 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${fe.email ? "border-alert" : "border-border"}`}
         />
         <FieldError msg={fe.email} />
       </div>
 
       {/* Username */}
       <div>
-        <label htmlFor="signup-username" className="block text-sm font-medium text-ink mb-1.5">Username</label>
+        <label htmlFor="signup-username" className="block text-sm font-medium text-ink mb-2">Username</label>
         <input
           id="signup-username" name="username" type="text" autoComplete="username"
           placeholder="alexvun" required minLength={3}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          className={`w-full px-4 py-2.5 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${fe.username ? "border-alert" : "border-border"}`}
+          className={`w-full px-4 py-3 rounded-xl border bg-canvas text-ink text-sm placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-brand transition-shadow ${fe.username ? "border-alert" : "border-border"}`}
         />
         <FieldError msg={fe.username} />
         <p className="text-[11px] text-ink-faint mt-1">Letters and numbers only, no spaces.</p>
@@ -183,7 +183,7 @@ function SignUpForm({ onSuccess }: { onSuccess: (msg: string) => void }) {
               initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="mt-2"
             >
-              <p className="text-[11px] text-ink-faint mb-1.5">Try one of these:</p>
+              <p className="text-[11px] text-ink-faint mb-2">Try one of these:</p>
               <div className="flex gap-2 flex-wrap">
                 {suggestions.map((s) => (
                   <button
@@ -223,7 +223,7 @@ function SignUpForm({ onSuccess }: { onSuccess: (msg: string) => void }) {
         {state && "error" in state && !Object.keys(fe).length && (
           <motion.p
             initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="flex items-center gap-2 text-xs text-alert bg-alert-light rounded-xl px-4 py-2.5"
+            className="flex items-center gap-2 text-xs text-alert bg-alert-light rounded-xl px-4 py-3"
           >
             <AlertCircle size={14} className="shrink-0" /> {state.error}
           </motion.p>
@@ -262,12 +262,12 @@ function LoginPageContent() {
       <div className="pointer-events-none fixed bottom-0 right-0 w-96 h-96 rounded-full bg-gold opacity-10 blur-3xl translate-x-1/4 translate-y-1/4" />
 
       {/* Theme switch */}
-      <div className="fixed top-4 right-4 z-10 inline-flex items-center gap-1 rounded-full border border-border bg-surface/90 backdrop-blur px-1.5 py-1 shadow-sm">
+      <div className="fixed top-4 right-4 z-10 inline-flex items-center gap-1 rounded-full border border-border bg-surface/90 backdrop-blur px-2 py-1 shadow-sm">
         <button
           type="button"
           aria-label="Use light mode"
           onClick={() => setThemeMode("light")}
-          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
             resolvedTheme === "light"
               ? "bg-brand text-ink"
               : "text-ink-muted hover:text-ink hover:bg-brand-faint"
@@ -280,7 +280,7 @@ function LoginPageContent() {
           type="button"
           aria-label="Use dark mode"
           onClick={() => setThemeMode("dark")}
-          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
             resolvedTheme === "dark"
               ? "bg-brand text-ink"
               : "text-ink-muted hover:text-ink hover:bg-brand-faint"
@@ -327,7 +327,7 @@ function LoginPageContent() {
               <h1 className="text-2xl font-extrabold text-ink leading-tight">
                 {mode === "login" ? "Welcome back!" : "Join SIMplify"}
               </h1>
-              <p className="text-sm text-ink-muted mt-1.5 max-w-xs">
+              <p className="text-sm text-ink-muted mt-2 max-w-xs">
                 {mode === "login"
                   ? "Sign in to find your perfect study spot and earn rewards."
                   : "Create your account and start discovering study spaces."}
@@ -341,7 +341,7 @@ function LoginPageContent() {
           {linkError === "invalid_or_expired_link" && (
             <motion.p
               initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="flex items-center gap-2 text-xs text-alert bg-alert-light rounded-xl px-4 py-2.5 mb-4"
+              className="flex items-center gap-2 text-xs text-alert bg-alert-light rounded-xl px-4 py-3 mb-4"
             >
               <AlertCircle size={14} className="shrink-0" />
               That reset link has expired or is invalid. Please request a new one.
@@ -404,7 +404,7 @@ function LoginPageContent() {
                   transition={{ duration: 0.2, ease: "easeInOut" }}
                 >
                   {mode === "login" ? (
-                    <LoginForm onSuccess={() => { window.location.href = "/"; }} />
+                    <LoginForm onSuccess={() => { window.location.href = "/dashboard"; }} />
                   ) : (
                     <SignUpForm onSuccess={(msg) => setSignupSuccess(msg)} />
                   )}

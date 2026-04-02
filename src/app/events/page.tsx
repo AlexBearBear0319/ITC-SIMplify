@@ -148,7 +148,7 @@ const CAL_CLASSES: Record<string, string> = {
   month:           "w-full",
   month_caption:   "flex items-center justify-between px-1 mb-2 h-9",
   caption_label:   "text-sm font-bold text-ink",
-  nav:             "flex items-center gap-0.5",
+  nav:             "flex items-center gap-1",
   button_previous: [
     "w-8 h-8 flex items-center justify-center rounded-xl",
     "text-ink-muted hover:text-ink hover:bg-brand-faint",
@@ -244,7 +244,7 @@ function EventCard({ event, locationName }: { event: CalendarEvent; locationName
             </Link>
           )}
           {event.is_peak_alert && (
-            <span className="px-1.5 py-0.5 bg-alert/20 text-alert text-[10px] font-bold rounded-full">
+            <span className="px-2 py-1 bg-alert/20 text-alert text-[10px] font-bold rounded-full">
               Peak day
             </span>
           )}
@@ -333,7 +333,7 @@ Rules:
           <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest leading-none">
             AI Study Suggestion
           </p>
-          <p className="text-sm font-bold text-ink mt-0.5 leading-snug">Where to Study Today</p>
+          <p className="text-sm font-bold text-ink mt-1 leading-snug">Where to Study Today</p>
         </div>
       </div>
 
@@ -355,7 +355,7 @@ Rules:
           <Link
             key={spot.locationId}
             href={`/location/${spot.locationId}`}
-            className="group flex items-center gap-1.5 px-2.5 py-1.5 bg-surface border border-border rounded-xl text-xs font-medium text-ink hover:border-brand hover:bg-brand-faint transition-all duration-150"
+            className="group flex items-center gap-2 px-3 py-2 bg-surface border border-border rounded-xl text-xs font-medium text-ink hover:border-brand hover:bg-brand-faint transition-all duration-150"
           >
             <MapPin size={10} className="text-brand-dark shrink-0" />
             <span>{spot.name}</span>
@@ -510,15 +510,15 @@ export default function EventsPage() {
 
             {/* Legend */}
             <div className="flex items-center gap-5 mt-4 pt-4 border-t border-border">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-brand-dark shrink-0" />
                 <span className="text-[11px] text-ink-muted">Event</span>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-alert shrink-0" />
                 <span className="text-[11px] text-ink-muted">Peak / Exam day</span>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded bg-brand shrink-0" />
                 <span className="text-[11px] text-ink-muted">Selected</span>
               </div>
@@ -536,12 +536,12 @@ export default function EventsPage() {
               <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest leading-none">
                 {format(selectedDate, "EEEE")}
               </p>
-              <h2 className="text-xl font-bold text-ink leading-tight mt-0.5">
+              <h2 className="text-xl font-bold text-ink leading-tight mt-1">
                 {format(selectedDate, "d MMMM yyyy")}
               </h2>
             </div>
             {!loading && dayEvents.length > 0 && (
-              <span className="px-2.5 py-1 bg-brand text-ink text-xs font-bold rounded-full shadow-sm">
+              <span className="px-3 py-1 bg-brand text-ink text-xs font-bold rounded-full shadow-sm">
                 {dayEvents.length} event{dayEvents.length > 1 ? "s" : ""}
               </span>
             )}
