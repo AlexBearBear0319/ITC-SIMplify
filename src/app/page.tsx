@@ -89,7 +89,8 @@ type ActiveSession = {
 type Review = {
   id: number;
   username: string;
-  comment: string;
+  comment: string | null;
+  rating: number | null;
   created_at: string;
 };
 
@@ -461,11 +462,18 @@ function LocationDrawer({
                           {review.username.slice(0, 2).toUpperCase()}
                         </div>
                         <span className="text-xs font-semibold text-ink">@{review.username}</span>
+                        <div className="flex items-center gap-px ml-1.5" aria-label={`${review.rating ?? 0} out of 5 stars`}>
+                          {[1, 2, 3, 4, 5].map((i) => (
+                            <span key={i} className={(review.rating ?? 0) >= i ? "text-gold" : "text-border"}>★</span>
+                          ))}
+                        </div>
                         <span className="text-[10px] text-ink-faint ml-auto">
                           {timeAgo(review.created_at)}
                         </span>
                       </div>
-                      <p className="text-sm text-ink-muted leading-relaxed">{review.comment}</p>
+                      <p className="text-sm text-ink-muted leading-relaxed">
+                        {review.comment?.trim() ? review.comment : "No written comment."}
+                      </p>
                     </div>
                   ))
                 )}
@@ -930,7 +938,7 @@ export default function DashboardPage() {
     supabase
       .from("reviews")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .select("id, comment, created_at, profiles(username)" as any)
+      .select("id, rating, comment, created_at, profiles(username)" as any)
       .eq("location_id", selectedLocation.id)
       .order("created_at", { ascending: false })
       .limit(5)
@@ -941,6 +949,7 @@ export default function DashboardPage() {
           data.map((r) => ({
             id:         r.id,
             username:   (r.profiles as { username: string } | null)?.username ?? "anonymous",
+            rating:     r.rating ?? null,
             comment:    r.comment,
             created_at: r.created_at,
           }))
@@ -1487,19 +1496,13 @@ export default function DashboardPage() {
       trackMissionProgress(supabase, userId, POINT_ACTIONS.STUDY);
     }
 
-    // crowd_status → star rating: empty = 5★, busy = 3★, full = 1★
-    if (data.comment.trim()) {
-      const rating =
-        data.crowd_status === "empty" ? 5 :
-        data.crowd_status === "busy"  ? 3 : 1;
-
-      await supabase.from("reviews").insert({
-        location_id: snapshotLocation.id,
-        user_id:     userId,
-        comment:     data.comment,
-        rating,
-      });
-    }
+    const trimmedComment = data.comment.trim();
+    await supabase.from("reviews").insert({
+      location_id: snapshotLocation.id,
+      user_id:     userId,
+      comment:     trimmedComment || null,
+      rating:      data.rating,
+    });
 
     // Recalculate location status now that this session has ended
     const { data: remaining } = await supabase
@@ -1680,6 +1683,10 @@ export default function DashboardPage() {
             }}
             onLeaveSpot={() => {
               if (activeGroup) {
+                if (activeSession) {
+                  setFeedbackOpen(true);
+                  return;
+                }
                 void handleLeaveGroupSession();
                 return;
               }
@@ -1886,6 +1893,14 @@ export default function DashboardPage() {
                 <button
                   onClick={() => {
                     if (isGroupContext) {
+                      if (activeSession) {
+                        const loc = locations.find((l) => l.id === activeSession.locationId);
+                        if (loc) {
+                          setSelectedLocation(loc);
+                          setFeedbackOpen(true);
+                          return;
+                        }
+                      }
                       void handleLeaveGroupSession();
                       return;
                     }

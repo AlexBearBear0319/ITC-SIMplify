@@ -4,7 +4,7 @@ import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import ThemeProvider from "@/components/providers/ThemeProvider";
-import { MorphPanel } from "@/components/ui/ai-input";
+import AIDock from "@/components/layout/AIDock";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -50,10 +50,7 @@ export default function RootLayout({
             </div>
           </div>
 
-          {/* Floating AI chat button — fixed above mobile nav area */}
-          <div className="fixed bottom-20 right-4 z-50 md:bottom-6 md:right-6">
-            <MorphPanel />
-          </div>
+          <AIDock />
         </ThemeProvider>
       </body>
     </html>

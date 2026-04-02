@@ -13,6 +13,7 @@ type CrowdStatus = "empty" | "busy" | "full";
 
 export type FeedbackData = {
   crowd_status: CrowdStatus;
+  rating: number;
   comment: string;
 };
 
@@ -45,14 +46,16 @@ const CROWD_OPTIONS: {
 
 export default function FeedbackModal({ open, locationName, onOpenChange, onSubmit }: Props) {
   const [crowdStatus, setCrowdStatus] = useState<CrowdStatus | null>(null);
+  const [rating,      setRating]      = useState(0);
   const [comment,     setComment]     = useState("");
   const [submitting,  setSubmitting]  = useState(false);
   const [success,     setSuccess]     = useState(false);
 
-  const isValid = crowdStatus !== null;
+  const isValid = crowdStatus !== null && rating >= 1;
 
   const reset = () => {
     setCrowdStatus(null);
+    setRating(0);
     setComment("");
     setSuccess(false);
   };
@@ -65,7 +68,7 @@ export default function FeedbackModal({ open, locationName, onOpenChange, onSubm
   const handleSubmit = async () => {
     if (!isValid || submitting) return;
     setSubmitting(true);
-    await onSubmit({ crowd_status: crowdStatus!, comment });
+    await onSubmit({ crowd_status: crowdStatus!, rating, comment });
     setSuccess(true);
     setSubmitting(false);
     setTimeout(() => handleOpenChange(false), 1600);
@@ -146,6 +149,38 @@ export default function FeedbackModal({ open, locationName, onOpenChange, onSubm
                           <span className="text-xs">{label}</span>
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* Comment */}
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-muted mb-2">
+                      Rate this spot{" "}
+                      <span className="text-alert">*</span>
+                    </label>
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((value) => {
+                          const active = value <= rating;
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setRating(value)}
+                              className={`text-2xl leading-none transition-transform duration-150 hover:scale-110 ${
+                                active ? "text-gold" : "text-border hover:text-gold/70"
+                              }`}
+                              aria-label={`Rate ${value} star${value > 1 ? "s" : ""}`}
+                              title={`${value} star${value > 1 ? "s" : ""}`}
+                            >
+                              ★
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <span className="text-xs font-medium text-ink-muted min-w-20">
+                        {rating > 0 ? `${rating}/5` : "Select rating"}
+                      </span>
                     </div>
                   </div>
 

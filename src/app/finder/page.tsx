@@ -8,6 +8,7 @@ import { createClient } from "@/utils/supabase/client";
 import { joinStudyGroup, leaveStudyGroup, createStudyGroup } from "@/lib/db/study-groups";
 import { awardPoints, POINT_ACTIONS, trackMissionProgress } from "@/lib/db/points";
 import QRScannerModal from "@/components/features/QRScannerModal";
+import FeedbackModal, { type FeedbackData } from "@/components/features/FeedbackModal";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -73,6 +74,12 @@ type Subject = { id: number; name: string; course_code: string | null };
 type GroupMember = {
   user_id: string;
   profiles: { username: string; avatar_url: string | null };
+};
+
+type LeaveFeedbackContext = {
+  groupId: number;
+  locationId: number;
+  locationName: string;
 };
 
 // ─────────────────────────────────────────────
@@ -1017,6 +1024,8 @@ function FinderPageContent() {
   const [blockToast,           setBlockToast]           = useState<string | null>(null); // inline message
   const [newBadgeName,         setNewBadgeName]         = useState<string | null>(null);
   const [countdownNow,         setCountdownNow]         = useState(() => new Date());
+  const [leaveFeedbackOpen,    setLeaveFeedbackOpen]    = useState(false);
+  const [pendingLeaveFeedback, setPendingLeaveFeedback] = useState<LeaveFeedbackContext | null>(null);
 
   useEffect(() => {
     const id = setInterval(() => setCountdownNow(new Date()), 1_000);
@@ -1144,7 +1153,7 @@ function FinderPageContent() {
     await fetchGroups();
   };
 
-  const handleLeaveGroup = async (id: number) => {
+  const handleLeaveGroup = async (id: number, feedback?: FeedbackData, reviewLocationId?: number) => {
     const isHost = groups.some((g) => g.id === id && g.host_id === currentUser?.id);
     if (!currentUser || (activeGroupId !== id && !isHost)) return;
     const { error } = await leaveStudyGroup(supabase, id, currentUser.id);
@@ -1160,6 +1169,26 @@ function FinderPageContent() {
       type: "group",
       description: "Left a study group",
     });
+
+    if (feedback && reviewLocationId != null) {
+      const trimmedComment = feedback.comment.trim();
+      const { error: reviewError } = await supabase.from("reviews").insert({
+        location_id: reviewLocationId,
+        user_id: currentUser.id,
+        comment: trimmedComment || null,
+        rating: feedback.rating,
+      });
+
+      if (reviewError) {
+        showBlockToast("Left group, but your review could not be saved. Please try again.");
+      } else {
+        await awardPoints(supabase, currentUser.id, POINT_ACTIONS.LEAVE_REVIEW);
+        showPointsAnim(POINT_ACTIONS.LEAVE_REVIEW);
+        trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.LEAVE_REVIEW);
+        try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+      }
+    }
+
     // Optimistic update: drop the card count immediately
     setGroups((prev) =>
       prev.map((g) =>
@@ -1168,6 +1197,33 @@ function FinderPageContent() {
     );
     setActiveGroupId(null);
     await fetchGroups();
+  };
+
+  const requestLeaveGroup = (id: number) => {
+    const isHost = groups.some((g) => g.id === id && g.host_id === currentUser?.id);
+    if (!currentUser || (activeGroupId !== id && !isHost)) return;
+
+    const group = groups.find((g) => g.id === id);
+    if (!group) {
+      void handleLeaveGroup(id);
+      return;
+    }
+
+    setSelectedGroupId((prev) => (prev === id ? null : prev));
+    setPendingLeaveFeedback({
+      groupId: id,
+      locationId: group.location_id,
+      locationName: group.locations.name,
+    });
+    setLeaveFeedbackOpen(true);
+  };
+
+  const handleLeaveFeedbackSubmit = async (data: FeedbackData) => {
+    if (!pendingLeaveFeedback) return;
+    const pending = pendingLeaveFeedback;
+    setLeaveFeedbackOpen(false);
+    setPendingLeaveFeedback(null);
+    await handleLeaveGroup(pending.groupId, data, pending.locationId);
   };
 
   const expireGroup = useCallback(async (id: number) => {
@@ -1248,8 +1304,20 @@ function FinderPageContent() {
           currentUserId={currentUser?.id ?? null}
           supabase={supabase}
           onJoin={handleJoinGroup}
-          onLeave={handleLeaveGroup}
+          onLeave={requestLeaveGroup}
           onClose={() => setSelectedGroupId(null)}
+        />
+      )}
+
+      {pendingLeaveFeedback && (
+        <FeedbackModal
+          open={leaveFeedbackOpen}
+          locationName={pendingLeaveFeedback.locationName}
+          onOpenChange={(open) => {
+            setLeaveFeedbackOpen(open);
+            if (!open) setPendingLeaveFeedback(null);
+          }}
+          onSubmit={handleLeaveFeedbackSubmit}
         />
       )}
 
@@ -1381,7 +1449,7 @@ function FinderPageContent() {
                 <p className="text-xs text-ink-muted">{activeGroup.locations.name}</p>
               </div>
               <button
-                onClick={() => handleLeaveGroup(activeGroupId)}
+                onClick={() => requestLeaveGroup(activeGroupId)}
                 className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full bg-alert-light text-alert border border-alert/30 hover:bg-alert/20 transition-colors"
               >
                 <LogOut size={12} /> Leave
@@ -1529,7 +1597,7 @@ function FinderPageContent() {
                   onExpire={expireGroup}
                   onSelect={() => setSelectedGroupId(group.id)}
                   onJoin={handleJoinGroup}
-                  onLeave={handleLeaveGroup}
+                  onLeave={requestLeaveGroup}
                 />
               </motion.div>
             ))
