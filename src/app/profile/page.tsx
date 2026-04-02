@@ -557,6 +557,17 @@ export default function ProfilePage() {
     month: "short",
     year: "numeric",
   });
+  const featuredIds = (() => {
+    const unlocked = achievements.filter((a) => a.unlocked).map((a) => a.id);
+    const deduped = new Set<number>();
+
+    if (profile.equipped_badge_id) deduped.add(profile.equipped_badge_id);
+    unlocked.forEach((id) => {
+      if (deduped.size < 3) deduped.add(id);
+    });
+
+    return Array.from(deduped).slice(0, 3);
+  })();
 
   return (
     <div className="min-h-full bg-canvas px-5 pt-8 pb-20 sm:px-8">
@@ -662,6 +673,28 @@ export default function ProfilePage() {
                   Member since {joinedLabel}
                 </span>
               </div>
+
+              {/* Featured badges */}
+              {featuredIds.length > 0 && (
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  {featuredIds.map((fid) => {
+                    const badge = achievements.find((a) => a.id === fid);
+                    if (!badge) return null;
+                    const rCfg = RARITY_CONFIG[badge.rarity];
+                    const Icon = badge.icon;
+                    return (
+                      <div
+                        key={fid}
+                        title={badge.name}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium ${rCfg.bg} ${rCfg.iconClass}`}
+                      >
+                        <Icon size={11} />
+                        {badge.name}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* School / major / education info */}
               {(profile.education_level || profile.semester_term) && (
