@@ -101,7 +101,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Danger Zone ── */}
-        <section className="bg-surface rounded-2xl border border-alert/30 shadow-sm overflow-hidden">
+        <section className="bg-alert-light/45 rounded-2xl border border-alert/30 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-alert/20 flex items-center gap-2">
             <AlertTriangle size={16} className="text-alert" />
             <h2 className="font-semibold text-alert">Danger Zone</h2>
