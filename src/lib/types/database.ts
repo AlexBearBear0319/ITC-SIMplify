@@ -47,8 +47,7 @@ export type Profile = {
   avatar_url: string | null
   points: number | null
   exp: number | null                 // Total EXP earned — never decreases, drives the level system
-  level: number | null               // 1–5, mirrors the LEVELS tiers in src/lib/levels.ts
-  updated_at: string | null
+updated_at: string | null
   full_name: string | null
   streak_days: number | null
   last_checkin_at: string | null

@@ -240,7 +240,7 @@ export async function getLeaderboard(
 ): Promise<DbResult<Profile[]>> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, full_name, avatar_url, points, level, streak_days')
+    .select('id, username, full_name, avatar_url, points, streak_days')
     .order('points', { ascending: false })  // highest points first
     .limit(limit)
 

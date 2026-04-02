@@ -266,15 +266,3 @@ body {
   animation: crown-pulse 2s ease-in-out infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .rarity-common::before,
-  .rarity-uncommon::before,
-  .rarity-rare::before,
-  .rarity-epic::before,
-  .rarity-legendary::before,
-  .animated-gradient-border::before,
-  .legend-sweep::after,
-  .crown-pulse {
-    animation: none;
-  }
-}
