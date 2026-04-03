@@ -64,9 +64,6 @@ type CreateForm = {
   duration_minutes: number;
 };
 
-
-const POPULAR_SUBJECTS = ["Python", "React", "Statistics", "Writing", "DSA", "Security", "Design"];
-
 type Subject = { id: number; name: string; course_code: string | null };
 
 type GroupMember = {
@@ -1478,26 +1475,30 @@ function FinderPageContent() {
                   </option>
                 ))}
               </FilterSelect>
-
-              <FilterSelect value={peopleFilter} onChange={setPeopleFilter}>
-                <option value="all">Any Group Size</option>
-                {memberCountOptions.map((count) => (
-                  <option key={count} value={String(count)}>
-                    {count} {count === 1 ? "person" : "people"}
-                  </option>
-                ))}
-              </FilterSelect>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <SlidersHorizontal size={12} className="text-ink-faint shrink-0" />
-            {POPULAR_SUBJECTS.map((tag) => {
-              const isActive = searchQuery.toLowerCase() === tag.toLowerCase();
+            <button
+              onClick={() => setPeopleFilter("all")}
+              className={`
+                px-2.5 py-1 text-xs font-medium rounded-full border transition-all duration-150
+                ${peopleFilter === "all"
+                  ? "bg-brand border-brand text-ink"
+                  : "bg-surface border-border text-ink-muted hover:border-brand hover:text-ink"
+                }
+              `}
+            >
+              Any Group Size
+            </button>
+            {memberCountOptions.map((count) => {
+              const value = String(count);
+              const isActive = peopleFilter === value;
               return (
                 <button
-                  key={tag}
-                  onClick={() => setSearchQuery(isActive ? "" : tag)}
+                  key={count}
+                  onClick={() => setPeopleFilter(isActive ? "all" : value)}
                   className={`
                     px-2.5 py-1 text-xs font-medium rounded-full border transition-all duration-150
                     ${isActive
@@ -1506,7 +1507,7 @@ function FinderPageContent() {
                     }
                   `}
                 >
-                  {tag}
+                  {count} {count === 1 ? "person" : "people"}
                 </button>
               );
             })}
