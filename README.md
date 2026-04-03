@@ -2,7 +2,22 @@
 
 **SIMplify** is a web app built by the IT Club that helps students find available study spots on campus, check in using QR codes, and earn points for contributing crowd status updates. Students can also browse upcoming campus events, join study groups, and redeem points for rewards.
 
-Built with **Next.js 15 (App Router)**, **Tailwind CSS v4**, and **Supabase**.
+Tech stack:
+- Next.js 16 (App Router) + React 19 + TypeScript
+- Tailwind CSS v4 + Framer Motion
+- Supabase (Auth, Postgres, Storage)
+- OpenAI via AI SDK for campus assistant features
+
+## Project Overview
+
+SIMplify solves a common campus problem: students waste time searching for seats, power outlets, and suitable study environments.
+
+The platform combines:
+- Live location occupancy signals
+- Solo and group study session flows
+- Gamification (points, achievements, missions, leaderboard)
+- Rewards redemption
+- Admin controls and insights
 
 ---
 
