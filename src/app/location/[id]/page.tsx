@@ -8,6 +8,7 @@ import { createClient } from "@/utils/supabase/client";
 import { awardPoints, POINT_ACTIONS, trackMissionProgress } from "@/lib/db/points";
 import { leaveStudyGroup } from "@/lib/db/study-groups";
 import { deriveLocationStatus } from "@/lib/location-status";
+import { markProfileStatsDirty } from "@/lib/profile-sync";
 import QRScannerModal from "@/components/features/QRScannerModal";
 import ActionChoiceModal from "@/components/features/ActionChoiceModal";
 import StudyBuddyModal, { type StudyBuddyData } from "@/components/features/StudyBuddyModal";
@@ -515,7 +516,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       setPointsDelta(pts);
       setTimeout(() => setPointsDelta(null), 2500);
       setAlreadyEarnedToday(true);
-      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+      markProfileStatsDirty();
     }
   }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday, location]);
 
@@ -622,7 +623,7 @@ export default function LocationPage({ params }: { params: Promise<{ id: string 
       setAlreadyEarnedToday(true);
 
       // Signal profile page to refresh its points counter
-      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+      markProfileStatsDirty();
     }
   }, [currentUserId, locationId, supabase, existingSession, existingGroupId, alreadyEarnedToday, location]);
 

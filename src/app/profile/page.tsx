@@ -56,7 +56,7 @@ type UserProfile = {
   equipped_badge_id: number | null;
 };
 
-type AchievementRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
+type AchievementRarity = "common" | "uncommon" | "rare" | "epic" | "legendary" | "mythical";
 
 type Achievement = {
   id: number;
@@ -65,7 +65,7 @@ type Achievement = {
   description: string;
   unlocked: boolean;
   unlockedAt?: string;
-  rarity: AchievementRarity;
+  rarity: string;
   progress?: string;
 };
 
@@ -97,7 +97,17 @@ const RARITY_CONFIG: Record<AchievementRarity, { bg: string; iconClass: string; 
   rare:      { bg: "bg-gold-light",    iconClass: "text-gold",       label: "Rare",      shineClass: "rarity-rare"      },
   epic:      { bg: "bg-alert-light",   iconClass: "text-alert",      label: "Epic",      shineClass: "rarity-epic"      },
   legendary: { bg: "bg-brand-light",   iconClass: "text-brand",      label: "Legendary", shineClass: "rarity-legendary" },
+  mythical:  { bg: "bg-surface",       iconClass: "text-ink",        label: "Mythical",  shineClass: "rarity-mythical"  },
 };
+
+function getRarityConfig(rarity: string | null | undefined) {
+  const normalized = String(rarity ?? "").toLowerCase() as AchievementRarity;
+  return RARITY_CONFIG[normalized] ?? RARITY_CONFIG.common;
+}
+
+function isMythicalRarity(rarity: string | null | undefined) {
+  return String(rarity ?? "").toLowerCase() === "mythical";
+}
 
 const ACTIVITY_CONFIG: Record<ActivityType, { icon: LucideIcon; bg: string; iconClass: string }> = {
   checkin:    { icon: MapPin,       bg: "bg-brand-faint",   iconClass: "text-brand-dark" },
@@ -342,7 +352,7 @@ export default function ProfilePage() {
             icon,
             name:        a.name,
             description: a.description,
-            rarity:      a.rarity as AchievementRarity,
+            rarity:      a.rarity ?? "common",
             unlocked:    !!unlockedAt,
             unlockedAt:  unlockedAt
               ? new Date(unlockedAt).toLocaleDateString("en-SG", { month: "short", year: "numeric" })
@@ -557,6 +567,9 @@ export default function ProfilePage() {
     month: "short",
     year: "numeric",
   });
+  const visibleAchievements = achievements.filter(
+    (achievement) => achievement.unlocked || !isMythicalRarity(achievement.rarity)
+  );
 
   return (
     <div className="min-h-full bg-canvas px-4 pt-6 pb-16 sm:px-6">
@@ -630,10 +643,11 @@ export default function ProfilePage() {
                     {profile.equipped_badge_id && (() => {
                       const b = achievements.find((a) => a.id === profile.equipped_badge_id);
                       if (!b) return null;
-                      const rCfg = RARITY_CONFIG[b.rarity];
+                      const rCfg = getRarityConfig(b.rarity);
+                      const isMythical = isMythicalRarity(b.rarity);
                       const Icon = b.icon;
                       return (
-                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${rCfg.bg} ${rCfg.iconClass}`}>
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${rCfg.bg} ${rCfg.iconClass}${isMythical ? " rarity-mythical-badge" : ""}`}>
                           <Icon size={11} />
                           {b.name}
                         </span>
@@ -716,8 +730,9 @@ export default function ProfilePage() {
             animate="visible"
             className="grid grid-cols-1 sm:grid-cols-2 gap-3"
           >
-            {achievements.map((achievement) => {
-              const rCfg = RARITY_CONFIG[achievement.rarity];
+            {visibleAchievements.map((achievement) => {
+              const rCfg = getRarityConfig(achievement.rarity);
+              const isMythical = isMythicalRarity(achievement.rarity);
               const Icon = achievement.icon;
               return (
                 <motion.div
@@ -732,7 +747,7 @@ export default function ProfilePage() {
                   <div
                     className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${
                       achievement.unlocked ? rCfg.bg : "bg-border"
-                    }`}
+                    }${achievement.unlocked && isMythical ? " rarity-mythical-badge" : ""}`}
                   >
                     {achievement.unlocked ? (
                       <Icon size={18} className={rCfg.iconClass} />
@@ -747,7 +762,7 @@ export default function ProfilePage() {
                         {achievement.name}
                       </p>
                       {achievement.unlocked && (
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${rCfg.bg} ${rCfg.iconClass}`}>
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${rCfg.bg} ${rCfg.iconClass}${isMythical ? " rarity-mythical-badge" : ""}`}>
                           {rCfg.label}
                         </span>
                       )}

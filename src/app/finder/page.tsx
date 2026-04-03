@@ -7,6 +7,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { createClient } from "@/utils/supabase/client";
 import { joinStudyGroup, leaveStudyGroup, createStudyGroup } from "@/lib/db/study-groups";
 import { awardPoints, POINT_ACTIONS, trackMissionProgress } from "@/lib/db/points";
+import { markProfileStatsDirty } from "@/lib/profile-sync";
 import QRScannerModal from "@/components/features/QRScannerModal";
 import FeedbackModal, { type FeedbackData } from "@/components/features/FeedbackModal";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1088,7 +1089,7 @@ function FinderPageContent() {
       await awardPoints(supabase, currentUser.id, POINT_ACTIONS.JOIN_STUDY_GROUP);
       showPointsAnim(POINT_ACTIONS.JOIN_STUDY_GROUP);
       setAlreadyEarnedToday(true);
-      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+      markProfileStatsDirty();
     }
     trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.JOIN_GROUP);
     trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.CHECK_IN); // study groups are in the library, counts as a check-in
@@ -1237,7 +1238,7 @@ function FinderPageContent() {
       await awardPoints(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);
       showPointsAnim(POINT_ACTIONS.CREATE_STUDY_GROUP);
       setAlreadyEarnedToday(true);
-      try { sessionStorage.setItem("simplify_points_dirty", "1"); } catch { /* ignore */ }
+      markProfileStatsDirty();
     }
     trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.CREATE_STUDY_GROUP);
     trackMissionProgress(supabase, currentUser.id, POINT_ACTIONS.CHECK_IN); // study groups are in the library, counts as a check-in

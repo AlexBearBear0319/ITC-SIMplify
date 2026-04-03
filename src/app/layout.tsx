@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import Level67Celebration from "@/components/features/Level67Celebration";
 import ThemeProvider from "@/components/providers/ThemeProvider";
 import AIDock from "@/components/layout/AIDock";
 
@@ -51,6 +52,7 @@ export default function RootLayout({
           </div>
 
           <AIDock />
+          <Level67Celebration />
         </ThemeProvider>
       </body>
     </html>
