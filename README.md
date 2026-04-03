@@ -8,6 +8,10 @@ Tech stack:
 - Supabase (Auth, Postgres, Storage)
 - OpenAI via AI SDK for campus assistant features
 
+## Demo
+
+[Watch the demo video](./demo/demo.MP4)
+
 ## Project Overview
 
 SIMplify solves a common campus problem: students waste time searching for seats, power outlets, and suitable study environments.
