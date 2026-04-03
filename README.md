@@ -38,14 +38,31 @@ npm install
 
 ### 3. Configure environment variables
 
-Create a `.env.local` file in the project root:
+Create your local env file from template:
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+```bash
+cp .env.example .env.local
 ```
 
-Get these values from the Supabase Dashboard under **Project Settings > API**.
+Then update `.env.local` with real values:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url_here
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+```
+
+Where to get each value:
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase Dashboard → **Project Settings → API**
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase Dashboard → **Project Settings → API** (service role, server-only secret)
+- `OPENAI_API_KEY`: OpenAI dashboard (used by chat/admin AI endpoints)
+- `NEXT_PUBLIC_SITE_URL`: your app base URL (`http://localhost:3000` for local, your Vercel domain in production)
+
+Important:
+- Keep `.env.local` private and never commit real secrets.
+- `SUPABASE_SERVICE_ROLE_KEY` must only be used on server-side code.
 
 ### 4. Run the development server
 
