@@ -971,7 +971,7 @@ function FinderPageContent() {
     const locId = searchParams.get("locationId");
     if (locId) setLocationFilter(locId);
   }, [searchParams]);
-  const [slotsFilter,        setSlotsFilter]        = useState("all");
+  const [peopleFilter,       setPeopleFilter]       = useState("all");
   const [activeGroupId,      setActiveGroupId]      = useState<number | null>(null);
   const [selectedGroupId,    setSelectedGroupId]    = useState<number | null>(null);
   const [qrScanOpen,         setQrScanOpen]         = useState(false);
@@ -1011,6 +1011,17 @@ function FinderPageContent() {
     }
   }, [groups, activeGroupId, currentUser, supabase]);
 
+  const memberCountOptions = useMemo(() => {
+    const counts = Array.from(
+      new Set(
+        groups
+          .filter((g) => g.is_active)
+          .map((g) => Math.max(1, g.current_members))
+      )
+    );
+    return counts.sort((a, b) => a - b);
+  }, [groups]);
+
   // Always derive live group data from current state so dialog re-renders on join/leave
   const selectedGroup = selectedGroupId !== null
     ? groups.find((g) => g.id === selectedGroupId) ?? null
@@ -1023,25 +1034,23 @@ function FinderPageContent() {
         if (!g.is_active) return false;
         const matchesSearch   = q === "" || g.subject.toLowerCase().includes(q);
         const matchesLocation = locationFilter === "all" || g.location_id === Number(locationFilter);
-        const matchesSlots    =
-          slotsFilter === "all"       ? true :
-          slotsFilter === "available" ? g.current_members < g.max_members :
-                                        g.current_members >= g.max_members;
-        return matchesSearch && matchesLocation && matchesSlots;
+        const matchesPeople   =
+          peopleFilter === "all" ? true : g.current_members === Number(peopleFilter);
+        return matchesSearch && matchesLocation && matchesPeople;
       })
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [groups, searchQuery, locationFilter, slotsFilter]);
+  }, [groups, searchQuery, locationFilter, peopleFilter]);
 
   const activeFilterCount = [
     searchQuery !== "",
     locationFilter !== "all",
-    slotsFilter !== "all",
+    peopleFilter !== "all",
   ].filter(Boolean).length;
 
   const clearFilters = () => {
     setSearchQuery("");
     setLocationFilter("all");
-    setSlotsFilter("all");
+    setPeopleFilter("all");
   };
 
 
@@ -1470,10 +1479,13 @@ function FinderPageContent() {
                 ))}
               </FilterSelect>
 
-              <FilterSelect value={slotsFilter} onChange={setSlotsFilter}>
-                <option value="all">Any Slots</option>
-                <option value="available">Has Slots</option>
-                <option value="full">Full Only</option>
+              <FilterSelect value={peopleFilter} onChange={setPeopleFilter}>
+                <option value="all">Any Group Size</option>
+                {memberCountOptions.map((count) => (
+                  <option key={count} value={String(count)}>
+                    {count} {count === 1 ? "person" : "people"}
+                  </option>
+                ))}
               </FilterSelect>
             </div>
           </div>
@@ -1534,7 +1546,7 @@ function FinderPageContent() {
           </div>
         ) : (
         <motion.div
-          key={`${searchQuery}|${locationFilter}|${slotsFilter}`}
+          key={`${searchQuery}|${locationFilter}|${peopleFilter}`}
           variants={containerVariants}
           initial="hidden"
           animate="show"

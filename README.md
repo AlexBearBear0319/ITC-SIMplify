@@ -168,4 +168,3 @@ The app is deployed on Vercel:
 | **Chris** | Frontend Developer | Implemented pages and React components from Kimbery's designs using Tailwind CSS. |
 
 For coding conventions, folder structure, and the Git workflow, see [CONTRIBUTING.md](./CONTRIBUTING.md).
-For the full component API, design token reference, and route architecture, see [TEAM_HANDOVER.md](./TEAM_HANDOVER.md).
